@@ -11,14 +11,16 @@ function initCrossfade() {
   const CF_MIN_MS = 0;
   const CF_MAX_MS = 20000;
   const CF_STEP_MS = 100;
+  const CF_MAJOR_MARKS_MS = [0, 5000, 10000, 15000, 20000];
 
   // Standard polar angles: east=0, south=90, west=180/-180.
-  // Crossfade arc is bottom quarter: SW (135deg) -> SE (45deg).
+  // Crossfade arc is the TOP path, clockwise from SW (135deg) to SE (45deg).
   const CF_ARC_START = 135;
   const CF_ARC_END = 45;
 
   let cfAngle = msToAngle(STATE.crossfade || 0);
   let dragging = false;
+  let majorTickHitZones = [];
 
   function clampMs(ms) {
     return Math.max(CF_MIN_MS, Math.min(CF_MAX_MS, Math.round(ms / CF_STEP_MS) * CF_STEP_MS));
@@ -26,13 +28,33 @@ function initCrossfade() {
 
   function msToAngle(ms) {
     const t = (clampMs(ms) - CF_MIN_MS) / (CF_MAX_MS - CF_MIN_MS);
-    return CF_ARC_START - t * (CF_ARC_START - CF_ARC_END);
+    return progressToTopArcAngle(t);
   }
 
   function angleToMs(a) {
-    const clamped = Math.max(CF_ARC_END, Math.min(CF_ARC_START, a));
-    const t = (CF_ARC_START - clamped) / (CF_ARC_START - CF_ARC_END);
+    const t = topArcAngleToProgress(a);
     return clampMs(CF_MIN_MS + t * (CF_MAX_MS - CF_MIN_MS));
+  }
+
+  function normalizeAngle(a) {
+    let n = a;
+    while (n <= -180) n += 360;
+    while (n > 180) n -= 360;
+    return n;
+  }
+
+  function progressToTopArcAngle(t) {
+    const clamped = Math.max(0, Math.min(1, t));
+    const raw = CF_ARC_START + clamped * 270;
+    return normalizeAngle(raw);
+  }
+
+  function topArcAngleToProgress(a) {
+    const n = normalizeAngle(a);
+    if (n >= CF_ARC_START) {
+      return (n - CF_ARC_START) / 270;
+    }
+    return (n + 360 - CF_ARC_START) / 270;
   }
 
   function draw() {
@@ -54,15 +76,43 @@ function initCrossfade() {
     ctx.strokeStyle = '#2d4170';
     ctx.stroke();
 
+    // Major fixed ticks (0/5/10/15/20 seconds) with click hit-zones.
+    majorTickHitZones = [];
+    for (const markMs of CF_MAJOR_MARKS_MS) {
+      const markAngle = msToAngle(markMs);
+      const markRad = (markAngle * Math.PI) / 180;
+      const inner = r + 1;
+      const outer = r + 9;
+      const x1 = cx + Math.cos(markRad) * inner;
+      const y1 = cy + Math.sin(markRad) * inner;
+      const x2 = cx + Math.cos(markRad) * outer;
+      const y2 = cy + Math.sin(markRad) * outer;
+
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.lineWidth = 2.2;
+      ctx.strokeStyle = 'rgba(234,240,251,0.95)';
+      ctx.stroke();
+
+      majorTickHitZones.push({
+        ms: markMs,
+        x: x2,
+        y: y2,
+        radius: 11,
+      });
+    }
+
     // Progressive nicks/rays from zero-point to current value.
     const curMs = clampMs(STATE.crossfade || 0);
     if (curMs > 0) {
       const tickCount = Math.floor(curMs / 500);
       const maxTicks = 40;
       const ticks = Math.min(maxTicks, tickCount);
+      const pCur = curMs / CF_MAX_MS;
       for (let i = 0; i <= ticks; i++) {
         const t = ticks === 0 ? 0 : i / ticks;
-        const ang = CF_ARC_START - t * (CF_ARC_START - cfAngle);
+        const ang = progressToTopArcAngle(t * pCur);
         const rad = (ang * Math.PI) / 180;
         const inner = r + 1;
         const outer = r + 6;
@@ -116,15 +166,16 @@ function initCrossfade() {
     const clientY = e.touches ? e.touches[0].clientY : e.clientY;
     const x = clientX - (rect.left + rect.width / 2);
     const y = clientY - (rect.top + rect.height / 2);
-    let a = Math.atan2(y, x) * 180 / Math.PI;
-    if (a < -180) a += 360;
-    if (a > 180) a -= 360;
-    // Normalize to bottom arc range [45, 135].
-    return Math.max(CF_ARC_END, Math.min(CF_ARC_START, a));
+    const a = normalizeAngle(Math.atan2(y, x) * 180 / Math.PI);
+    // Active only on top sweep: [135..180] U [-180..45].
+    const onTopArc = (a >= CF_ARC_START) || (a <= CF_ARC_END);
+    if (!onTopArc) return null;
+    return a;
   }
 
   function setFromAngle(a) {
-    cfAngle = Math.max(CF_ARC_END, Math.min(CF_ARC_START, a));
+    if (a == null) return;
+    cfAngle = normalizeAngle(a);
     STATE.crossfade = angleToMs(cfAngle);
     cfAngle = msToAngle(STATE.crossfade);
     updateLabel();
@@ -132,15 +183,56 @@ function initCrossfade() {
     saveSession();
   }
 
+  function setCrossfadeMs(ms) {
+    STATE.crossfade = clampMs(ms);
+    cfAngle = msToAngle(STATE.crossfade);
+    updateLabel();
+    draw();
+    saveSession();
+  }
+
+  function markerMsAtPoint(clientX, clientY) {
+    const rect = canvas.getBoundingClientRect();
+    const localX = clientX - rect.left;
+    const localY = clientY - rect.top;
+    for (const zone of majorTickHitZones) {
+      const dx = localX - zone.x;
+      const dy = localY - zone.y;
+      if ((dx * dx + dy * dy) <= zone.radius * zone.radius) {
+        return zone.ms;
+      }
+    }
+    return null;
+  }
+
   canvas.addEventListener('mousedown', (e) => {
-    dragging = true;
-    setFromAngle(eventAngle(e));
+    const snapMs = markerMsAtPoint(e.clientX, e.clientY);
+    if (snapMs != null) {
+      dragging = false;
+      setCrossfadeMs(snapMs);
+      e.preventDefault();
+      return;
+    }
+    const a = eventAngle(e);
+    dragging = a != null;
+    setFromAngle(a);
     e.preventDefault();
   });
 
   canvas.addEventListener('touchstart', (e) => {
-    dragging = true;
-    setFromAngle(eventAngle(e));
+    const t = e.touches && e.touches[0];
+    if (t) {
+      const snapMs = markerMsAtPoint(t.clientX, t.clientY);
+      if (snapMs != null) {
+        dragging = false;
+        setCrossfadeMs(snapMs);
+        e.preventDefault();
+        return;
+      }
+    }
+    const a = eventAngle(e);
+    dragging = a != null;
+    setFromAngle(a);
     e.preventDefault();
   }, { passive: false });
 

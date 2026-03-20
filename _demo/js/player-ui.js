@@ -38,6 +38,11 @@ function renderPlayerArea(fmt, songIdx) {
   song.parts.forEach((p, i) => allFiles.push({ label: p.file, partIndex: i, isMain: false }));
 
   allFiles.forEach(f => {
+    // Wrapper for part item + mini bar
+    const itemWrapper = document.createElement('div');
+    itemWrapper.className = 'part-item-wrapper';
+    itemWrapper.dataset.partIndex = f.partIndex;
+
     const item = document.createElement('div');
     item.className = 'part-item';
     item.dataset.partIndex = f.partIndex;
@@ -63,9 +68,9 @@ function renderPlayerArea(fmt, songIdx) {
       const ps = STATE.players[`${fmt}_${songIdx}`];
       if (ps && ps._directNode && ps._directPartIndex === f.partIndex) {
         stopDirectPart(ps);
-        resetDirectPartUI(ps, `${fmt}_${songIdx}`, f.partIndex, item);
+        resetDirectPartUI(ps, `${fmt}_${songIdx}`, f.partIndex, itemWrapper);
       } else {
-        playPartDirectly(fmt, songIdx, f.partIndex, item);
+        playPartDirectly(fmt, songIdx, f.partIndex, itemWrapper);
       }
     };
     item.appendChild(pBtn);
@@ -81,12 +86,14 @@ function renderPlayerArea(fmt, songIdx) {
       const ps = STATE.players[`${fmt}_${songIdx}`];
       if (ps) {
         stopDirectPart(ps);
-        resetDirectPartUI(ps, `${fmt}_${songIdx}`, f.partIndex, item);
+        resetDirectPartUI(ps, `${fmt}_${songIdx}`, f.partIndex, itemWrapper);
       }
     };
     item.appendChild(sBtn);
 
-    // Mini bar (shown when this part is playing directly)
+    itemWrapper.appendChild(item);
+
+    // Mini bar (shown when this part is playing directly) - BELOW the item
     const miniBar = document.createElement('div');
     miniBar.className = 'part-mini-bar';
     miniBar.id = `mini-bar-${key}-${f.partIndex}`;
@@ -98,7 +105,7 @@ function renderPlayerArea(fmt, songIdx) {
     miniHandle.id = `mini-handle-${key}-${f.partIndex}`;
     miniBar.appendChild(miniFill);
     miniBar.appendChild(miniHandle);
-    item.appendChild(miniBar);
+    itemWrapper.appendChild(miniBar);
 
     // Drag from parts list to timeline
     item.addEventListener('dragstart', (e) => {
@@ -110,11 +117,10 @@ function renderPlayerArea(fmt, songIdx) {
       highlightPartInstances(key, f.partIndex, false);
     });
 
-    // Hover highlight cross-reference
     item.addEventListener('mouseenter', () => highlightPartInstances(key, f.partIndex, true));
     item.addEventListener('mouseleave', () => highlightPartInstances(key, f.partIndex, false));
 
-    partsList.appendChild(item);
+    partsList.appendChild(itemWrapper);
   });
 
   area.appendChild(partsList);

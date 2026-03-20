@@ -13,13 +13,20 @@
 
 /* ---- PARTS LIST ---- */
 .parts-list { margin-bottom: 12px; }
+
+/* ---- PART ITEM WRAPPER ---- */
+.part-item-wrapper {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 3px;
+}
+
 .part-item {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 5px 8px;
   border-radius: var(--radius-sm);
-  margin-bottom: 3px;
   transition: background 0.1s;
   cursor: grab;
 }
@@ -42,10 +49,10 @@
   height: 10px;
   background: var(--bg3);
   border-radius: 5px;
-  margin: 6px 0 2px 0;
+  margin: 4px 8px 0 8px;
   position: relative;
   cursor: pointer;
-  width: 100%;
+  width: calc(100% - 16px);
 }
 .part-mini-bar.visible { display: block; }
 .part-mini-fill {

@@ -13,6 +13,7 @@ function stopDirectPart(ps) {
 function resetDirectPartUI(ps, key, partIndex, listItem) {
   ps._directNode = null;
   ps._directPartIndex = null;
+  const partItem = listItem.querySelector('.part-item');
   const playBtn = listItem.querySelector('.part-play-btn');
   const stopBtn = listItem.querySelector('.part-stop-btn');
   const miniBar = document.getElementById(`mini-bar-${key}-${partIndex}`);
@@ -22,7 +23,7 @@ function resetDirectPartUI(ps, key, partIndex, listItem) {
   }
   if (stopBtn) stopBtn.style.display = 'none';
   if (miniBar) miniBar.classList.remove('visible');
-  listItem.classList.remove('playing-part');
+  if (partItem) partItem.classList.remove('playing-part');
 }
 
 async function playPartDirectly(fmt, songIdx, partIndex, listItem) {
@@ -49,6 +50,7 @@ async function playPartDirectly(fmt, songIdx, partIndex, listItem) {
   ps._directPartIndex = partIndex;
 
   // Update UI
+  const partItem = listItem.querySelector('.part-item');
   const playBtn = listItem.querySelector('.part-play-btn');
   const stopBtn = listItem.querySelector('.part-stop-btn');
   const miniBar = document.getElementById(`mini-bar-${key}-${partIndex}`);
@@ -58,7 +60,7 @@ async function playPartDirectly(fmt, songIdx, partIndex, listItem) {
   }
   if (stopBtn) stopBtn.style.display = '';
   if (miniBar) miniBar.classList.add('visible');
-  listItem.classList.add('playing-part');
+  if (partItem) partItem.classList.add('playing-part');
 
   const dur = buf.duration;
   ps._directStartAC = AC.currentTime;

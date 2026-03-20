@@ -138,86 +138,132 @@ async function startPlaying(fmt, songIdx) {
   scheduleSegment(fmt, songIdx, 0);
 }
 
+function cancelPreScheduled(ps) {
+  if (ps._nextNode) {
+    try { ps._nextNode.stop(); } catch(e) {}
+    ps._nextNode.disconnect();
+    ps._nextNode = null;
+  }
+  ps._nextSeqIdx = null;
+  ps._nextLoopCount = null;
+  ps._nextStartAC = null;
+  ps._nextEndAC = null;
+}
+
+// Small lookahead (seconds) to guarantee scheduled times are in the future.
+// Must exceed the audio rendering quantum (~2.67ms at 48kHz / ~2.9ms at 44.1kHz).
+const SCHEDULE_AHEAD = 0.005;
+
 function scheduleSegment(fmt, songIdx, offsetSecs) {
   const key  = `${fmt}_${songIdx}`;
   const ps   = STATE.players[key];
   if (!ps) return;
 
-  const seqItem   = ps.sequence[ps.currentSeqIdx];
+  // Cancel any pre-scheduled next segment
+  cancelPreScheduled(ps);
+
+  const seqItem = ps.sequence[ps.currentSeqIdx];
   if (!seqItem) { onSongEnded(fmt, songIdx); return; }
 
   const buffer = ps.buffers[seqItem.partIndex];
   if (!buffer) {
-    advanceSequence(fmt, songIdx);
+    ps.currentSeqIdx++;
+    ps.loopPlayCount = 0;
+    if (ps.currentSeqIdx >= ps.sequence.length) { onSongEnded(fmt, songIdx); return; }
+    scheduleSegment(fmt, songIdx, 0);
     return;
   }
 
   if (ps.node) { try { ps.node.stop(); } catch(e){} ps.node.disconnect(); ps.node = null; }
 
+  const rate = Math.max(0.01, Math.abs(STATE.speedPercent) / 100);
   const src = AC.createBufferSource();
   src.buffer = buffer;
-  src.playbackRate.value = Math.max(0.01, Math.abs(STATE.speedPercent) / 100);
+  src.playbackRate.value = rate;
   src.connect(ps.gainNode);
   ps.node = src;
 
-  const now = AC.currentTime;
-  src.start(now, offsetSecs);
-  ps.startTime = now - offsetSecs;
+  // Schedule slightly into the future so the audio engine processes
+  // the start at the EXACT requested sample — no render-quantum jitter.
+  const startAt = AC.currentTime + SCHEDULE_AHEAD;
+  src.start(startAt, offsetSecs);
+  ps.startTime = startAt - offsetSecs;
   ps.pausedAt  = 0;
 
+  // End time is now exact because startAt is guaranteed to be in the future
+  const segEndAC = startAt + (buffer.duration - offsetSecs) / rate;
+  ps._segmentEndAC = segEndAC;
+
+  // Pre-schedule the NEXT segment's AudioBufferSourceNode to start
+  // at the exact sample where this one ends — no gap possible.
+  preScheduleNext(fmt, songIdx, segEndAC);
+
+  // onended is only a fallback for when no next was pre-scheduled (end of song)
   src.onended = () => {
     if (ps.node !== src) return;
-    onSegmentEnded(fmt, songIdx);
+    if (!ps._nextNode) {
+      const item = ps.sequence[ps.currentSeqIdx];
+      ps.totalPlayedTime += ps.partDurations[item?.partIndex] || 0;
+      ps.currentSeqIdx++;
+      ps.loopPlayCount = 0;
+      if (ps.currentSeqIdx >= ps.sequence.length) {
+        onSongEnded(fmt, songIdx);
+      } else {
+        scheduleSegment(fmt, songIdx, 0);
+      }
+    }
   };
 
   cancelAnimationFrame(ps.rafId);
   ps.rafId = requestAnimationFrame(() => tickPlayer(fmt, songIdx));
 }
 
-function onSegmentEnded(fmt, songIdx) {
-  const key = `${fmt}_${songIdx}`;
-  const ps  = STATE.players[key];
+function preScheduleNext(fmt, songIdx, startAtAC) {
+  const key  = `${fmt}_${songIdx}`;
+  const ps   = STATE.players[key];
   if (!ps || ps.paused) return;
 
   const seqItem = ps.sequence[ps.currentSeqIdx];
-  if (!seqItem) { onSongEnded(fmt, songIdx); return; }
+  if (!seqItem) return;
 
-  const loopVal = ps.loopSettings[ps.currentSeqIdx] ?? 1;
-  const part    = STATE.songs[fmt][songIdx].parts[seqItem.partIndex];
+  // Determine what comes next (loop or advance)
+  const loopVal    = ps.loopSettings[ps.currentSeqIdx] ?? 1;
+  const part       = STATE.songs[fmt][songIdx].parts[seqItem.partIndex];
   const isLoopable = part && part.nexts.includes(part.num);
 
+  let nextSeqIdx   = ps.currentSeqIdx;
+  let nextLoopCount = ps.loopPlayCount;
+
   if (isLoopable && loopVal !== 1) {
-    if (loopVal === -1) {
-      ps.loopPlayCount++;
-      ps.totalPlayedTime += ps.partDurations[seqItem.partIndex] || 0;
-      scheduleSegment(fmt, songIdx, 0);
-      return;
+    if (loopVal === -1 || ps.loopPlayCount < loopVal - 1) {
+      nextLoopCount = ps.loopPlayCount + 1;
     } else {
-      if (ps.loopPlayCount < loopVal - 1) {
-        ps.loopPlayCount++;
-        ps.totalPlayedTime += ps.partDurations[seqItem.partIndex] || 0;
-        scheduleSegment(fmt, songIdx, 0);
-        return;
-      }
+      nextSeqIdx = ps.currentSeqIdx + 1;
+      nextLoopCount = 0;
     }
+  } else {
+    nextSeqIdx = ps.currentSeqIdx + 1;
+    nextLoopCount = 0;
   }
 
-  ps.loopPlayCount = 0;
-  ps.totalPlayedTime += ps.partDurations[seqItem.partIndex] || 0;
-  advanceSequence(fmt, songIdx);
-}
+  if (nextSeqIdx >= ps.sequence.length) return;
 
-function advanceSequence(fmt, songIdx) {
-  const key = `${fmt}_${songIdx}`;
-  const ps  = STATE.players[key];
-  if (!ps) return;
+  const nextItem = ps.sequence[nextSeqIdx];
+  const nextBuf  = ps.buffers[nextItem.partIndex];
+  if (!nextBuf) return;
 
-  ps.currentSeqIdx++;
-  if (ps.currentSeqIdx >= ps.sequence.length) {
-    onSongEnded(fmt, songIdx);
-    return;
-  }
-  scheduleSegment(fmt, songIdx, 0);
+  const rate = Math.max(0.01, Math.abs(STATE.speedPercent) / 100);
+  const nextSrc = AC.createBufferSource();
+  nextSrc.buffer = nextBuf;
+  nextSrc.playbackRate.value = rate;
+  nextSrc.connect(ps.gainNode);
+  nextSrc.start(startAtAC, 0); // Queued in audio hardware — sample-accurate
+
+  ps._nextNode      = nextSrc;
+  ps._nextSeqIdx    = nextSeqIdx;
+  ps._nextLoopCount = nextLoopCount;
+  ps._nextStartAC   = startAtAC;
+  ps._nextEndAC     = startAtAC + nextBuf.duration / rate;
 }
 
 function onSongEnded(fmt, songIdx) {
@@ -227,6 +273,7 @@ function onSongEnded(fmt, songIdx) {
 
   updateActionButtons(fmt, songIdx, 'stopped');
   hidePlayerArea(fmt, songIdx);
+  cancelPreScheduled(ps);
   cancelAnimationFrame(ps.rafId);
   ps.node = null;
 
@@ -249,6 +296,7 @@ function pausePlaying(fmt, songIdx) {
   ps.pausedAt = buf ? Math.min(elapsed, buf.duration) : 0;
 
   if (ps.node) { try { ps.node.stop(); } catch(e){} ps.node.disconnect(); ps.node = null; }
+  cancelPreScheduled(ps);
   cancelAnimationFrame(ps.rafId);
   ps.paused = true;
   updateActionButtons(fmt, songIdx, 'paused');
@@ -269,6 +317,7 @@ function stopPlaying(fmt, songIdx) {
   if (!ps) return;
 
   if (ps.node) { try { ps.node.stop(); } catch(e){} ps.node.disconnect(); ps.node = null; }
+  cancelPreScheduled(ps);
   cancelAnimationFrame(ps.rafId);
   ps.paused = false;
   ps.totalPlayedTime = 0;
@@ -286,11 +335,55 @@ function tickPlayer(fmt, songIdx) {
   if (!ps || ps.paused) return;
 
   const now = AC.currentTime;
+
+  // Detect segment transition: if we've passed the current segment's end time
+  // and there's a pre-scheduled next node, swap it in immediately.
+  // This keeps the seek bar perfectly in sync — no waiting for async callbacks.
+  if (ps._nextNode && ps._segmentEndAC && now >= ps._segmentEndAC - 0.005) {
+    const oldItem = ps.sequence[ps.currentSeqIdx];
+    ps.totalPlayedTime += ps.partDurations[oldItem.partIndex] || 0;
+
+    // Promote next → current
+    const prevNode = ps.node;
+    ps.node           = ps._nextNode;
+    ps.currentSeqIdx  = ps._nextSeqIdx;
+    ps.loopPlayCount  = ps._nextLoopCount;
+    ps.startTime      = ps._nextStartAC;
+    ps._segmentEndAC  = ps._nextEndAC;
+
+    // Clear next-slot
+    ps._nextNode      = null;
+    ps._nextSeqIdx    = null;
+    ps._nextLoopCount = null;
+    ps._nextStartAC   = null;
+    ps._nextEndAC     = null;
+
+    // Wire onended for the new current node (fallback for end of song)
+    const curSrc = ps.node;
+    curSrc.onended = () => {
+      if (ps.node !== curSrc) return;
+      if (!ps._nextNode) {
+        const item = ps.sequence[ps.currentSeqIdx];
+        ps.totalPlayedTime += ps.partDurations[item?.partIndex] || 0;
+        ps.currentSeqIdx++;
+        ps.loopPlayCount = 0;
+        if (ps.currentSeqIdx >= ps.sequence.length) {
+          onSongEnded(fmt, songIdx);
+        } else {
+          scheduleSegment(fmt, songIdx, 0);
+        }
+      }
+    };
+
+    // Pre-schedule the segment after this new current one
+    preScheduleNext(fmt, songIdx, ps._segmentEndAC);
+  }
+
   const seqItem = ps.sequence[ps.currentSeqIdx];
   if (!seqItem) return;
 
   const durInPart = ps.partDurations[seqItem.partIndex] || 0;
-  const posInPart = Math.min(now - ps.startTime, durInPart);
+  const posInPart = Math.min(Math.max(0, now - ps.startTime), durInPart);
 
   let totalPos = ps.totalPlayedTime + posInPart;
 
@@ -361,6 +454,8 @@ function seekToTime(fmt, songIdx, targetSecs, totalDur) {
   const key = `${fmt}_${songIdx}`;
   const ps  = STATE.players[key];
   if (!ps) return;
+
+  cancelPreScheduled(ps);
 
   let acc = 0;
   let found = -1;

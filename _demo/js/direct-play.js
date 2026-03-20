@@ -22,11 +22,8 @@ function pauseDirectPart(ps) {
 function resumeDirectPart(ps) {
   if (ps._directNode && ps._directPaused) {
     ps._directPaused = false;
-    // Resume audio by restoring gain
+    // Resume audio by restoring gain (audio source has been playing in background, so timing is already correct)
     ps.gainNode.gain.setValueAtTime(1, AC.currentTime);
-    // Adjust start time to account for pause duration
-    const pausedDuration = AC.currentTime - ps._directPauseTime;
-    ps._directStartAC += pausedDuration;
   }
 }
 

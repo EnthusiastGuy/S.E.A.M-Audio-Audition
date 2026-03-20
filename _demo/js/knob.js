@@ -222,6 +222,22 @@ function initKnob() {
       if (ps.node) {
         ps.node.playbackRate.value = Math.max(0.001, Math.abs(pct) / 100);
       }
+      // When speed changes, cancel and re-schedule the pre-scheduled next
+      // segment since its timing is now invalid
+      if (ps._nextNode && !ps.paused) {
+        cancelPreScheduled(ps);
+        const buf = ps.buffers[ps.sequence[ps.currentSeqIdx]?.partIndex];
+        if (buf && ps.startTime) {
+          const rate = Math.max(0.01, Math.abs(pct) / 100);
+          const elapsed = AC.currentTime - ps.startTime;
+          const remaining = buf.duration - elapsed;
+          if (remaining > 0) {
+            const newEndAC = AC.currentTime + remaining / rate;
+            ps._segmentEndAC = newEndAC;
+            preScheduleNext(ps.fmt, ps.songIdx, newEndAC);
+          }
+        }
+      }
     }
 
     saveSession();

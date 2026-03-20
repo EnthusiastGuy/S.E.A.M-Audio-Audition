@@ -315,29 +315,31 @@ body {
 .part-item.playing-part .part-label { color: var(--green); font-weight: 500; }
 .part-mini-bar {
   display: none;
-  height: 4px;
+  height: 10px;
   background: var(--bg3);
-  border-radius: 2px;
-  margin: 4px 0 2px 8px;
+  border-radius: 5px;
+  margin: 6px 0 2px 0;
   position: relative;
   cursor: pointer;
+  width: 100%;
 }
 .part-mini-bar.visible { display: block; }
 .part-mini-fill {
   height: 100%;
   background: var(--green);
-  border-radius: 2px;
+  border-radius: 5px;
   transition: width 0.1s linear;
 }
 .part-mini-handle {
-  width: 10px;
-  height: 10px;
+  width: 12px;
+  height: 12px;
   background: var(--green);
   border-radius: 50%;
   position: absolute;
-  top: -3px;
+  top: -1px;
   transform: translateX(-50%);
   cursor: grab;
+  box-shadow: 0 0 3px rgba(0,0,0,0.4);
 }
 
 /* Color swatches per part */
@@ -442,6 +444,26 @@ body {
   text-overflow: clip;
   padding: 0 3px;
 }
+.brick-delete {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--red, #ff6b6b);
+  color: #fff;
+  font-size: 10px;
+  line-height: 16px;
+  text-align: center;
+  cursor: pointer;
+  border: none;
+  padding: 0;
+  display: none;
+  z-index: 10;
+  font-weight: 700;
+}
+.part-brick:hover .brick-delete { display: block; }
 .part-brick-drag-handle {
   position: absolute;
   top: 0; left: 0; right: 0; bottom: 0;
@@ -930,7 +952,11 @@ const STATE = {
 };
 
 // Persist keys in localStorage
-const LS_KEY = 'seam_session_v3';
+const LS_KEY_PREFIX = 'seam_session_v4_';
+
+function getSessionKey() {
+  return LS_KEY_PREFIX + (STATE.rootDir?.name || 'default');
+}
 
 function saveSession() {
   try {
@@ -941,19 +967,20 @@ function saveSession() {
       loopSettings: {},
       sequences: {},
       currentFormat: STATE.currentFormat,
+      openSheets: Array.from(openPartSheets),
     };
     // Save loop settings and sequences per player
     for (const [key, ps] of Object.entries(STATE.players)) {
       data.loopSettings[key] = ps.loopSettings;
       data.sequences[key] = ps.sequence.map(b => b.partIndex);
     }
-    localStorage.setItem(LS_KEY, JSON.stringify(data));
+    localStorage.setItem(getSessionKey(), JSON.stringify(data));
   } catch(e) {}
 }
 
 function loadSession() {
   try {
-    const raw = localStorage.getItem(LS_KEY);
+    let raw = localStorage.getItem(getSessionKey());
     if (!raw) return null;
     return JSON.parse(raw);
   } catch(e) { return null; }
@@ -978,8 +1005,8 @@ function parseFilename(fname) {
   const base = dot >= 0 ? fname.slice(0, dot) : fname;
   const ext  = dot >= 0 ? fname.slice(dot+1).toLowerCase() : '';
 
-  // Try to match part pattern:  "... N -> A, B, C"
-  const partMatch = base.match(/^(.+?)\s+(\d+)\s*->\s*([\d,\s]+)$/);
+  // Try to match part pattern:  "... N - A, B, C" or "... N -> A, B, C"
+  const partMatch = base.match(/^(.+?)\s+(\d+)\s*(?:->|-)\s*([\d,\s]+)$/);
   if (partMatch) {
     const songName = partMatch[1].trim();
     const partNum  = parseInt(partMatch[2], 10);
@@ -1019,7 +1046,7 @@ async function scanFormat(formatHandle) {
       if (!['mp3','ogg','wav'].includes(ext)) continue;
 
       const parsed = parseFilename(fname);
-      const entry  = ensureSong(parsed.songName || songName);
+      const entry  = ensureSong(songName);
 
       if (parsed.partNum === null) {
         // Full song file
@@ -1285,6 +1312,24 @@ function ensurePlayerState(fmt, songIdx) {
       locked: false,
     };
     STATE.players[key].gainNode.connect(masterGain);
+
+    // Restore saved sequence and loop settings if available
+    if (STATE._savedSession) {
+      const ss = STATE._savedSession;
+      if (ss.sequences && ss.sequences[key]) {
+        const restored = ss.sequences[key]
+          .map(pi => {
+            if (pi === -1) return song.mainHandle ? { partIndex: -1, label: 'Full Song' } : null;
+            const part = song.parts[pi];
+            return part ? { partIndex: pi, label: part.file } : null;
+          })
+          .filter(Boolean);
+        if (restored.length > 0) STATE.players[key].sequence = restored;
+      }
+      if (ss.loopSettings && ss.loopSettings[key]) {
+        STATE.players[key].loopSettings = ss.loopSettings[key];
+      }
+    }
   }
   return STATE.players[key];
 }
@@ -1374,6 +1419,10 @@ async function startPlaying(fmt, songIdx) {
   ps.paused          = false;
   ps.pausedAt        = 0;
   ps.crossfadeScheduled = false;
+
+  // Reset gain (may be stuck near zero after a crossfade out)
+  ps.gainNode.gain.cancelScheduledValues(AC.currentTime);
+  ps.gainNode.gain.setValueAtTime(1, AC.currentTime);
 
   updateActionButtons(fmt, songIdx, 'playing');
   showPlayerArea(fmt, songIdx);
@@ -1630,14 +1679,36 @@ function renderPlayerArea(fmt, songIdx) {
 
     // Play part button
     const pBtn = document.createElement('button');
-    pBtn.className = 't-btn play btn-sm';
+    pBtn.className = 't-btn play btn-sm part-play-btn';
     pBtn.title = 'Play this part';
     pBtn.innerHTML = '&#9654;';
-    pBtn.addEventListener('click', (e) => {
+    pBtn.onclick = (e) => {
       e.stopPropagation();
-      playPartDirectly(fmt, songIdx, f.partIndex, item);
-    });
+      const ps = STATE.players[`${fmt}_${songIdx}`];
+      if (ps && ps._directNode && ps._directPartIndex === f.partIndex) {
+        stopDirectPart(ps);
+        resetDirectPartUI(ps, `${fmt}_${songIdx}`, f.partIndex, item);
+      } else {
+        playPartDirectly(fmt, songIdx, f.partIndex, item);
+      }
+    };
     item.appendChild(pBtn);
+
+    // Stop part button
+    const sBtn = document.createElement('button');
+    sBtn.className = 't-btn stop btn-sm part-stop-btn';
+    sBtn.title = 'Stop';
+    sBtn.innerHTML = '&#9632;';
+    sBtn.style.display = 'none';
+    sBtn.onclick = (e) => {
+      e.stopPropagation();
+      const ps = STATE.players[`${fmt}_${songIdx}`];
+      if (ps) {
+        stopDirectPart(ps);
+        resetDirectPartUI(ps, `${fmt}_${songIdx}`, f.partIndex, item);
+      }
+    };
+    item.appendChild(sBtn);
 
     // Mini bar (shown when this part is playing directly)
     const miniBar = document.createElement('div');
@@ -1656,7 +1727,7 @@ function renderPlayerArea(fmt, songIdx) {
     // Drag from parts list to timeline
     item.addEventListener('dragstart', (e) => {
       e.dataTransfer.setData('part-source', JSON.stringify({ fmt, songIdx, partIndex: f.partIndex, fromList: true }));
-      e.dataTransfer.effectAllowed = 'copy';
+      e.dataTransfer.effectAllowed = 'copyMove';
       highlightPartInstances(key, f.partIndex, true);
     });
     item.addEventListener('dragend', () => {
@@ -1792,6 +1863,20 @@ function renderBricks(fmt, songIdx, totalDur) {
     lbl.className = 'part-brick-label';
     lbl.textContent = item.partIndex === -1 ? 'Full' : String(STATE.songs[fmt][songIdx].parts[item.partIndex]?.num ?? seqIdx+1);
     brick.appendChild(lbl);
+
+    // Delete button
+    const delBtn = document.createElement('button');
+    delBtn.className = 'brick-delete';
+    delBtn.textContent = '✕';
+    delBtn.title = 'Remove from timeline';
+    delBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (ps.sequence.length <= 1) return;
+      ps.sequence.splice(seqIdx, 1);
+      reRenderSeek(fmt, songIdx);
+      saveSession();
+    });
+    brick.appendChild(delBtn);
 
     // Click to seek to this part
     brick.addEventListener('click', () => seekToPart(fmt, songIdx, seqIdx));
@@ -2103,12 +2188,14 @@ function togglePartSheet(fmt, songIdx) {
     area.classList.remove('visible');
     area.innerHTML = '';
     openPartSheets.delete(key);
+    saveSession();
   } else {
     ensurePlayerState(fmt, songIdx);
     preloadSong(fmt, songIdx).then(() => {
       area.classList.add('visible');
       renderPlayerArea(fmt, songIdx);
       openPartSheets.add(key);
+      saveSession();
     });
   }
 }
@@ -2160,7 +2247,7 @@ function setupBricksDropZone(fmt, songIdx) {
 
   bricksRow.addEventListener('dragover', (e) => {
     e.preventDefault();
-    e.dataTransfer.dropEffect = 'copy';
+    e.dataTransfer.dropEffect = 'move';
     showInsertLine(e.clientX);
   });
 
@@ -2219,6 +2306,29 @@ function reRenderSeek(fmt, songIdx) {
 }
 
 // ─── PART DIRECT PLAY ────────────────────────────────────────
+function stopDirectPart(ps) {
+  if (ps._directNode) {
+    try { ps._directNode.stop(); } catch(e) {}
+    ps._directNode.disconnect();
+    ps._directNode = null;
+  }
+}
+
+function resetDirectPartUI(ps, key, partIndex, listItem) {
+  ps._directNode = null;
+  ps._directPartIndex = null;
+  const playBtn = listItem.querySelector('.part-play-btn');
+  const stopBtn = listItem.querySelector('.part-stop-btn');
+  const miniBar = document.getElementById(`mini-bar-${key}-${partIndex}`);
+  if (playBtn) {
+    playBtn.innerHTML = '&#9654;';
+    playBtn.title = 'Play this part';
+  }
+  if (stopBtn) stopBtn.style.display = 'none';
+  if (miniBar) miniBar.classList.remove('visible');
+  listItem.classList.remove('playing-part');
+}
+
 async function playPartDirectly(fmt, songIdx, partIndex, listItem) {
   if (AC.state === 'suspended') await AC.resume();
   const key  = `${fmt}_${songIdx}`;
@@ -2230,7 +2340,11 @@ async function playPartDirectly(fmt, songIdx, partIndex, listItem) {
   if (!buf) return;
 
   // Stop previous direct node if any
-  if (ps._directNode) { try { ps._directNode.stop(); } catch(e){} ps._directNode.disconnect(); }
+  stopDirectPart(ps);
+
+  // Reset gain (may be stuck near zero after crossfade)
+  ps.gainNode.gain.cancelScheduledValues(AC.currentTime);
+  ps.gainNode.gain.setValueAtTime(1, AC.currentTime);
 
   const src = AC.createBufferSource();
   src.buffer = buf;
@@ -2238,73 +2352,65 @@ async function playPartDirectly(fmt, songIdx, partIndex, listItem) {
   src.connect(ps.gainNode);
   src.start();
   ps._directNode = src;
+  ps._directPartIndex = partIndex;
 
-  // Show mini bar
-  const miniBar  = document.getElementById(`mini-bar-${key}-${partIndex}`);
+  // Update UI
+  const playBtn = listItem.querySelector('.part-play-btn');
+  const stopBtn = listItem.querySelector('.part-stop-btn');
+  const miniBar = document.getElementById(`mini-bar-${key}-${partIndex}`);
+  if (playBtn) {
+    playBtn.innerHTML = '&#9646;&#9646;';
+    playBtn.title = 'Pause';
+  }
+  if (stopBtn) stopBtn.style.display = '';
   if (miniBar) miniBar.classList.add('visible');
   listItem.classList.add('playing-part');
 
-  // Update t-btn
-  const pBtn = listItem.querySelector('.t-btn.play');
-  if (pBtn) {
-    pBtn.innerHTML = '&#9646;&#9646;';
-    pBtn.classList.replace('play','pause');
-    pBtn.title = 'Stop part';
-    pBtn.onclick = (e) => {
-      e.stopPropagation();
-      if (ps._directNode) { try { ps._directNode.stop(); } catch(e2){} ps._directNode = null; }
-      miniBar?.classList.remove('visible');
-      listItem.classList.remove('playing-part');
-      pBtn.innerHTML = '&#9654;';
-      pBtn.classList.replace('pause','play');
-      pBtn.title = 'Play this part';
-      pBtn.onclick = (ev) => { ev.stopPropagation(); playPartDirectly(fmt, songIdx, partIndex, listItem); };
-    };
-  }
-
   const dur = buf.duration;
-  const startAC = AC.currentTime;
+  ps._directStartAC = AC.currentTime;
+  ps._directSeekOffset = 0;
+  ps._directDuration = dur;
 
   function tickMini() {
-    if (!ps._directNode) return;
-    const pos = Math.min(AC.currentTime - startAC, dur);
+    if (!ps._directNode || ps._directNode !== src) return;
+    const elapsed = AC.currentTime - ps._directStartAC;
+    const pos = Math.min(ps._directSeekOffset + elapsed, dur);
     const pct = (pos / dur) * 100;
-    const fill   = document.getElementById(`mini-fill-${key}-${partIndex}`);
-    const hnd    = document.getElementById(`mini-handle-${key}-${partIndex}`);
-    const bar    = document.getElementById(`mini-bar-${key}-${partIndex}`);
-    if (fill)  fill.style.width  = `${pct}%`;
-    if (hnd && bar) hnd.style.left = `${pct}%`;
+    const fill = document.getElementById(`mini-fill-${key}-${partIndex}`);
+    const hnd  = document.getElementById(`mini-handle-${key}-${partIndex}`);
+    if (fill) fill.style.width  = `${pct}%`;
+    if (hnd)  hnd.style.left = `${pct}%`;
     if (pos < dur) requestAnimationFrame(tickMini);
   }
   requestAnimationFrame(tickMini);
 
-  // Mini bar seek
-  const miniBar2 = document.getElementById(`mini-bar-${key}-${partIndex}`);
-  if (miniBar2) {
-    miniBar2.addEventListener('click', (e) => {
-      const rect = miniBar2.getBoundingClientRect();
-      const ratio = (e.clientX - rect.left) / rect.width;
-      if (ps._directNode) { try { ps._directNode.stop(); } catch(e2){} ps._directNode = null; }
+  // Mini bar seek (uses onclick to avoid accumulating handlers)
+  if (miniBar) {
+    miniBar.onclick = (e) => {
+      if (!ps._directNode) return;
+      const rect = miniBar.getBoundingClientRect();
+      const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+      stopDirectPart(ps);
+      const seekPos = ratio * dur;
       const newSrc = AC.createBufferSource();
       newSrc.buffer = buf;
       newSrc.playbackRate.value = Math.max(0.01, Math.abs(STATE.speedPercent) / 100);
       newSrc.connect(ps.gainNode);
-      newSrc.start(0, ratio * dur);
+      newSrc.start(0, seekPos);
       ps._directNode = newSrc;
-    });
+      ps._directStartAC = AC.currentTime;
+      ps._directSeekOffset = seekPos;
+      newSrc.onended = () => {
+        if (ps._directNode !== newSrc) return;
+        resetDirectPartUI(ps, key, partIndex, listItem);
+      };
+      requestAnimationFrame(tickMini);
+    };
   }
 
   src.onended = () => {
     if (ps._directNode !== src) return;
-    ps._directNode = null;
-    if (miniBar) miniBar.classList.remove('visible');
-    listItem.classList.remove('playing-part');
-    if (pBtn) {
-      pBtn.innerHTML = '&#9654;';
-      pBtn.classList.replace('pause','play');
-      pBtn.title = 'Play this part';
-      pBtn.onclick = (ev) => { ev.stopPropagation(); playPartDirectly(fmt, songIdx, partIndex, listItem); };
-    }
+    resetDirectPartUI(ps, key, partIndex, listItem);
   };
 }
 
@@ -2424,6 +2530,7 @@ let knobAngle = speedToAngle(100);   // ~45°  default NE
 let knobDragging = false;
 let knobLastAngle = 0;
 let knobAccum = knobAngle;  // accumulated angle to prevent jump
+let knobDidMove = false;
 
 // Click sound
 const AC_CLICK = new (window.AudioContext || window.webkitAudioContext)();
@@ -2461,6 +2568,16 @@ function drawKnob(canvas, angle) {
   ctx.arc(cx, cy, r - 2, zeroRad - 0.04, zeroRad + 0.04, false);
   ctx.strokeStyle = '#4ecdc4';
   ctx.lineWidth = 5;
+  ctx.stroke();
+
+  // 100% tick marker
+  const hundredAngle = speedToAngle(100);
+  const hundredRad = (hundredAngle - 90) * Math.PI / 180;
+  ctx.beginPath();
+  ctx.moveTo(cx + Math.cos(hundredRad) * (r - 5), cy + Math.sin(hundredRad) * (r - 5));
+  ctx.lineTo(cx + Math.cos(hundredRad) * (r + 1), cy + Math.sin(hundredRad) * (r + 1));
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 2;
   ctx.stroke();
 
   // Filled arc from zero to current angle
@@ -2517,6 +2634,7 @@ function initKnob() {
 
   canvas.addEventListener('mousedown', (e) => {
     knobDragging = true;
+    knobDidMove = false;
     knobLastAngle = getAngleFromEvent(e);
     knobAccum = knobAngle;
     e.preventDefault();
@@ -2524,10 +2642,26 @@ function initKnob() {
 
   canvas.addEventListener('touchstart', (e) => {
     knobDragging = true;
+    knobDidMove = false;
     knobLastAngle = getAngleFromEvent(e);
     knobAccum = knobAngle;
     e.preventDefault();
   }, { passive: false });
+
+  // Click on 100% tick to reset speed
+  canvas.addEventListener('click', (e) => {
+    if (knobDidMove) return;
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const hundredAngle = speedToAngle(100);
+    const hundredRad = (hundredAngle - 90) * Math.PI / 180;
+    const r = Math.min(canvas.width, canvas.height) / 2 - 6;
+    const tickX = canvas.width / 2 + Math.cos(hundredRad) * (r - 2);
+    const tickY = canvas.height / 2 + Math.sin(hundredRad) * (r - 2);
+    const dist = Math.sqrt((x - tickX) ** 2 + (y - tickY) ** 2);
+    if (dist < 12) setKnobSpeed(100);
+  });
 
   document.addEventListener('mousemove', (e) => {
     if (!knobDragging) return;
@@ -2549,6 +2683,7 @@ function initKnob() {
   }, { passive: false });
 
   function updateKnob(e) {
+    knobDidMove = true;
     const newA = getAngleFromEvent(e);
     let delta = newA - knobLastAngle;
     // Wrap delta
@@ -2684,6 +2819,7 @@ async function discoverSongs(rootHandle) {
 
   // Restore session
   const saved = loadSession();
+  STATE._savedSession = saved;
   if (saved) {
     STATE.crossfade    = saved.crossfade    ?? 0;
     STATE.speedPercent = saved.speedPercent ?? 100;
@@ -2696,13 +2832,6 @@ async function discoverSongs(rootHandle) {
         // Add any missing indices
         STATE.songs[fmt].forEach((_,i) => { if (!validOrder.includes(i)) validOrder.push(i); });
         STATE.order[fmt] = validOrder;
-      }
-    }
-
-    if (saved.loopSettings) {
-      for (const [key, ls] of Object.entries(saved.loopSettings)) {
-        const ps = STATE.players[key];
-        if (ps) ps.loopSettings = ls;
       }
     }
   }
@@ -2719,6 +2848,17 @@ async function discoverSongs(rootHandle) {
   // Restore knob / crossfade values
   const cf = document.getElementById('crossfade-slider');
   if (cf) { cf.value = STATE.crossfade; document.getElementById('crossfade-val').textContent = `${STATE.crossfade} ms`; }
+
+  // Restore open part sheets
+  if (saved && saved.openSheets) {
+    for (const sheetKey of saved.openSheets) {
+      const [fmt, idxStr] = sheetKey.split('_');
+      const songIdx = parseInt(idxStr, 10);
+      if (STATE.songs[fmt] && STATE.songs[fmt][songIdx]) {
+        togglePartSheet(fmt, songIdx);
+      }
+    }
+  }
 
   statusEl.textContent = '';
 }

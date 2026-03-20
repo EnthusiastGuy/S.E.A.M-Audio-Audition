@@ -67,9 +67,19 @@ function renderPlayerArea(fmt, songIdx) {
       e.stopPropagation();
       const ps = STATE.players[`${fmt}_${songIdx}`];
       if (ps && ps._directNode && ps._directPartIndex === f.partIndex) {
-        stopDirectPart(ps);
-        resetDirectPartUI(ps, `${fmt}_${songIdx}`, f.partIndex, itemWrapper);
+        // Currently playing: pause it
+        if (!ps._directPaused) {
+          pauseDirectPart(ps);
+          pBtn.innerHTML = '&#9654;';
+          pBtn.title = 'Resume';
+        } else {
+          // Currently paused: resume it
+          resumeDirectPart(ps);
+          pBtn.innerHTML = '&#9646;&#9646;';
+          pBtn.title = 'Pause';
+        }
       } else {
+        // Not playing: start playing
         playPartDirectly(fmt, songIdx, f.partIndex, itemWrapper);
       }
     };

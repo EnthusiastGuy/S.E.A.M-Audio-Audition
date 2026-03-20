@@ -1,0 +1,44 @@
+/* =========================================================
+   S.E.A.M Audio Audition — CSS Variables, Reset & Base
+   ========================================================= */
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap');
+
+:root {
+  --bg:        #1a1a2e;
+  --bg2:       #16213e;
+  --bg3:       #0f3460;
+  --card:      #1e2a45;
+  --card2:     #253352;
+  --border:    #2d4170;
+  --accent:    #e94560;
+  --accent2:   #f5a623;
+  --accent3:   #4ecdc4;
+  --accent4:   #a8dadc;
+  --green:     #52d68a;
+  --text:      #eaf0fb;
+  --text2:     #8fa3c8;
+  --text3:     #546a8a;
+  --tab-h:     38px;
+  --row-h:     48px;
+  --radius:    8px;
+  --radius-sm: 5px;
+  --shadow:    0 4px 20px rgba(0,0,0,0.4);
+  --crayon1:   #ff6b6b;
+  --crayon2:   #ffd93d;
+  --crayon3:   #6bcb77;
+  --crayon4:   #4d96ff;
+  --crayon5:   #cc96ff;
+  --part-colors: #ff6b6b,#ffd93d,#6bcb77,#4d96ff,#cc96ff,#f5a623,#4ecdc4,#ff9f43;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  min-height: 100vh;
+  overflow-x: hidden;
+}

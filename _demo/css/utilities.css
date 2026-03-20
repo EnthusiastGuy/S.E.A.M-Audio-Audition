@@ -1,0 +1,70 @@
+/* =========================================================
+   S.E.A.M Audio Audition — Animations, Drag, Status & Responsive
+   ========================================================= */
+
+/* ---- ANIMATIONS ---- */
+@keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.song-player-area.visible { animation: fadeIn 0.2s ease; }
+
+/* ---- STATUS DOT ---- */
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--green);
+  display: inline-block;
+  margin-left: 6px;
+  animation: pulse 1.2s infinite;
+}
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+/* ---- DRAG GHOST ---- */
+.drag-ghost {
+  position: fixed;
+  pointer-events: none;
+  opacity: 0.85;
+  z-index: 9999;
+  background: var(--card2);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  padding: 6px 12px;
+  font-size: 12px;
+  font-family: 'Space Mono', monospace;
+  color: var(--text);
+  max-width: 220px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  box-shadow: var(--shadow);
+}
+
+/* ---- MISSING SONG TOOLTIP ---- */
+.missing-tip {
+  display: none;
+  position: absolute;
+  background: var(--card2);
+  border: 1px solid var(--accent2);
+  color: var(--accent2);
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  white-space: nowrap;
+  z-index: 600;
+  top: -28px;
+  left: 0;
+  pointer-events: none;
+}
+.col-name.missing:hover .missing-tip { display: block; }
+
+/* ---- RESPONSIVE ---- */
+@media (max-width: 900px) {
+  .tabs-wrapper, .playlist-container, .footer-controls, .playlist-totals { width: 100%; }
+  .playlist-header { grid-template-columns: 32px 1fr 80px 50px 90px; }
+  .song-row-main { grid-template-columns: 32px 1fr 80px 50px 90px; }
+  .setup-card { padding: 28px 20px; }
+}
+@media (max-width: 600px) {
+  .playlist-header { display: none; }
+  .song-row-main { grid-template-columns: 28px 1fr 70px 40px 80px; font-size: 12px; }
+  .app-logo { font-size: 16px; }
+}

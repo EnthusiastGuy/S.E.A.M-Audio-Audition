@@ -1,0 +1,94 @@
+/* =========================================================
+   S.E.A.M Audio Audition — Playlist Table & Song Rows
+   ========================================================= */
+
+/* ---- PLAYLIST TABLE ---- */
+.playlist-container {
+  width: 80%;
+  margin: 0 auto;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: var(--shadow);
+}
+.playlist-header {
+  display: grid;
+  grid-template-columns: 42px 1fr 110px 60px 130px;
+  padding: 10px 14px;
+  background: var(--bg3);
+  font-family: 'Space Mono', monospace;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: var(--text2);
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--border);
+  gap: 8px;
+}
+
+/* ---- SONG ROW ---- */
+.song-row {
+  border-bottom: 1px solid var(--border);
+  transition: background 0.1s;
+  cursor: grab;
+  user-select: none;
+}
+.song-row:last-child { border-bottom: none; }
+.song-row.dragging { opacity: 0.4; cursor: grabbing; }
+.song-row.drag-over-top { border-top: 2px solid var(--accent); }
+.song-row.drag-over-bottom { border-bottom: 2px solid var(--accent); }
+.song-row.playing { background: rgba(233,69,96,0.06); }
+
+.song-row-main {
+  display: grid;
+  grid-template-columns: 42px 1fr 110px 60px 130px;
+  padding: 10px 14px;
+  align-items: center;
+  gap: 8px;
+}
+.song-row-main:hover { background: rgba(255,255,255,0.03); }
+
+/* ---- COLUMNS ---- */
+.col-nr {
+  font-family: 'Space Mono', monospace;
+  font-size: 13px;
+  color: var(--text3);
+  text-align: center;
+}
+.col-name {
+  font-weight: 500;
+  color: var(--text);
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.col-name.missing { color: var(--accent2); }
+.col-dur {
+  font-family: 'Space Mono', monospace;
+  font-size: 13px;
+  color: var(--accent3);
+  text-align: center;
+}
+.col-parts {
+  text-align: center;
+  font-family: 'Space Mono', monospace;
+  font-size: 13px;
+}
+.col-parts .parts-badge {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 2px 10px;
+  cursor: pointer;
+  transition: all 0.15s;
+  display: inline-block;
+}
+.col-parts .parts-badge:hover { background: var(--accent3); color: var(--bg); border-color: var(--accent3); }
+.col-action {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: flex-end;
+}

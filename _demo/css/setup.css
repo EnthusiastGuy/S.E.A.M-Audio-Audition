@@ -1,0 +1,27 @@
+/* =========================================================
+   S.E.A.M Audio Audition — Setup Panel
+   ========================================================= */
+
+#setup-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: calc(100vh - 80px);
+  gap: 24px;
+  padding: 32px 24px;
+}
+.setup-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 48px 56px;
+  max-width: 520px;
+  width: 100%;
+  text-align: center;
+  box-shadow: var(--shadow);
+}
+.setup-icon { font-size: 56px; margin-bottom: 16px; }
+.setup-card h2 { font-size: 24px; font-weight: 700; color: var(--text); margin-bottom: 10px; }
+.setup-card p { color: var(--text2); font-size: 14px; line-height: 1.7; margin-bottom: 28px; }
+.setup-card .btn-accent { font-size: 15px; padding: 12px 32px; width: 100%; justify-content: center; }

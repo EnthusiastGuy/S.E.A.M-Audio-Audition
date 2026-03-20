@@ -1,0 +1,234 @@
+I need an application made that showcases different audio files that I deliver to some customers. The application will operate over some audio that is also loopable and this allows showcasing how it works for the sample files that will be provided separately.
+
+Because this will be delivered as a browser-based demo that users open locally on Windows, macOS, and Linux, the application must not rely on automatic filesystem scanning without permission; instead, it should begin by asking the user to select the root sample-pack directory, then discover the mp3, ogg, and wav subdirectories and build its interface from the files found there. The solution should preferably be implemented as a self-contained single HTML file using JavaScript and the Web Audio API so playback, layering, looping, seeking, crossfading, and seamless stitched transitions between parts are all handled robustly in-browser, while preserving full compatibility with local use and avoiding server-side dependencies.
+
+I'd like for you to build this whole integrated thing, ideally as a single html file. You are free to use jquery, javascript, whatever else you see fit to use.
+ 
+So, first you need to know how the directories structure will be:
+ 
+The root directory of the whole package will have several directories based on the format:
+ 
+```
+[d] _demo
+[d] mp3
+[d] ogg
+[d] wav
+[f] readme.txt
+[f] startdemo.lnk		// Points inside the _demo directory to the .html we will create here. Can be .lnk or whatever else works, but should work on win/mac/linux. Multiple shortcuts (platform specific) are allowed.
+```
+ 
+each of the [mp3, ogg, wav] directories will have other directories, one per each individual song. This directory will have the name of the song. So, this could be for example:
+ 
+```
+[d] _demo
+[d]mp3
+  [d] Azure Horizon
+    Azure Horizon.mp3
+    Azure Horizon 1 -> 2, 4.mp3
+    Azure Horizon 2 -> 2, 3, 4.mp3
+    Azure Horizon 3 -> 2, 3, 4.mp3
+    Azure Horizon 4.mp3
+  [d] The Alchemist’s Greenhouse
+	The Alchemist’s Greenhouse.mp3
+	The Alchemist’s Greenhouse 1 -> 2.mp3
+	The Alchemist’s Greenhouse 2 -> 2, 3.mp3
+	The Alchemist’s Greenhouse 3.mp3
+[d] mp3
+[d] ogg
+[d] wav
+[f] readme.txt
+[f] startdemo.lnk
+```
+ 
+Now, let me explain the weird numberings at the end. Let's take the Azure Horizon directory. That is one song and what you have in there is:
+ 
+1. the full song: Azure Horizon.mp3
+2. all pieces that make it up with what pieces they connect to at the end.
+ 
+So, Azure Horizon 1 -> 2, 4.mp3 is the start of the song and after it either part 2 or part 4 can follow.
+Azure Horizon 2 -> 2, 3, 4.mp3 is the second part, and after it you can play 2 again (which means it loops), but also parts 3 or 4.
+Azure Horizon 3 -> 2, 3, 4.mp3 is the third part, and after it you can play 2, 3 again (which means this one loops as well with the exact termination as part 2) but also part 4.
+Azure Horizon 4.mp3 is the last part. It does not loop or connect with anything else, it simply ends the melody.
+ 
+The next example, "The Alchemist’s Greenhouse" is a simpler example.
+ 
+The Alchemist’s Greenhouse.mp3 is the full melody
+The Alchemist’s Greenhouse 1 -> 2.mp3 is the first part of it and connects to the second part
+The Alchemist’s Greenhouse 2 -> 2, 3.mp3 is the second part which connects afterwards with itself (loopable) or the final part (part 3)
+The Alchemist’s Greenhouse 3.mp3 is the final part which ends the song after playing.
+ 
+This notation will be consistent across all songs.
+ 
+ 
+So, in the _demo directory we need to have our html application which is described below:
+ 
+ 
+A very nice web page player, flat style graphics with nice neutral fonts (bot not that common like Arial) which exposes a few things:
+ 
+As it has been mentioned, we might have the CORS problem, we probably need to start with a single button titled "Select" and below a bit of explanatory text such as "Browse to the directory that has the sample music. It should be the directory where you find the mp3, ogg and wav directories. Select that directory using the above button."
+ 
+Once we have all that set up, in the centre we set up a tabbed list that takes 80% of all width since there will most all things happen. The tabs point to mp3, ogg and wav. Switching between those tabs switches evidently between the three directories we have listing below the song names in this format:
+
+```
+Nr	Name					Duration (minutes:seconds)			Parts		Action
+-----------------------------------------------------------------------------------
+1	Azure Horizon					3:15						4				>
+2	The Alchemist’s Greenhouse		5:43						3				>
+...
+-----------------------------------------------------------------------------------
+ 
+TOTAL		19 songs, 57:25  total duration, 72 parts
+```
+ 
+This list can be reordered by dragging an entry with the mouse up/down, and it acts as a playlist organizer.
+ 
+The duration can be taken from the main file (such as: "Azure Horizon.mp3"). If the main file is missing we still show the name, duration (calculated as the duration sum of the parts) and parts number, but we show this entry with a different color. When hovering it we mention "main song file is missing, only parts available".
+If there are no parts either, we don't display that entry. If there's only the main mp3 file and no parts, we simply show Parts 0.
+ 
+The Action button represents an area where we have some control buttons. For now we will be using a play/stop button. Pressing that play action button on the Azure Horizon song for instance starts playing the main song, replaces the play button on the action cell with a pair of Pause and stop buttons (but only in this cell where we're playing) and also spawns a small seek bar below the row that can be dragged with the mouse, evidentiates the individual parts with some markers that when clicked snap the seek point to them. Below them, all loopable parts have special buttons centered nicely between the limits of each loopable part brick. If a song finishes playing the one immediately underneath follows until the end. At the end we restart at the top.
+ 
+Here's how it must look:
+
+```
+Nr	Name					Duration (minutes:seconds)			Parts		Action
+-----------------------------------------------------------------------------------
+1	Azure Horizon					3:15						4			||  []
+ 
+  | 00:10 |
+  ----V-----------|------------------|--------------------------|---------------- 5.3%
+				      [ Loop once ]	        [ Loop once ]
+ 
+2	The Alchemist’s Greenhouse		5:43						3			   >
+ 
+...
+ 
+-----------------------------------------------------------------------------------
+ 
+TOTAL		19 songs, 57:25  total duration, 72 parts
+```
+
+On the rightmost side we have the percentage indicating where we are relative to the original song duration, we don't count loops or anything like that.
+Above the seek mark we show the total time played now INCLUDING loops, so if a loop was played several times, the time there is added. If we reach hours, we change the view to: 00:00:00 and center nicely over the seek mark.
+Clicking on any loop button presents the following dropdown with options:
+ 
+once (not actually looping, just continuing)	// maybe shorten this text, make it more succint
+twice
+3 times
+4 times
+5 times
+10 times
+forever
+ 
+Selecting either of those values sets them also in the LOOP button text such as for instance:
+ 
+Loop once
+ 
+or 
+ 
+Loop 3 times
+ 
+The text in the buttons also reflects where we are with the looping sequence, so as soon as the seek point reaches a loop, we get the progress of it like this:
+
+```
+				   | 00:10 |
+  ----------------|----V-------------|--------------------------|---------------- 24.8%
+					  [ Loop 1/2 ]			  [ Loop once ]
+```
+ 
+Very important, we can play several files simultaneously this way, in case the user wants to overlap some to hear them together. Realistically, I don't expect more than two songs played simultaneously.
+ 
+Below the table we have an option called Crossfade with a value of 0. (that is in milliseconds). That value is used when we play songs in the playlist, so if we approach the end of the song - the amount of milliseconds set there, we start to play the other song at a minimal volume that we increase over the duration of that value of milliseconds while we reduce the value of the original song. Well, I assume you know what crossfade is already.
+ 
+ 
+Below the table we also have another button looking like a styled knob that sets the playback speed. The default value is 100% (the know points North East). Main values are:
+ 
+- default: 100% speed (North-East)
+- max speed: 200% speed (South-East)
+- stop: 0% speed (North)
+- Reverse 100% (North-West)
+- Reverse 200% (South-West)
+- Reverse 250% (South)
+ 
+The knob CANNOT turn from South East to South, it needs to be correctly rotated counter clockwise from that position, like a real knob. The know can however turn in snapping increments of 5% with a small click sound.
+This know affects all playback speeds if multiple files are playing.
+
+Now, the next feature is the ability to place parts on a sheet, so given the player view already shown we can click on the "4" in the parts column and this presents all the parts in a drag-and-drop layout with the existing parts already layed out in the seek bar since we already have them there like this:
+
+
+```
+Nr	Name					Duration (minutes:seconds)			Parts		Action
+-----------------------------------------------------------------------------------
+1	Azure Horizon					3:15						4			||  []
+ 
+		[ Azure Horizon.mp3 ]												>
+		[ Azure Horizon 1 -> 2, 4.mp3 ]										>
+		[ Azure Horizon 2 -> 2, 3, 4.mp3 ]									||  []
+		-------V--------------------------
+		[ Azure Horizon 3 -> 2, 3, 4.mp3 ]									>
+		[ Azure Horizon 4.mp3 ]												>
+
+  | 00:10 |
+  [      1        ][        2        ][           3             ][      4       ]
+  ----V-----------|------------------|--------------------------|---------------- 5.3%
+				      [ Loop once ]	        [ Loop once ]
+ 
+2	The Alchemist’s Greenhouse		5:43						3			   >
+ 
+...
+ 
+-----------------------------------------------------------------------------------
+ 
+TOTAL		19 songs, 57:25  total duration, 72 parts
+```
+
+Each of this parts has a play button, and if that is clicked, underneath the corresponding part on the left we also see a minimal drag bar that shows the progress and also can be used to skip or go back, just like it's shown in the example above on entry "Azure Horizon 2 -> 2, 3, 4.mp3" which is played, shows the pause/stop buttons and the trackbar below.
+Now, the seek bar is also kind-of editable, in the sense that we can hover over the existing bricks there and can grab-move them one after another.
+Grabbing an existing placed brick will simply move it left/right so we can re-position it in the timeline hierarchy. However, if we pick any of the bricks above in the list, we can ADD them to the existing hierarchy, between two bricks.
+Only when the mouse is released we drop and SNAP in the piece.
+
+So, if we pick-up brick 2, we could place it like so:
+
+
+```
+Nr	Name					Duration (minutes:seconds)			Parts		Action
+-----------------------------------------------------------------------------------
+1	Azure Horizon					3:15						4			||  []
+ 
+		[ Azure Horizon.mp3 ]												>
+		[ Azure Horizon 1 -> 2, 4.mp3 ]										>
+		[ Azure Horizon 2 -> 2, 3, 4.mp3 ]									>
+		[ Azure Horizon 3 -> 2, 3, 4.mp3 ]									>
+		[ Azure Horizon 4.mp3 ]												>
+ 
+  | 00:10 |
+  [     1      ][       2     ][          3         ][       2     ][     4     ]
+  ----V--------|--------------|---------------------|--------------|------------- 4.7%
+			     [ Loop once ]	   [ Loop once ]      [ Loop once ]
+ 
+2	The Alchemist’s Greenhouse		5:43						3			   >
+ 
+...
+ 
+-----------------------------------------------------------------------------------
+ 
+TOTAL		19 songs, 57:25  total duration, 72 parts
+```
+
+
+Also, the the corresponding loop button is added below, because it's a loopable piece.
+
+Also, when hovering the bricks where you pick them up, they highlight and also the corresponding instances of them in the timeline are highlighted too.
+This happens the other way around too, highlight a brick in the timeline and it will be highlighted in the available bricks list.
+
+
+Final notes:
+ 
+1. A VERY important requirement is the seamlessness of the audio play across stitched parts, I don't any hiccups or clicks or anything. Audio API was suggested, if that's the best option, use it.
+
+2. The visuals must be stunning and responsive with a flat-design look, prefferably "retro-crayon". Ideally I should be able to view this on my mobile as well as on my laptop.
+
+3. All things the user does must be saved in a session somewhere in the browser so whenever the user opens up the application again, he finds things EXACTLY how he left them.
+
+Provide a help section which brings up a pop-up explaining every detail in very good detail.
+
+Code tidy, but implement everything.

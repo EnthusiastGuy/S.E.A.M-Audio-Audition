@@ -1,0 +1,91 @@
+/* =========================================================
+   S.E.A.M Audio Audition — Help Modal & Tooltips
+   ========================================================= */
+
+/* ---- HELP MODAL ---- */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.7);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.modal-overlay.hidden { display: none; }
+.modal-box {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  max-width: 760px;
+  width: 100%;
+  max-height: 85vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+  padding: 32px 36px;
+  position: relative;
+}
+.modal-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text2);
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.modal-close:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+.modal-box h2 {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--accent);
+  margin-bottom: 6px;
+  font-family: 'Space Mono', monospace;
+}
+.modal-box h3 {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--accent3);
+  margin: 18px 0 6px;
+  font-family: 'Space Mono', monospace;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+.modal-box p { color: var(--text2); font-size: 13px; line-height: 1.7; margin-bottom: 8px; }
+.modal-box ul { color: var(--text2); font-size: 13px; line-height: 1.8; padding-left: 20px; }
+.modal-box li { margin-bottom: 4px; }
+.modal-box code {
+  background: var(--bg3);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-family: 'Space Mono', monospace;
+  font-size: 11px;
+  color: var(--accent4);
+}
+
+/* ---- TOOLTIP ---- */
+[data-tip] { position: relative; }
+[data-tip]:hover::after {
+  content: attr(data-tip);
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  white-space: nowrap;
+  z-index: 600;
+  pointer-events: none;
+}

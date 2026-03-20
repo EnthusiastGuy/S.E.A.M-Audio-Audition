@@ -1,0 +1,44 @@
+/* =========================================================
+   S.E.A.M Audio Audition — Layout: Scrollbar, Main App, Tabs
+   ========================================================= */
+
+/* ---- SCROLLBAR ---- */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--bg2); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+/* ---- MAIN APP ---- */
+#main-app { display: none; padding: 20px 24px; max-width: 1400px; margin: 0 auto; }
+
+/* ---- TABS ---- */
+.tabs-wrapper { width: 80%; margin: 0 auto 20px; }
+.tabs-nav {
+  display: flex;
+  gap: 4px;
+  background: var(--bg2);
+  padding: 4px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  width: fit-content;
+}
+.tab-btn {
+  background: transparent;
+  border: none;
+  color: var(--text2);
+  padding: 8px 24px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-family: 'Space Mono', monospace;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  transition: all 0.15s;
+}
+.tab-btn.active {
+  background: var(--accent);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(233,69,96,0.4);
+}
+.tab-btn:hover:not(.active) { background: var(--card2); color: var(--text); }
+.tab-content { display: none; }
+.tab-content.active { display: block; }

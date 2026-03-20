@@ -1,0 +1,193 @@
+/* =========================================================
+   S.E.A.M Audio Audition — Seekbar, Part Bricks & Loop Controls
+   ========================================================= */
+
+/* ---- SEEK BAR AREA ---- */
+.seekbar-container {
+  position: relative;
+  margin-top: 10px;
+}
+.time-display {
+  font-family: 'Space Mono', monospace;
+  font-size: 11px;
+  color: var(--text2);
+  margin-bottom: 4px;
+  display: flex;
+  align-items: flex-end;
+  position: relative;
+  height: 18px;
+}
+.time-current-label {
+  background: var(--card2);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 1px 5px;
+  font-size: 10px;
+  white-space: nowrap;
+  position: absolute;
+  bottom: 0;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+.seekbar-track {
+  height: 8px;
+  background: var(--bg3);
+  border-radius: 4px;
+  position: relative;
+  cursor: pointer;
+  overflow: visible;
+}
+.seekbar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent) 0%, var(--accent2) 100%);
+  border-radius: 4px;
+  pointer-events: none;
+  transition: width 0.1s linear;
+}
+.seekbar-handle {
+  width: 14px;
+  height: 14px;
+  background: #fff;
+  border: 2px solid var(--accent);
+  border-radius: 50%;
+  position: absolute;
+  top: -3px;
+  transform: translateX(-50%);
+  cursor: grab;
+  box-shadow: 0 0 6px rgba(233,69,96,0.5);
+  transition: left 0.1s linear;
+}
+.seekbar-handle:active { cursor: grabbing; }
+
+/* ---- PART BRICKS ON SEEKBAR ---- */
+.part-bricks {
+  display: flex;
+  position: relative;
+  height: 32px;
+  margin-bottom: 2px;
+  gap: 2px;
+}
+.part-brick {
+  flex: 1;
+  height: 100%;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  font-family: 'Space Mono', monospace;
+  cursor: pointer;
+  transition: opacity 0.15s, filter 0.15s;
+  position: relative;
+  overflow: visible;
+  user-select: none;
+  border: 1px solid rgba(255,255,255,0.15);
+}
+.part-brick:hover, .part-brick.highlighted { filter: brightness(1.3); }
+.part-brick.active-brick { box-shadow: 0 0 0 2px var(--text); }
+.part-brick-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: rgba(0,0,0,0.7);
+  pointer-events: none;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: clip;
+  padding: 0 3px;
+}
+.brick-delete {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--red, #ff6b6b);
+  color: #fff;
+  font-size: 10px;
+  line-height: 16px;
+  text-align: center;
+  cursor: pointer;
+  border: none;
+  padding: 0;
+  display: none;
+  z-index: 10;
+  font-weight: 700;
+}
+.part-brick:hover .brick-delete { display: block; }
+.part-brick-drag-handle {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  cursor: grab;
+}
+.part-brick-drag-handle:active { cursor: grabbing; }
+
+/* ---- LOOP BUTTONS ---- */
+.loop-buttons-row {
+  display: flex;
+  position: relative;
+  height: 24px;
+  margin-top: 4px;
+}
+.loop-btn-wrapper {
+  position: absolute;
+  transform: translateX(-50%);
+}
+.loop-btn {
+  background: var(--card2);
+  border: 1px solid var(--border);
+  color: var(--text2);
+  border-radius: 12px;
+  padding: 3px 10px;
+  font-size: 10px;
+  font-family: 'Space Mono', monospace;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.12s;
+}
+.loop-btn:hover { background: var(--bg3); color: var(--accent3); border-color: var(--accent3); }
+.loop-btn.active { background: rgba(78,205,196,0.2); border-color: var(--accent3); color: var(--accent3); }
+
+/* ---- SEEK PCT LABEL ---- */
+.seek-pct {
+  font-family: 'Space Mono', monospace;
+  font-size: 10px;
+  color: var(--text3);
+  margin-top: 4px;
+  text-align: right;
+}
+
+/* ---- LOOP DROPDOWN ---- */
+.loop-dropdown {
+  position: absolute;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow);
+  z-index: 500;
+  min-width: 120px;
+  overflow: hidden;
+}
+.loop-dropdown.hidden { display: none; }
+.loop-option {
+  padding: 8px 14px;
+  cursor: pointer;
+  font-size: 12px;
+  font-family: 'DM Sans', sans-serif;
+  transition: background 0.1s;
+  color: var(--text2);
+}
+.loop-option:hover { background: var(--card2); color: var(--text); }
+.loop-option.selected { color: var(--accent3); background: rgba(78,205,196,0.08); }
+
+/* ---- INSERTION LINE FOR BRICK DRAG ---- */
+.insert-line {
+  position: absolute;
+  top: 0; bottom: 0;
+  width: 3px;
+  background: var(--accent);
+  border-radius: 2px;
+  pointer-events: none;
+  z-index: 50;
+}

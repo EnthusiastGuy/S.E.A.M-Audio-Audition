@@ -1,0 +1,75 @@
+/* =========================================================
+   S.E.A.M Audio Audition — Player Expand Area & Parts List
+   ========================================================= */
+
+/* ---- PLAYER EXPAND AREA ---- */
+.song-player-area {
+  background: rgba(15,52,96,0.4);
+  border-top: 1px solid var(--border);
+  padding: 12px 14px 16px;
+  display: none;
+}
+.song-player-area.visible { display: block; }
+
+/* ---- PARTS LIST ---- */
+.parts-list { margin-bottom: 12px; }
+.part-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: var(--radius-sm);
+  margin-bottom: 3px;
+  transition: background 0.1s;
+  cursor: grab;
+}
+.part-item:hover { background: rgba(255,255,255,0.04); }
+.part-item.playing-part { background: rgba(82,214,138,0.08); border-left: 2px solid var(--green); }
+.part-item.highlighted { background: rgba(78,205,196,0.12); }
+.part-label {
+  flex: 1;
+  font-size: 13px;
+  color: var(--text2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.part-item.playing-part .part-label { color: var(--green); font-weight: 500; }
+
+/* ---- PART MINI BAR ---- */
+.part-mini-bar {
+  display: none;
+  height: 10px;
+  background: var(--bg3);
+  border-radius: 5px;
+  margin: 6px 0 2px 0;
+  position: relative;
+  cursor: pointer;
+  width: 100%;
+}
+.part-mini-bar.visible { display: block; }
+.part-mini-fill {
+  height: 100%;
+  background: var(--green);
+  border-radius: 5px;
+  transition: width 0.1s linear;
+}
+.part-mini-handle {
+  width: 12px;
+  height: 12px;
+  background: var(--green);
+  border-radius: 50%;
+  position: absolute;
+  top: -1px;
+  transform: translateX(-50%);
+  cursor: grab;
+  box-shadow: 0 0 3px rgba(0,0,0,0.4);
+}
+
+/* ---- COLOR SWATCHES PER PART ---- */
+.part-color-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}

@@ -81,7 +81,7 @@ async function discoverSongs(rootHandle) {
 
   // Switch to main app
   document.getElementById('setup-panel').style.display = 'none';
-  document.getElementById('main-app').style.display    = 'block';
+  document.getElementById('main-app').style.display    = 'flex';
   document.getElementById('btn-reselect').style.display = '';
 
   buildUI(saved);

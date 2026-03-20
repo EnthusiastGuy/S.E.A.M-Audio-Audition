@@ -58,7 +58,7 @@
 
 /* ---- RESPONSIVE ---- */
 @media (max-width: 900px) {
-  .tabs-wrapper, .playlist-container, .footer-controls, .playlist-totals { width: 100%; }
+  .tabs-wrapper, .playlist-container, .playlist-totals { width: 100%; }
   .playlist-header { grid-template-columns: 32px 1fr 80px 50px 90px; }
   .song-row-main { grid-template-columns: 32px 1fr 80px 50px 90px; }
   .setup-card { padding: 28px 20px; }

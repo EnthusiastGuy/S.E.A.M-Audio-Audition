@@ -8,10 +8,36 @@
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 
 /* ---- MAIN APP ---- */
-#main-app { display: none; padding: 20px 24px; max-width: 1400px; margin: 0 auto; }
+#main-app {
+  display: flex;
+  flex-direction: row;
+  gap: 20px;
+  padding: 20px 24px;
+  max-width: none;
+  height: calc(100vh - 70px);
+  overflow: hidden;
+}
 
-/* ---- TABS ---- */
-.tabs-wrapper { width: 80%; margin: 0 auto 20px; }
+/* Sidebar with fixed controls */
+.sidebar-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  width: 140px;
+  flex-shrink: 0;
+  position: sticky;
+  top: 20px;
+  height: fit-content;
+}
+
+/* Main scrollable content */
+.main-content {
+  flex: 1;
+  overflow-y: auto;
+  min-width: 0;
+}
+
+.tabs-wrapper { width: 100%; margin: 0 0 20px 0; }
 .tabs-nav {
   display: flex;
   gap: 4px;

@@ -2,16 +2,6 @@
    S.E.A.M Audio Audition — Footer Controls, Crossfade, Knob & Totals
    ========================================================= */
 
-/* ---- FOOTER CONTROLS ---- */
-.footer-controls {
-  width: 80%;
-  margin: 20px auto 0;
-  display: flex;
-  align-items: center;
-  gap: 32px;
-  flex-wrap: wrap;
-}
-
 /* ---- CROSSFADE ---- */
 .crossfade-group {
   display: flex;
@@ -62,8 +52,7 @@
 
 /* ---- TOTALS FOOTER ---- */
 .playlist-totals {
-  width: 80%;
-  margin: 8px auto 0;
+  width: 100%;
   display: flex;
   justify-content: flex-end;
   gap: 20px;

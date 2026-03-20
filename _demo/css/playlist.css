@@ -4,8 +4,7 @@
 
 /* ---- PLAYLIST TABLE ---- */
 .playlist-container {
-  width: 80%;
-  margin: 0 auto;
+  width: 100%;
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: var(--radius);

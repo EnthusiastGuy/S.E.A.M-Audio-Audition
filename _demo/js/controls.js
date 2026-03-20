@@ -181,6 +181,7 @@ function initCrossfade() {
     updateLabel();
     draw();
     saveSession();
+    playClickSound(STATE.crossfade);
   }
 
   function setCrossfadeMs(ms) {
@@ -189,6 +190,7 @@ function initCrossfade() {
     updateLabel();
     draw();
     saveSession();
+    playClickSound(STATE.crossfade);
   }
 
   function markerMsAtPoint(clientX, clientY) {
@@ -203,6 +205,38 @@ function initCrossfade() {
       }
     }
     return null;
+  }
+
+  let lastClickSoundTime = 0;
+  function playClickSound(valueMs) {
+    const now = Date.now();
+    // Debounce: only play sound at most every 30ms to avoid rapid overlapping clicks
+    if (now - lastClickSoundTime < 30) return;
+    lastClickSoundTime = now;
+
+    // Frequency mapping: 0ms→180Hz, 20000ms→800Hz (rise across range)
+    const freq = 180 + (valueMs / CF_MAX_MS) * 620;
+
+    try {
+      const osc = AC.createOscillator();
+      const gain = AC.createGain();
+
+      osc.connect(gain);
+      gain.connect(AC.destination);
+
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+
+      // Quick attack + decay envelope (~40ms total)
+      const t = AC.currentTime;
+      gain.gain.setValueAtTime(0.03, t);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.04);
+
+      osc.start(t);
+      osc.stop(t + 0.04);
+    } catch (e) {
+      // AudioContext may be in closed state or suspended; silently fail
+    }
   }
 
   canvas.addEventListener('mousedown', (e) => {
@@ -257,6 +291,7 @@ function initCrossfade() {
     updateLabel();
     draw();
     saveSession();
+    playClickSound(STATE.crossfade);
   }, { passive: false });
 
   STATE.crossfade = clampMs(STATE.crossfade || 0);

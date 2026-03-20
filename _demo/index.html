@@ -43,13 +43,8 @@
 
 <!-- MAIN APP -->
 <div id="main-app">
-  <div class="tabs-wrapper">
-    <div class="tabs-nav" id="tabs-nav"></div>
-  </div>
-  <div id="tabs-content"></div>
-
-  <!-- Footer controls -->
-  <div class="footer-controls">
+  <!-- Left sidebar with fixed controls -->
+  <div class="sidebar-controls">
     <!-- Crossfade -->
     <div class="crossfade-group">
       <div class="knob-label">CROSSFADE</div>
@@ -62,6 +57,14 @@
       <canvas class="knob-canvas" id="speed-knob" width="80" height="80"></canvas>
       <div class="knob-val" id="speed-val">100%</div>
     </div>
+  </div>
+
+  <!-- Main scrollable content -->
+  <div class="main-content">
+    <div class="tabs-wrapper">
+      <div class="tabs-nav" id="tabs-nav"></div>
+    </div>
+    <div id="tabs-content"></div>
   </div>
 </div>
 

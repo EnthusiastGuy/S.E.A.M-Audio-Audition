@@ -88,10 +88,6 @@ async function discoverSongs(rootHandle) {
   initKnob();
   initCrossfade();
 
-  // Restore knob / crossfade values
-  const cf = document.getElementById('crossfade-slider');
-  if (cf) { cf.value = STATE.crossfade; document.getElementById('crossfade-val').textContent = `${STATE.crossfade} ms`; }
-
   // Restore open part sheets
   if (saved && saved.openSheets) {
     for (const sheetKey of saved.openSheets) {

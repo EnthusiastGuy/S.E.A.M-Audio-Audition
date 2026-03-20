@@ -52,9 +52,9 @@
   <div class="footer-controls">
     <!-- Crossfade -->
     <div class="crossfade-group">
-      <label>CROSSFADE</label>
-      <input type="range" class="crossfade-slider" id="crossfade-slider" min="0" max="5000" step="50" value="0" />
-      <span class="crossfade-val" id="crossfade-val">0 ms</span>
+      <div class="knob-label">CROSSFADE</div>
+      <canvas class="knob-canvas" id="crossfade-knob" width="80" height="80"></canvas>
+      <div class="knob-val crossfade-val" id="crossfade-val">0.0s</div>
     </div>
     <!-- Knob -->
     <div class="knob-group">
@@ -126,7 +126,7 @@
     </ul>
 
     <h3>Crossfade</h3>
-    <p>The <strong>Crossfade</strong> slider at the bottom (0 – 5000 ms) controls the overlap between consecutive playlist songs. When the current song has fewer than <em>N</em> ms remaining, the next song begins quietly and fades in while the current one fades out.</p>
+    <p>The <strong>Crossfade</strong> knob at the bottom (0.0 – 20.0 s) controls the overlap between consecutive playlist songs. When the current song has fewer than <em>N</em> seconds remaining, the next song begins quietly and fades in while the current one fades out.</p>
 
     <h3>Playback Speed Knob</h3>
     <p>The rotary knob controls playback rate for all active audio. Turn <strong>clockwise</strong> to increase speed, <strong>counter-clockwise</strong> to slow, reverse, or stop.</p>

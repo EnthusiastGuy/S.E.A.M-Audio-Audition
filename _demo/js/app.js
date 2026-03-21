@@ -387,19 +387,196 @@ async function openRecentProject(projectId) {
   }
 }
 
+/** Brave and some file:// contexts omit File System Access API; webkitdirectory still works. */
+function pickFolderViaWebkitDirectoryInput() {
+  return new Promise((resolve, reject) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.multiple = true;
+    try {
+      input.webkitdirectory = true;
+    } catch (_) {}
+    input.setAttribute('webkitdirectory', '');
+    input.setAttribute('directory', '');
+
+    let done = false;
+    let armFocusTimer = null;
+    function onWinFocus() {
+      setTimeout(() => {
+        window.removeEventListener('focus', onWinFocus);
+        if (done) return;
+        fail(Object.assign(new Error('Aborted'), { name: 'AbortError' }));
+      }, 200);
+    }
+    const finish = () => {
+      if (armFocusTimer !== null) {
+        clearTimeout(armFocusTimer);
+        armFocusTimer = null;
+      }
+      window.removeEventListener('focus', onWinFocus);
+      if (input.parentNode) input.remove();
+    };
+
+    const fail = err => {
+      if (done) return;
+      done = true;
+      finish();
+      reject(err);
+    };
+
+    const ok = files => {
+      if (done) return;
+      done = true;
+      finish();
+      resolve(files);
+    };
+
+    input.addEventListener('change', () => {
+      const files = Array.from(input.files || []);
+      if (!files.length) {
+        fail(Object.assign(new Error('Aborted'), { name: 'AbortError' }));
+        return;
+      }
+      const rel0 = files[0].webkitRelativePath;
+      if (typeof rel0 !== 'string' || !rel0.length) {
+        fail(
+          new Error(
+            'Folder selection is not supported in this browser. Try Chrome or Edge, or open this page via http://localhost.'
+          )
+        );
+        return;
+      }
+      ok(files);
+    });
+
+    input.addEventListener('cancel', () => {
+      fail(Object.assign(new Error('Aborted'), { name: 'AbortError' }));
+    });
+
+    document.body.appendChild(input);
+    input.click();
+
+    armFocusTimer = setTimeout(() => {
+      armFocusTimer = null;
+      window.addEventListener('focus', onWinFocus);
+    }, 400);
+  });
+}
+
+function newVirtualDirNode(displayName) {
+  return { _name: displayName, _dirMap: new Map(), _fileMap: new Map(), _final: false };
+}
+
+function createVirtualFileHandle(name, file) {
+  return {
+    kind: 'file',
+    name,
+    getFile() {
+      return Promise.resolve(file);
+    },
+  };
+}
+
+function finalizeVirtualDirNode(node) {
+  if (node._final) return node;
+  node._final = true;
+  node.kind = 'directory';
+  node.name = node._name;
+
+  node.getDirectoryHandle = async function (name, opts = {}) {
+    const child = node._dirMap.get(name);
+    if (!child) {
+      throw new DOMException(
+        'A requested file or directory could not be found at the time an operation was processed.',
+        'NotFoundError'
+      );
+    }
+    return finalizeVirtualDirNode(child);
+  };
+
+  node.entries = async function* () {
+    const keys = new Set([...node._dirMap.keys(), ...node._fileMap.keys()]);
+    for (const key of [...keys].sort()) {
+      if (node._dirMap.has(key)) {
+        yield [key, finalizeVirtualDirNode(node._dirMap.get(key))];
+      } else {
+        yield [key, node._fileMap.get(key)];
+      }
+    }
+  };
+
+  return node;
+}
+
+function folderLabelFromWebkitFiles(files) {
+  const paths = files
+    .map(f => (f.webkitRelativePath || '').replace(/\\/g, '/'))
+    .filter(Boolean)
+    .sort();
+  let h = 0;
+  for (const p of paths) {
+    for (let i = 0; i < p.length; i++) h = (Math.imul(31, h) + p.charCodeAt(i)) >>> 0;
+  }
+  const hex = h.toString(16).padStart(8, '0').slice(0, 8);
+  return `Sample pack ${hex}`;
+}
+
+/** Mimics FileSystemDirectoryHandle enough for discoverSongs / scanFormat / getFile(). Not serializable to IndexedDB. */
+function buildVirtualRootFromWebkitFiles(files, displayName) {
+  const root = newVirtualDirNode(displayName);
+  for (const file of files) {
+    let rel = (file.webkitRelativePath || file.name || '').replace(/\\/g, '/');
+    const segments = rel.split('/').filter(Boolean);
+    if (segments.length < 2) continue;
+
+    let node = root;
+    for (let i = 0; i < segments.length - 1; i++) {
+      const seg = segments[i];
+      if (!node._dirMap.has(seg)) node._dirMap.set(seg, newVirtualDirNode(seg));
+      node = node._dirMap.get(seg);
+    }
+    const fname = segments[segments.length - 1];
+    node._fileMap.set(fname, createVirtualFileHandle(fname, file));
+  }
+  const sealed = finalizeVirtualDirNode(root);
+  sealed.__seamWebkitFallback = true;
+  return sealed;
+}
+
 async function selectFolder() {
   hideRecentPathPopover();
+  const statusEl = document.getElementById('select-status');
   try {
-    const dirHandle = await window.showDirectoryPicker({ mode: 'read' });
-    STATE.rootDir   = dirHandle;
-    await addRecentProject(dirHandle);
+    let rootHandle = null;
+    let saveToRecent = false;
+
+    if (typeof window.showDirectoryPicker === 'function') {
+      try {
+        rootHandle = await window.showDirectoryPicker({ mode: 'read' });
+        saveToRecent = true;
+      } catch (e) {
+        if (e.name === 'AbortError') return;
+        console.warn('showDirectoryPicker failed, using folder upload fallback:', e);
+      }
+    }
+
+    if (!rootHandle) {
+      statusEl.textContent = 'Opening folder picker…';
+      const files = await pickFolderViaWebkitDirectoryInput();
+      rootHandle = buildVirtualRootFromWebkitFiles(files, folderLabelFromWebkitFiles(files));
+    }
+
+    STATE.rootDir = rootHandle;
+    if (saveToRecent) {
+      await addRecentProject(rootHandle);
+    }
     renderRecentProjects();
     renderFolderSwitcher();
-    document.getElementById('select-status').textContent = `Loading: ${dirHandle.name} …`;
-    await discoverSongs(dirHandle);
-  } catch(e) {
+    statusEl.textContent = `Loading: ${rootHandle.name} …`;
+    await discoverSongs(rootHandle);
+  } catch (e) {
     if (e.name !== 'AbortError') {
-      document.getElementById('select-status').textContent = 'Could not open folder: ' + e.message;
+      statusEl.textContent = 'Could not open folder: ' + e.message;
     }
   }
 }

@@ -587,6 +587,11 @@
     const t = (now - t0) * 0.001;
     const w = panel.clientWidth;
     const h = panel.clientHeight;
+    const sw = parseFloat(canvas.style.width);
+    const sh = parseFloat(canvas.style.height);
+    if (!Number.isFinite(sw) || !Number.isFinite(sh) || Math.abs(sw - w) > 1 || Math.abs(sh - h) > 1) {
+      resize();
+    }
 
     const layerStates = WAVE_LAYERS.map(layer => ({
       layer,
@@ -657,6 +662,13 @@
     },
     { passive: true }
   );
+
+  if (typeof ResizeObserver !== 'undefined') {
+    const ro = new ResizeObserver(() => {
+      if (running) resize();
+    });
+    ro.observe(panel);
+  }
 
   if (panel.style.display !== 'none') start();
 

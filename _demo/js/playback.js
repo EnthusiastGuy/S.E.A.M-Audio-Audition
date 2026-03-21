@@ -232,6 +232,10 @@ async function maybeResampleBuffer(audioBuffer, targetRate, channels) {
 }
 
 let _lameJsPromise = null;
+function vendorUrl(relativePath) {
+  return new URL(relativePath, document.baseURI).href;
+}
+
 async function loadLameJs() {
   if (window.lamejs && window.lamejs.Mp3Encoder) return window.lamejs;
   if (!_lameJsPromise) {
@@ -244,7 +248,7 @@ async function loadLameJs() {
       }
 
       const s = document.createElement('script');
-      s.src = 'https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js';
+      s.src = vendorUrl('vendor/lame.min.js');
       s.async = true;
       s.dataset.lamejs = '1';
       s.onload = () => resolve(window.lamejs);
@@ -259,10 +263,29 @@ async function loadLameJs() {
 
 let _vorbisPromise = null;
 async function loadVorbisEncoder() {
-  if (!_vorbisPromise) {
-    _vorbisPromise = import('https://esm.sh/vorbis-encoder-js@1.0.2');
+  if (window.__vorbisEncoderJs && window.__vorbisEncoderJs.encoder) {
+    return window.__vorbisEncoderJs;
   }
-  return _vorbisPromise;
+  if (!_vorbisPromise) {
+    _vorbisPromise = new Promise((resolve, reject) => {
+      const existing = document.querySelector('script[data-vorbis-encoder="1"]');
+      if (existing) {
+        existing.addEventListener('load', () => resolve(window.__vorbisEncoderJs));
+        existing.addEventListener('error', () => reject(new Error('Failed to load vorbis encoder')));
+        return;
+      }
+      const s = document.createElement('script');
+      s.src = vendorUrl('vendor/vorbis-encoder-js.js');
+      s.async = true;
+      s.dataset.vorbisEncoder = '1';
+      s.onload = () => resolve(window.__vorbisEncoderJs);
+      s.onerror = () => reject(new Error('Failed to load vorbis encoder'));
+      document.head.appendChild(s);
+    });
+  }
+  const mod = await _vorbisPromise;
+  if (!mod || !mod.encoder) throw new Error('Vorbis encoder unavailable');
+  return mod;
 }
 
 async function audioBufferToMp3Blob(audioBuffer) {

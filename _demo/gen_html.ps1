@@ -12,7 +12,7 @@ WL '<meta charset="UTF-8"/>'
 WL '<meta name="viewport" content="width=device-width,initial-scale=1.0"/>'
 WL '<title>S.E.A.M &#8212; Audio Audition</title>'
 WL '<style>'
-WL "@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=Space+Mono:wght@400;700&display=swap');"
+WL '/* Fonts: use css/fonts.css + ../fonts/ in the modular index.html build (offline). */'
 WL ':root{'
 WL '  --bg:#1a1a2e;--bg2:#16213e;--bg3:#0f3460;--card:#1e2a45;--card2:#253352;'
 WL '  --border:#2d4170;--accent:#e94560;--accent2:#f5a623;--accent3:#4ecdc4;'

@@ -41,6 +41,15 @@ function fmtTime(secs) {
   return `${m}:${String(s).padStart(2,'0')}`;
 }
 
+function fmtTimeHundredths(secs) {
+  if (!isFinite(secs) || secs < 0) return '00:00:00';
+  const totalHundredths = Math.floor(secs * 100);
+  const minutes = Math.floor(totalHundredths / 6000);
+  const seconds = Math.floor((totalHundredths % 6000) / 100);
+  const hundredths = totalHundredths % 100;
+  return `${String(minutes).padStart(2,'0')}:${String(seconds).padStart(2,'0')}:${String(hundredths).padStart(2,'0')}`;
+}
+
 // ─── SESSION PERSISTENCE (localStorage) ──────────────────────
 const LS_KEY_PREFIX = 'seam_session_v4_';
 

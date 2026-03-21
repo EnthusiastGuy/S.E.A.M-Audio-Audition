@@ -5,38 +5,46 @@
 /* ---- PLAYLIST TABLE ---- */
 .playlist-container {
   width: 100%;
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  overflow: hidden;
-  box-shadow: var(--shadow);
 }
 .playlist-header {
   display: grid;
   grid-template-columns: 42px 1fr 110px 60px 220px;
   padding: 10px 14px;
   background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
   font-family: 'Space Mono', monospace;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 1px;
   color: var(--text2);
   text-transform: uppercase;
-  border-bottom: 1px solid var(--border);
   gap: 8px;
+}
+
+/* ---- PLAYLIST BODY (gaps between song cards) ---- */
+.playlist-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 0;
+  background: var(--bg);
 }
 
 /* ---- SONG ROW ---- */
 .song-row {
-  border-bottom: 1px solid var(--border);
+  flex: 0 0 auto;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
   transition: background 0.1s;
   cursor: grab;
   user-select: none;
 }
-.song-row:last-child { border-bottom: none; }
 .song-row.dragging { opacity: 0.4; cursor: grabbing; }
-.song-row.drag-over-top { border-top: 2px solid var(--accent); }
-.song-row.drag-over-bottom { border-bottom: 2px solid var(--accent); }
+.song-row.drag-over-top { box-shadow: inset 0 2px 0 0 var(--accent); }
+.song-row.drag-over-bottom { box-shadow: inset 0 -2px 0 0 var(--accent); }
 .song-row.playing { background: rgba(233,69,96,0.06); }
 
 .song-row-main {

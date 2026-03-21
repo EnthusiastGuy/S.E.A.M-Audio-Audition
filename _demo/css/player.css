@@ -4,8 +4,8 @@
 
 /* ---- PLAYER EXPAND AREA ---- */
 .song-player-area {
-  background: rgba(15,52,96,0.4);
-  border-top: 1px solid var(--border);
+  background: rgba(15,52,96,0.35);
+  border-top: 1px solid rgba(45, 65, 112, 0.55);
   padding: 12px 14px 16px;
   display: none;
 }

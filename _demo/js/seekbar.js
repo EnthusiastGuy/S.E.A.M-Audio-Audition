@@ -36,6 +36,7 @@ function renderSeekBar(fmt, songIdx) {
   timeLabel.innerHTML = fmtTimeHTML(0);
   timeDisp.appendChild(timeLabel);
   cont.appendChild(timeDisp);
+  clampSeekTimeLabelLeft(timeLabel, 0);
 
   // Seekbar track
   const track = document.createElement('div');

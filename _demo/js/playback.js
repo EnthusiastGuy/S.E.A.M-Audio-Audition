@@ -748,6 +748,22 @@ function stopPlaying(fmt, songIdx) {
   hidePlayerArea(fmt, songIdx);
 }
 
+/** Keeps .time-current-label (translateX(-50%)) inside the time strip so it is not clipped by the song row. */
+function clampSeekTimeLabelLeft(timeLbl, pct) {
+  if (!timeLbl) return;
+  const disp = timeLbl.parentElement;
+  if (!disp) return;
+  const cw = disp.clientWidth;
+  if (cw <= 0) return;
+  timeLbl.style.left = `${pct}%`;
+  const lw = timeLbl.offsetWidth;
+  const half = lw / 2;
+  const minPct = (half / cw) * 100;
+  const maxPct = 100 - minPct;
+  const clamped = Math.min(maxPct, Math.max(minPct, pct));
+  timeLbl.style.left = `${clamped}%`;
+}
+
 // ─── TICK / RAF UPDATE ───────────────────────────────────────
 function tickPlayer(fmt, songIdx) {
   const key = `${fmt}_${songIdx}`;
@@ -781,7 +797,7 @@ function tickPlayer(fmt, songIdx) {
     if (hnd)     hnd.style.left  = `${pct}%`;
     if (timeLbl) {
       timeLbl.innerHTML = fmtTimeHTML(posInPreview);
-      timeLbl.style.left  = `${pct}%`;
+      clampSeekTimeLabelLeft(timeLbl, pct);
     }
     if (pctLbl)  pctLbl.textContent = `${pct.toFixed(1)}%`;
 
@@ -864,7 +880,7 @@ function tickPlayer(fmt, songIdx) {
   if (hnd)     hnd.style.left  = `${pct}%`;
   if (timeLbl) {
     timeLbl.innerHTML = fmtTimeHTML(ps.totalPlayedTime + posInPart);
-    timeLbl.style.left  = `${pct}%`;
+    clampSeekTimeLabelLeft(timeLbl, pct);
   }
   if (pctLbl)  pctLbl.textContent = `${pct.toFixed(1)}%`;
 

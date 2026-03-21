@@ -64,6 +64,7 @@ function saveSession() {
       data.loopSettings[key] = ps.loopSettings;
       data.sequences[key] = ps.sequence.map(b => b.partIndex);
       data.downloadFormats[key] = ps.downloadFormat || 'wav';
+      data.downloadFormats[`${key}__parts`] = ps.partDownloadFormats || {};
     }
     localStorage.setItem(getSessionKey(), JSON.stringify(data));
   } catch(e) {}

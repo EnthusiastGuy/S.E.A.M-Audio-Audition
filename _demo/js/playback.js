@@ -30,6 +30,7 @@ function ensurePlayerState(fmt, songIdx) {
       previewNeedsRebuild: true,
       usingPreviewBuffer: false,
       downloadFormat: 'wav',
+      partDownloadFormats: {},
     };
     STATE.players[key].gainNode.connect(masterGain);
 
@@ -50,6 +51,9 @@ function ensurePlayerState(fmt, songIdx) {
       }
       if (ss.downloadFormats && ss.downloadFormats[key]) {
         STATE.players[key].downloadFormat = ss.downloadFormats[key];
+      }
+      if (ss.downloadFormats && ss.downloadFormats[`${key}__parts`]) {
+        STATE.players[key].partDownloadFormats = ss.downloadFormats[`${key}__parts`];
       }
     }
   }
@@ -147,6 +151,15 @@ function getCompositionDownloadName(fmt, songIdx) {
 
   const raw = partsText ? `${song.name} ${partsText}` : song.name;
   return sanitizeFileName(raw) || 'composition';
+}
+
+function getPartDownloadName(fmt, songIdx, partIndex) {
+  const song = STATE.songs[fmt][songIdx];
+  if (!song) return 'part';
+  if (partIndex === -1) return sanitizeFileName(`${song.name} Full`) || 'part';
+  const part = song.parts[partIndex];
+  const partNum = part ? part.num : (partIndex + 1);
+  return sanitizeFileName(`${song.name} ${partNum}`) || 'part';
 }
 
 function audioBufferToWavBlob(audioBuffer) {
@@ -327,6 +340,31 @@ async function downloadCompositionPreview(fmt, songIdx, requestedFormat) {
   if (!blob) return;
 
   const fileName = `${getCompositionDownloadName(fmt, songIdx)}.${format}`;
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 500);
+}
+
+async function downloadPartPreview(fmt, songIdx, partIndex, requestedFormat) {
+  const ps = ensurePlayerState(fmt, songIdx);
+  await loadPartBuffer(fmt, songIdx, partIndex);
+  const buf = ps.buffers[partIndex];
+  if (!buf) return;
+
+  const format = (requestedFormat || ps.partDownloadFormats?.[String(partIndex)] || 'wav').toLowerCase();
+  const blob =
+    format === 'wav' ? audioBufferToWavBlob(buf) :
+    format === 'mp3' ? await audioBufferToMp3Blob(buf) :
+    format === 'ogg' ? await audioBufferToOggBlob(buf) :
+    null;
+  if (!blob) return;
+
+  const fileName = `${getPartDownloadName(fmt, songIdx, partIndex)}.${format}`;
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;

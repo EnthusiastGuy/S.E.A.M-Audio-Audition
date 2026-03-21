@@ -43,6 +43,10 @@
 }
 .part-item.playing-part .part-label { color: var(--green); font-weight: 500; }
 
+.part-download-split {
+  margin-left: 4px;
+}
+
 /* ---- PART MINI BAR ---- */
 .part-mini-bar {
   display: none;

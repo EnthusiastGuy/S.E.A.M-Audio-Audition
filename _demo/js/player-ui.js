@@ -2,6 +2,76 @@
    S.E.A.M Audio Audition — Player UI & Part Sheet
    ============================================================= */
 
+let activePartDownloadDropdown = null;
+function closeActivePartDownloadDropdown() {
+  if (!activePartDownloadDropdown) return;
+  activePartDownloadDropdown.classList.add('hidden');
+  activePartDownloadDropdown = null;
+}
+
+function makePartDownloadControl(fmt, songIdx, partIndex) {
+  const key = `${fmt}_${songIdx}`;
+  const ps = ensurePlayerState(fmt, songIdx);
+  if (!ps.partDownloadFormats) ps.partDownloadFormats = {};
+  const selected = (ps.partDownloadFormats[String(partIndex)] || 'wav').toLowerCase();
+
+  const wrap = document.createElement('div');
+  wrap.className = 'download-split part-download-split';
+
+  const mainBtn = document.createElement('button');
+  mainBtn.className = 't-btn dl-main';
+  mainBtn.title = 'Download this file';
+  mainBtn.innerHTML = `&#128229; <span class="dl-fmt">${selected.toUpperCase()}</span>`;
+  mainBtn.onclick = (e) => {
+    e.stopPropagation();
+    downloadPartPreview(fmt, songIdx, partIndex, ps.partDownloadFormats[String(partIndex)] || 'wav');
+  };
+  wrap.appendChild(mainBtn);
+
+  const arrowBtn = document.createElement('button');
+  arrowBtn.className = 't-btn dl-arrow';
+  arrowBtn.title = 'Select download format';
+  arrowBtn.innerHTML = '&#9662;';
+  wrap.appendChild(arrowBtn);
+
+  const dd = document.createElement('div');
+  dd.className = 'download-format-dropdown hidden';
+  dd.id = `part-download-dd-${key}-${partIndex}`;
+  ['wav', 'mp3', 'ogg'].forEach((fmtOpt) => {
+    const opt = document.createElement('button');
+    opt.className = 'download-format-option';
+    opt.textContent = fmtOpt.toUpperCase();
+    if (selected === fmtOpt) opt.classList.add('selected');
+    opt.onclick = (ev) => {
+      ev.stopPropagation();
+      ps.partDownloadFormats[String(partIndex)] = fmtOpt;
+      const lbl = mainBtn.querySelector('.dl-fmt');
+      if (lbl) lbl.textContent = fmtOpt.toUpperCase();
+      dd.querySelectorAll('.download-format-option').forEach(o => o.classList.remove('selected'));
+      opt.classList.add('selected');
+      saveSession();
+      closeActivePartDownloadDropdown();
+    };
+    dd.appendChild(opt);
+  });
+  wrap.appendChild(dd);
+
+  arrowBtn.onclick = (e) => {
+    e.stopPropagation();
+    const willOpen = dd.classList.contains('hidden');
+    closeActivePartDownloadDropdown();
+    if (willOpen) {
+      dd.classList.remove('hidden');
+      activePartDownloadDropdown = dd;
+      setTimeout(() => {
+        document.addEventListener('click', closeActivePartDownloadDropdown, { once: true });
+      }, 0);
+    }
+  };
+
+  return wrap;
+}
+
 // ─── SHOW / HIDE PLAYER AREA ─────────────────────────────────
 function showPlayerArea(fmt, songIdx) {
   const key  = `${fmt}_${songIdx}`;
@@ -100,6 +170,9 @@ function renderPlayerArea(fmt, songIdx) {
       }
     };
     item.appendChild(sBtn);
+
+    const dlCtl = makePartDownloadControl(fmt, songIdx, f.partIndex);
+    item.appendChild(dlCtl);
 
     itemWrapper.appendChild(item);
 

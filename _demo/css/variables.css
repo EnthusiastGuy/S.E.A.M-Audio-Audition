@@ -29,6 +29,7 @@
   --crayon4:   #4d96ff;
   --crayon5:   #cc96ff;
   --part-colors: #ff6b6b,#ffd93d,#6bcb77,#4d96ff,#cc96ff,#f5a623,#4ecdc4,#ff9f43;
+  --footer-h: 32px;
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -41,4 +42,5 @@ body {
   line-height: 1.5;
   min-height: 100vh;
   overflow-x: hidden;
+  padding-bottom: var(--footer-h);
 }

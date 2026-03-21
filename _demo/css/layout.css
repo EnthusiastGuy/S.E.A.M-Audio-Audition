@@ -7,6 +7,46 @@
 ::-webkit-scrollbar-track { background: var(--bg2); }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 
+/* ---- APP FOOTER (fixed; always visible) ---- */
+.app-footer {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: var(--footer-h);
+  padding: 6px 16px;
+  font-family: 'Space Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 0.3px;
+  color: var(--text3);
+  background: linear-gradient(to top, rgba(22, 33, 62, 0.92), rgba(22, 33, 62, 0.75));
+  border-top: 1px solid rgba(45, 65, 112, 0.55);
+}
+.app-footer a {
+  color: var(--text2);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+  border-radius: 4px;
+  transition: color 0.15s, opacity 0.15s;
+  opacity: 0.85;
+}
+.app-footer a:hover {
+  color: var(--accent4);
+  opacity: 1;
+}
+.app-footer-discord-icon {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
+}
+
 /* ---- MAIN APP ---- */
 #main-app {
   display: none; /* shown after a folder is opened (see app.js) */
@@ -15,19 +55,17 @@
   gap: 20px;
   padding: 20px 24px;
   max-width: none;
-  height: calc(100vh - 70px);
-  /* overflow: hidden; */
+  height: calc(100vh - 70px - var(--footer-h));
+  overflow: hidden;
 }
 
-/* Sidebar with fixed controls */
+/* Sidebar: only .main-content scrolls; knobs stay fixed in the column */
 .sidebar-controls {
   display: flex;
   flex-direction: column;
   gap: 20px;
   width: 140px;
   flex-shrink: 0;
-  position: sticky;
-  top: 20px;
   height: fit-content;
 }
 

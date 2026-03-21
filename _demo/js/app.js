@@ -11,6 +11,9 @@ const RECENT_DB_NAME = 'seam_recent_projects_db';
 const RECENT_STORE_NAME = 'handles';
 const RECENT_LIST_KEY = 'seam_recent_projects_v1';
 
+/** Lazily created; declared before initRecentProjectsUI() so hideRecentPathPopover is safe at startup. */
+let recentPathPopoverEl;
+
 initRecentProjectsUI();
 
 async function getRecentProjectsDB() {
@@ -47,6 +50,16 @@ async function loadRecentHandle(id) {
   });
 }
 
+async function deleteRecentHandle(id) {
+  const db = await getRecentProjectsDB();
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction(RECENT_STORE_NAME, 'readwrite');
+    tx.objectStore(RECENT_STORE_NAME).delete(id);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error || new Error('Could not delete stored directory handle'));
+  });
+}
+
 function loadRecentProjectMeta() {
   try {
     const raw = localStorage.getItem(RECENT_LIST_KEY);
@@ -63,22 +76,204 @@ function saveRecentProjectMeta(list) {
   localStorage.setItem(RECENT_LIST_KEY, JSON.stringify(list.slice(0, RECENT_PROJECTS_MAX)));
 }
 
+/** Full path when the host exposes it (e.g. some Electron/Tauri builds); plain Chromium usually omits it. */
+function pathFromHandle(handle) {
+  if (!handle) return undefined;
+  if (typeof handle.path === 'string' && handle.path.length) return handle.path;
+  if (typeof handle.nativePath === 'string' && handle.nativePath.length) return handle.nativePath;
+  return undefined;
+}
+
 async function addRecentProject(handle) {
   if (!handle) return;
   const id = `project_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
   await saveRecentHandle(id, handle);
 
-  const current = loadRecentProjectMeta().filter(entry => entry.name !== handle.name);
-  current.unshift({ id, name: handle.name, updatedAt: Date.now() });
+  const meta = loadRecentProjectMeta();
+  const prev = meta.find(entry => entry.name === handle.name);
+  const current = meta.filter(entry => entry.name !== handle.name);
+  const newPath = pathFromHandle(handle);
+  const mergedPath =
+    newPath ||
+    (prev && typeof prev.path === 'string' && prev.path.length ? prev.path : undefined);
+  current.unshift({ id, name: handle.name, path: mergedPath, updatedAt: Date.now() });
   saveRecentProjectMeta(current);
 }
 
 function initRecentProjectsUI() {
+  initRecentPathPopoverListeners();
+  renderRecentProjects();
+  renderFolderSwitcher();
+}
+
+function getRecentPathPopover() {
+  if (!recentPathPopoverEl) {
+    recentPathPopoverEl = document.createElement('div');
+    recentPathPopoverEl.id = 'recent-path-popover';
+    recentPathPopoverEl.className = 'recent-path-popover';
+    recentPathPopoverEl.setAttribute('role', 'tooltip');
+    recentPathPopoverEl.setAttribute('hidden', '');
+    document.body.appendChild(recentPathPopoverEl);
+  }
+  return recentPathPopoverEl;
+}
+
+function initRecentPathPopoverListeners() {
+  const listEl = document.getElementById('recent-projects-list');
+  if (!listEl || listEl.dataset.pathPopoverBound) return;
+  listEl.dataset.pathPopoverBound = '1';
+  listEl.addEventListener('scroll', () => hideRecentPathPopover(), { passive: true });
+  window.addEventListener('resize', () => hideRecentPathPopover(), { passive: true });
+}
+
+function fillRecentPathPopover(el, item) {
+  el.replaceChildren();
+  const path = item.path && typeof item.path === 'string' ? item.path.trim() : '';
+  if (path) {
+    el.appendChild(document.createTextNode(path));
+    return;
+  }
+  const label = document.createElement('div');
+  label.className = 'recent-path-popover-label';
+  label.textContent = 'Saved folder name';
+
+  const value = document.createElement('div');
+  value.className = 'recent-path-popover-value';
+  value.textContent = item.name || '(unnamed folder)';
+
+  el.appendChild(label);
+  el.appendChild(value);
+
+  if (typeof item.updatedAt === 'number' && !Number.isNaN(item.updatedAt)) {
+    const meta = document.createElement('div');
+    meta.className = 'recent-path-popover-meta';
+    meta.textContent = `Last opened: ${new Date(item.updatedAt).toLocaleString()}`;
+    el.appendChild(meta);
+  }
+
+  const note = document.createElement('div');
+  note.className = 'recent-path-popover-note';
+  note.textContent =
+    'This browser does not expose the full filesystem path; only the folder name and history are stored.';
+  el.appendChild(note);
+}
+
+function placeRecentPathPopover(btn, el) {
+  el.removeAttribute('hidden');
+  el.style.display = 'block';
+  el.style.visibility = 'hidden';
+  el.style.left = '-9999px';
+  el.style.top = '0';
+  void el.offsetWidth;
+  const pr = el.getBoundingClientRect();
+  const br = btn.getBoundingClientRect();
+  let left = br.left;
+  let top = br.bottom + 6;
+  if (left + pr.width > window.innerWidth - 8) left = window.innerWidth - 8 - pr.width;
+  if (left < 8) left = 8;
+  if (top + pr.height > window.innerHeight - 8) top = br.top - 6 - pr.height;
+  if (top < 8) top = 8;
+  el.style.left = `${Math.round(left)}px`;
+  el.style.top = `${Math.round(top)}px`;
+  el.style.visibility = 'visible';
+}
+
+function showRecentPathPopoverForItem(btn, item) {
+  const el = getRecentPathPopover();
+  fillRecentPathPopover(el, item);
+  placeRecentPathPopover(btn, el);
+  btn.setAttribute('aria-describedby', 'recent-path-popover');
+}
+
+function hideRecentPathPopover() {
+  const el = recentPathPopoverEl;
+  if (!el) return;
+  el.setAttribute('hidden', '');
+  el.style.display = '';
+  el.style.visibility = '';
+  el.style.left = '';
+  el.style.top = '';
+  document.querySelectorAll('[aria-describedby="recent-path-popover"]').forEach(n => {
+    n.removeAttribute('aria-describedby');
+  });
+}
+
+function bindRecentProjectPathPopover(row, btn, item) {
+  const show = () => showRecentPathPopoverForItem(btn, item);
+  const hide = () => {
+    if (document.activeElement !== btn) hideRecentPathPopover();
+  };
+  row.addEventListener('mouseenter', show);
+  row.addEventListener('mouseleave', hide);
+  btn.addEventListener('focus', show);
+  btn.addEventListener('blur', hide);
+}
+
+function openRecentRemoveConfirmModal(displayName) {
+  return new Promise(resolve => {
+    const overlay = document.getElementById('recent-remove-confirm-modal');
+    const nameEl = document.getElementById('recent-remove-confirm-name');
+    const btnCancel = document.getElementById('recent-remove-confirm-cancel');
+    const btnRemove = document.getElementById('recent-remove-confirm-remove');
+    if (!overlay || !nameEl || !btnCancel || !btnRemove) {
+      resolve(false);
+      return;
+    }
+
+    nameEl.textContent = displayName;
+
+    function finish(ok) {
+      overlay.classList.add('hidden');
+      btnCancel.removeEventListener('click', onCancel);
+      btnRemove.removeEventListener('click', onRemove);
+      overlay.removeEventListener('click', onBackdrop);
+      document.removeEventListener('keydown', onKey);
+      resolve(ok);
+    }
+
+    function onCancel() {
+      finish(false);
+    }
+    function onRemove() {
+      finish(true);
+    }
+    function onBackdrop(e) {
+      if (e.target === overlay) finish(false);
+    }
+    function onKey(e) {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        finish(false);
+      }
+    }
+
+    btnCancel.addEventListener('click', onCancel);
+    btnRemove.addEventListener('click', onRemove);
+    overlay.addEventListener('click', onBackdrop);
+    document.addEventListener('keydown', onKey);
+
+    overlay.classList.remove('hidden');
+    btnCancel.focus();
+  });
+}
+
+async function removeRecentProjectFromHistory(projectId, displayName) {
+  hideRecentPathPopover();
+  const confirmed = await openRecentRemoveConfirmModal(displayName);
+  if (!confirmed) return;
+  const list = loadRecentProjectMeta().filter(e => e.id !== projectId);
+  saveRecentProjectMeta(list);
+  try {
+    await deleteRecentHandle(projectId);
+  } catch (e) {
+    console.warn('Could not remove stored directory handle:', e);
+  }
   renderRecentProjects();
   renderFolderSwitcher();
 }
 
 function renderRecentProjects() {
+  hideRecentPathPopover();
   const wrap = document.getElementById('recent-projects-wrap');
   const listEl = document.getElementById('recent-projects-list');
   if (!wrap || !listEl) return;
@@ -93,12 +288,30 @@ function renderRecentProjects() {
 
   wrap.style.display = '';
   for (const item of items) {
+    const row = document.createElement('div');
+    row.className = 'recent-project-row';
+
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'recent-project-btn';
     btn.textContent = item.name;
     btn.addEventListener('click', () => openRecentProject(item.id));
-    listEl.appendChild(btn);
+
+    const delBtn = document.createElement('button');
+    delBtn.type = 'button';
+    delBtn.className = 'brick-delete recent-project-delete';
+    delBtn.textContent = '✕';
+    delBtn.title = 'Remove from recent projects';
+    delBtn.setAttribute('aria-label', 'Remove from recent projects');
+    delBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      removeRecentProjectFromHistory(item.id, item.name);
+    });
+
+    row.appendChild(btn);
+    row.appendChild(delBtn);
+    bindRecentProjectPathPopover(row, btn, item);
+    listEl.appendChild(row);
   }
 }
 
@@ -144,6 +357,7 @@ async function onFolderSwitcherChange(e) {
 }
 
 async function openRecentProject(projectId) {
+  hideRecentPathPopover();
   const statusEl = document.getElementById('select-status');
   try {
     statusEl.textContent = 'Reopening recent project …';
@@ -174,6 +388,7 @@ async function openRecentProject(projectId) {
 }
 
 async function selectFolder() {
+  hideRecentPathPopover();
   try {
     const dirHandle = await window.showDirectoryPicker({ mode: 'read' });
     STATE.rootDir   = dirHandle;

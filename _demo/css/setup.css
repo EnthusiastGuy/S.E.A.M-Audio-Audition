@@ -53,25 +53,47 @@
   height: 0;
 }
 
+.recent-project-row {
+  position: relative;
+  width: 100%;
+}
+.recent-project-row:hover .brick-delete {
+  display: block;
+}
+/* Same control as timeline brick-delete (seekbar.css); position for list rows */
+.recent-project-row .brick-delete.recent-project-delete {
+  top: 50%;
+  right: 6px;
+  margin-top: 0;
+  transform: translateY(-50%);
+}
+
 .recent-project-btn {
   width: 100%;
+  min-width: 0;
+  padding: 8px 30px 8px 10px;
   background: var(--bg2);
   color: var(--text);
   border: 1px solid var(--border);
   border-radius: 10px;
-  padding: 8px 10px;
   text-align: left;
   font-size: 13px;
   cursor: pointer;
   transition: border-color .2s ease, background .2s ease;
 }
 
-.recent-project-btn:hover {
+.recent-project-btn:hover,
+.recent-project-row:hover .recent-project-btn {
   border-color: var(--accent);
   background: rgba(255,255,255,0.04);
 }
 
 .recent-project-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.recent-project-row .brick-delete:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
@@ -82,4 +104,51 @@
   color: var(--text3);
   text-align: center;
   letter-spacing: .02em;
+}
+
+/* Hover / focus tooltip for full folder path (when stored) */
+.recent-path-popover {
+  position: fixed;
+  z-index: 10050;
+  pointer-events: none;
+  max-width: min(480px, calc(100vw - 24px));
+  padding: 8px 10px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  font-family: 'Space Mono', monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.recent-path-popover-label {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text3);
+  margin-bottom: 4px;
+}
+.recent-path-popover-value {
+  font-family: 'Space Mono', monospace;
+  font-size: 12px;
+  color: var(--text);
+  margin-bottom: 6px;
+  word-break: break-all;
+}
+.recent-path-popover-meta {
+  font-family: 'Space Mono', monospace;
+  font-size: 11px;
+  color: var(--text2);
+  margin-bottom: 8px;
+}
+.recent-path-popover-note {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 11px;
+  color: var(--text2);
+  line-height: 1.4;
 }

@@ -309,6 +309,20 @@
   </div>
 </div>
 
+<!-- RECENT PROJECT — REMOVE CONFIRM -->
+<div class="modal-overlay hidden confirm-modal-overlay" id="recent-remove-confirm-modal" role="dialog" aria-modal="true" aria-labelledby="recent-remove-confirm-title">
+  <div class="modal-box confirm-modal-box">
+    <h2 id="recent-remove-confirm-title">Remove from recent?</h2>
+    <p class="confirm-modal-lead">You are about to remove this entry from your recent project history.</p>
+    <p class="confirm-modal-name" id="recent-remove-confirm-name"></p>
+    <p class="confirm-modal-note">This only removes the saved shortcut; it does not delete any files on disk.</p>
+    <div class="confirm-modal-actions">
+      <button type="button" class="btn btn-sm" id="recent-remove-confirm-cancel">Cancel</button>
+      <button type="button" class="btn btn-sm confirm-modal-btn-danger" id="recent-remove-confirm-remove">Remove</button>
+    </div>
+  </div>
+</div>
+
 <!-- Scripts (order matters: state first, then modules, app last) -->
 <script src="js/state.js"></script>
 <script src="js/header-viz.js"></script>

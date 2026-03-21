@@ -146,3 +146,59 @@
   z-index: 600;
   pointer-events: none;
 }
+
+/* ---- RECENT PROJECT REMOVE (compact confirm) ---- */
+.modal-overlay.confirm-modal-overlay {
+  z-index: 10100;
+}
+.confirm-modal-box {
+  max-width: 420px;
+  width: 100%;
+  padding: 26px 28px 24px;
+  max-height: none;
+  overflow: visible;
+}
+.confirm-modal-box h2 {
+  margin-bottom: 12px;
+}
+.confirm-modal-lead {
+  color: var(--text2);
+  font-size: 13px;
+  line-height: 1.6;
+  margin: 0 0 10px;
+}
+.confirm-modal-name {
+  font-family: 'Space Mono', monospace;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--accent2);
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  word-break: break-all;
+  line-height: 1.4;
+}
+.confirm-modal-note {
+  color: var(--text3);
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 0 0 20px;
+}
+.confirm-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.confirm-modal-btn-danger {
+  background: var(--red, #ff6b6b);
+  border-color: var(--red, #ff6b6b);
+  color: #fff;
+}
+.confirm-modal-btn-danger:hover {
+  filter: brightness(1.08);
+  border-color: var(--red, #ff6b6b);
+  color: #fff;
+}

@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
@@ -37,6 +37,11 @@
     <h2>Select Sample Pack</h2>
     <p>Click the button below and browse to the <strong>root directory</strong> of your sample pack — the folder that contains the <code>mp3</code>, <code>ogg</code>, and <code>wav</code> subdirectories.<br><br>No files leave your device; all processing happens in-browser.</p>
     <button class="btn btn-accent" id="btn-select">&#128193; &nbsp;Select Folder</button>
+    <div class="recent-projects" id="recent-projects-wrap" style="display:none;">
+      <p class="recent-projects-title">or reopen one of your recent projects</p>
+      <div class="recent-projects-list" id="recent-projects-list"></div>
+      <p class="recent-projects-hint">Scroll for more history</p>
+    </div>
     <p id="select-status" style="margin-top:14px;font-size:12px;color:var(--text3);"></p>
   </div>
 </div>

@@ -25,3 +25,61 @@
 .setup-card h2 { font-size: 24px; font-weight: 700; color: var(--text); margin-bottom: 10px; }
 .setup-card p { color: var(--text2); font-size: 14px; line-height: 1.7; margin-bottom: 28px; }
 .setup-card .btn-accent { font-size: 15px; padding: 12px 32px; width: 100%; justify-content: center; }
+
+.recent-projects {
+  margin-top: 16px;
+  text-align: left;
+}
+
+.recent-projects-title {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: var(--text2);
+}
+
+.recent-projects-list {
+  max-height: 114px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-right: 2px;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.recent-projects-list::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+.recent-project-btn {
+  width: 100%;
+  background: var(--bg2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 10px;
+  text-align: left;
+  font-size: 13px;
+  cursor: pointer;
+  transition: border-color .2s ease, background .2s ease;
+}
+
+.recent-project-btn:hover {
+  border-color: var(--accent);
+  background: rgba(255,255,255,0.04);
+}
+
+.recent-project-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.recent-projects-hint {
+  margin: 8px 0 0;
+  font-size: 11px;
+  color: var(--text3);
+  text-align: center;
+  letter-spacing: .02em;
+}

@@ -200,11 +200,28 @@ function floatTo16BitPCM(float32) {
 
 let _lameJsPromise = null;
 async function loadLameJs() {
+  if (window.lamejs && window.lamejs.Mp3Encoder) return window.lamejs;
   if (!_lameJsPromise) {
-    _lameJsPromise = import('https://esm.sh/lamejs@1.2.1');
+    _lameJsPromise = new Promise((resolve, reject) => {
+      const existing = document.querySelector('script[data-lamejs="1"]');
+      if (existing) {
+        existing.addEventListener('load', () => resolve(window.lamejs));
+        existing.addEventListener('error', () => reject(new Error('Failed to load lamejs')));
+        return;
+      }
+
+      const s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js';
+      s.async = true;
+      s.dataset.lamejs = '1';
+      s.onload = () => resolve(window.lamejs);
+      s.onerror = () => reject(new Error('Failed to load lamejs'));
+      document.head.appendChild(s);
+    });
   }
-  const mod = await _lameJsPromise;
-  return mod.default || mod;
+  const lame = await _lameJsPromise;
+  if (!lame || !lame.Mp3Encoder) throw new Error('Mp3Encoder unavailable');
+  return lame;
 }
 
 let _vorbisPromise = null;
@@ -218,16 +235,27 @@ async function loadVorbisEncoder() {
 async function audioBufferToMp3Blob(audioBuffer) {
   try {
     const lame = await loadLameJs();
-    const Mp3Encoder = lame.Mp3Encoder || lame.default?.Mp3Encoder;
-    if (!Mp3Encoder) throw new Error('Mp3Encoder unavailable');
+    const Mp3Encoder = lame.Mp3Encoder;
 
     const channels = Math.min(2, audioBuffer.numberOfChannels || 1);
-    const sampleRate = audioBuffer.sampleRate;
+    // lamejs is most stable at 44.1kHz input; render into that rate first.
+    const targetRate = 44100;
+    let workBuffer = audioBuffer;
+    if (audioBuffer.sampleRate !== targetRate) {
+      const offline = new OfflineAudioContext(channels, Math.ceil(audioBuffer.duration * targetRate), targetRate);
+      const src = offline.createBufferSource();
+      src.buffer = audioBuffer;
+      src.connect(offline.destination);
+      src.start(0);
+      workBuffer = await offline.startRendering();
+    }
+
+    const sampleRate = workBuffer.sampleRate;
     const kbps = 192;
     const encoder = new Mp3Encoder(channels, sampleRate, kbps);
-    const left = floatTo16BitPCM(audioBuffer.getChannelData(0));
+    const left = floatTo16BitPCM(workBuffer.getChannelData(0));
     const right = channels > 1
-      ? floatTo16BitPCM(audioBuffer.getChannelData(1))
+      ? floatTo16BitPCM(workBuffer.getChannelData(1))
       : null;
 
     const blockSize = 1152;
@@ -246,7 +274,7 @@ async function audioBufferToMp3Blob(audioBuffer) {
     return new Blob(mp3Chunks, { type: 'audio/mpeg' });
   } catch (e) {
     console.error('MP3 export failed', e);
-    alert('MP3 export failed in this browser. Please try WAV or OGG.');
+    alert('MP3 export failed. Please try again, or use WAV/OGG if the issue persists.');
     return null;
   }
 }

@@ -108,6 +108,7 @@ function renderBricks(fmt, songIdx, totalDur) {
       e.stopPropagation();
       if (ps.sequence.length <= 1) return;
       ps.sequence.splice(seqIdx, 1);
+      markCompositionDirty(fmt, songIdx);
       reRenderSeek(fmt, songIdx);
       saveSession();
     });
@@ -355,6 +356,7 @@ function setupBricksDropZone(fmt, songIdx) {
             label: d.partIndex === -1 ? (STATE.songs[fmt][songIdx].mainFile || 'Full') : STATE.songs[fmt][songIdx].parts[d.partIndex]?.file
           };
           ps.sequence.splice(insertIdx, 0, newItem);
+          markCompositionDirty(fmt, songIdx);
           reRenderSeek(fmt, songIdx);
         }
       } catch(e) {}
@@ -365,6 +367,7 @@ function setupBricksDropZone(fmt, songIdx) {
           const [moved] = ps.sequence.splice(d.seqIdx, 1);
           const newIdx  = insertIdx > d.seqIdx ? insertIdx - 1 : insertIdx;
           ps.sequence.splice(newIdx, 0, moved);
+          markCompositionDirty(fmt, songIdx);
           reRenderSeek(fmt, songIdx);
         }
       } catch(e) {}

@@ -25,6 +25,10 @@ function ensurePlayerState(fmt, songIdx) {
       rafId: null,
       crossfadeScheduled: false,
       locked: false,
+      previewBuffer: null,
+      previewSignature: '',
+      previewNeedsRebuild: true,
+      usingPreviewBuffer: false,
     };
     STATE.players[key].gainNode.connect(masterGain);
 
@@ -46,6 +50,106 @@ function ensurePlayerState(fmt, songIdx) {
     }
   }
   return STATE.players[key];
+}
+
+const PREVIEW_MAX_SECONDS = 60 * 60;
+
+function markCompositionDirty(fmt, songIdx) {
+  const ps = STATE.players[`${fmt}_${songIdx}`];
+  if (!ps) return;
+  ps.previewNeedsRebuild = true;
+}
+
+function getPreviewSignature(ps) {
+  return ps.sequence.map(item => String(item.partIndex)).join('|');
+}
+
+function getSequenceTotalDuration(ps) {
+  return ps.sequence.reduce((sum, item) => sum + (ps.partDurations[item.partIndex] || 0), 0);
+}
+
+function showPreviewTooLongMessage(totalSecs) {
+  const durationText = fmtTime(totalSecs);
+  alert(
+    `Preview unavailable: this composition is ${durationText}, which is longer than the 60-minute preview limit. ` +
+    `Shorten the arrangement to generate a seamless play preview.`
+  );
+}
+
+async function buildPreviewBuffer(fmt, songIdx) {
+  const key = `${fmt}_${songIdx}`;
+  const ps = STATE.players[key];
+  if (!ps) return null;
+
+  const signature = getPreviewSignature(ps);
+  const totalDur = getSequenceTotalDuration(ps);
+  if (totalDur > PREVIEW_MAX_SECONDS) {
+    showPreviewTooLongMessage(totalDur);
+    return null;
+  }
+
+  if (!ps.previewNeedsRebuild && ps.previewBuffer && ps.previewSignature === signature) {
+    return ps.previewBuffer;
+  }
+
+  const usedBuffers = ps.sequence
+    .map(item => ps.buffers[item.partIndex])
+    .filter(Boolean);
+  if (usedBuffers.length === 0) return null;
+
+  const channels = usedBuffers.reduce((max, b) => Math.max(max, b.numberOfChannels), 1);
+  const sampleRate = AC.sampleRate;
+  const frameCount = Math.max(1, Math.ceil(totalDur * sampleRate));
+  const offline = new OfflineAudioContext(channels, frameCount, sampleRate);
+
+  let offset = 0;
+  for (const item of ps.sequence) {
+    const buf = ps.buffers[item.partIndex];
+    if (!buf) continue;
+    const src = offline.createBufferSource();
+    src.buffer = buf;
+    src.connect(offline.destination);
+    src.start(offset);
+    offset += buf.duration;
+  }
+
+  const rendered = await offline.startRendering();
+  ps.previewBuffer = rendered;
+  ps.previewSignature = signature;
+  ps.previewNeedsRebuild = false;
+  return rendered;
+}
+
+function startPreviewPlayback(fmt, songIdx, offsetSecs) {
+  const key = `${fmt}_${songIdx}`;
+  const ps = STATE.players[key];
+  if (!ps || !ps.previewBuffer) return;
+
+  cancelPreScheduled(ps);
+  if (ps.node) { try { ps.node.stop(); } catch(e) {} ps.node.disconnect(); ps.node = null; }
+
+  const rate = Math.max(0.01, Math.abs(STATE.speedPercent) / 100);
+  const src = AC.createBufferSource();
+  src.buffer = ps.previewBuffer;
+  src.playbackRate.value = rate;
+  src.connect(ps.gainNode);
+  ps.node = src;
+  ps.usingPreviewBuffer = true;
+
+  const startAt = AC.currentTime + SCHEDULE_AHEAD;
+  src.start(startAt, Math.max(0, offsetSecs || 0));
+  ps.startTime = startAt - Math.max(0, offsetSecs || 0);
+  ps.pausedAt = 0;
+  ps.totalPlayedTime = 0;
+  ps.loopPlayCount = 0;
+
+  src.onended = () => {
+    if (ps.node !== src) return;
+    onSongEnded(fmt, songIdx);
+  };
+
+  cancelAnimationFrame(ps.rafId);
+  ps.rafId = requestAnimationFrame(() => tickPlayer(fmt, songIdx));
 }
 
 function buildDefaultSequence(song) {
@@ -129,13 +233,21 @@ async function startPlaying(fmt, songIdx) {
   ps.paused          = false;
   ps.pausedAt        = 0;
   ps.crossfadeScheduled = false;
+  ps.usingPreviewBuffer = false;
 
   ps.gainNode.gain.cancelScheduledValues(AC.currentTime);
   ps.gainNode.gain.setValueAtTime(1, AC.currentTime);
 
+  const preview = await buildPreviewBuffer(fmt, songIdx);
+  if (!preview) {
+    updateActionButtons(fmt, songIdx, 'stopped');
+    hidePlayerArea(fmt, songIdx);
+    return;
+  }
+
   updateActionButtons(fmt, songIdx, 'playing');
   showPlayerArea(fmt, songIdx);
-  scheduleSegment(fmt, songIdx, 0);
+  startPreviewPlayback(fmt, songIdx, 0);
 }
 
 function cancelPreScheduled(ps) {
@@ -292,7 +404,7 @@ function pausePlaying(fmt, songIdx) {
 
   const now = AC.currentTime;
   const elapsed = now - ps.startTime;
-  const buf = ps.buffers[ps.sequence[ps.currentSeqIdx]?.partIndex];
+  const buf = ps.usingPreviewBuffer ? ps.previewBuffer : ps.buffers[ps.sequence[ps.currentSeqIdx]?.partIndex];
   ps.pausedAt = buf ? Math.min(elapsed, buf.duration) : 0;
 
   if (ps.node) { try { ps.node.stop(); } catch(e){} ps.node.disconnect(); ps.node = null; }
@@ -307,7 +419,11 @@ function resumePlaying(fmt, songIdx) {
   const ps  = STATE.players[key];
   if (!ps || !ps.paused) return;
   ps.paused = false;
-  scheduleSegment(fmt, songIdx, ps.pausedAt);
+  if (ps.usingPreviewBuffer && ps.previewBuffer) {
+    startPreviewPlayback(fmt, songIdx, ps.pausedAt);
+  } else {
+    scheduleSegment(fmt, songIdx, ps.pausedAt);
+  }
   updateActionButtons(fmt, songIdx, 'playing');
 }
 
@@ -320,9 +436,11 @@ function stopPlaying(fmt, songIdx) {
   cancelPreScheduled(ps);
   cancelAnimationFrame(ps.rafId);
   ps.paused = false;
+  ps.pausedAt = 0;
   ps.totalPlayedTime = 0;
   ps.loopPlayCount = 0;
   ps.currentSeqIdx = 0;
+  ps.usingPreviewBuffer = false;
 
   updateActionButtons(fmt, songIdx, 'stopped');
   hidePlayerArea(fmt, songIdx);
@@ -335,6 +453,50 @@ function tickPlayer(fmt, songIdx) {
   if (!ps || ps.paused) return;
 
   const now = AC.currentTime;
+
+  if (ps.usingPreviewBuffer && ps.previewBuffer) {
+    const totalOrigDur = getSequenceTotalDuration(ps) || ps.previewBuffer.duration || 1;
+    const posInPreview = Math.min(Math.max(0, now - ps.startTime), ps.previewBuffer.duration);
+
+    let acc = 0;
+    let activeIdx = 0;
+    for (let i = 0; i < ps.sequence.length; i++) {
+      const dur = ps.partDurations[ps.sequence[i].partIndex] || 0;
+      if (posInPreview < acc + dur || i === ps.sequence.length - 1) {
+        activeIdx = i;
+        break;
+      }
+      acc += dur;
+    }
+    ps.currentSeqIdx = activeIdx;
+
+    const pct = Math.min(100, (posInPreview / totalOrigDur) * 100);
+    const fill    = document.getElementById(`seekfill-${key}`);
+    const hnd     = document.getElementById(`seekhandle-${key}`);
+    const timeLbl = document.getElementById(`time-label-${key}`);
+    const pctLbl  = document.getElementById(`seekpct-${key}`);
+    if (fill)    fill.style.width = `${pct}%`;
+    if (hnd)     hnd.style.left  = `${pct}%`;
+    if (timeLbl) {
+      timeLbl.textContent = fmtTime(posInPreview);
+      timeLbl.style.left  = `${pct}%`;
+    }
+    if (pctLbl)  pctLbl.textContent = `${pct.toFixed(1)}%`;
+
+    const allBricks = document.querySelectorAll(`.part-brick[data-key="${key}"]`);
+    allBricks.forEach((b) => b.classList.toggle('active-brick', parseInt(b.dataset.seqidx) === ps.currentSeqIdx));
+
+    if (!ps.crossfadeScheduled && STATE.crossfade > 0) {
+      const remaining = totalOrigDur - posInPreview;
+      if (remaining <= STATE.crossfade / 1000) {
+        ps.crossfadeScheduled = true;
+        triggerCrossfade(fmt, songIdx);
+      }
+    }
+
+    ps.rafId = requestAnimationFrame(() => tickPlayer(fmt, songIdx));
+    return;
+  }
 
   // Detect segment transition: if we've passed the current segment's end time
   // and there's a pre-scheduled next node, swap it in immediately.
@@ -478,9 +640,13 @@ function seekToTime(fmt, songIdx, targetSecs, totalDur) {
   ps.totalPlayedTime = tpt;
 
   if (ps.paused) {
-    ps.pausedAt = offsetInPart;
+    ps.pausedAt = (ps.usingPreviewBuffer && ps.previewBuffer) ? targetSecs : offsetInPart;
   } else {
-    scheduleSegment(fmt, songIdx, offsetInPart);
+    if (ps.usingPreviewBuffer && ps.previewBuffer) {
+      startPreviewPlayback(fmt, songIdx, targetSecs);
+    } else {
+      scheduleSegment(fmt, songIdx, offsetInPart);
+    }
   }
 }
 

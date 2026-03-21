@@ -2,14 +2,12 @@
   "name": "_demo",
   "version": "1.0.0",
   "private": true,
-  "description": "S.E.A.M demo — devDependencies only for rebuilding vendored encoder/fonts",
+  "description": "Optional: npm install + npm run vendor:* to rebuild vendor/*.js (fonts live in fonts/; not from npm).",
   "scripts": {
     "vendor:vorbis": "esbuild node_modules/vorbis-encoder-js/index.js --bundle --format=iife --platform=browser --global-name=__vorbisEncoderJs --outfile=vendor/vorbis-encoder-js.js --alias:fs=./vendor/build-shims/node-fs.js --alias:path=./vendor/build-shims/node-path.js",
     "vendor:lame": "node -e \"require('fs').copyFileSync('node_modules/lamejs/lame.min.js','vendor/lame.min.js')\""
   },
   "devDependencies": {
-    "@fontsource/dm-sans": "^5.2.5",
-    "@fontsource/space-mono": "^5.2.5",
     "esbuild": "^0.24.0",
     "lamejs": "1.2.1",
     "vorbis-encoder-js": "1.0.2"

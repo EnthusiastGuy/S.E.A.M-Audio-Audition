@@ -31,11 +31,13 @@
     }, IDLE_MS);
   }
 
-  function onActivity() {
+  function onActivity(ev) {
     if (!isPanelVisible()) return;
     card.classList.remove('setup-idle-dimmed');
     armIdleTimer();
-    resumeAudio();
+    // Browsers do not treat mousemove as a user gesture for AudioContext.resume();
+    // Calling resume on every move spams the console (thousands of warnings).
+    if (ev && ev.type !== 'mousemove') resumeAudio();
   }
 
   let running = false;
@@ -155,8 +157,8 @@
   let audioCtx = null;
 
   function resumeAudio() {
-    if (!audioCtx) return;
-    if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
+    if (!audioCtx || audioCtx.state !== 'suspended') return;
+    audioCtx.resume().catch(() => {});
   }
 
   function ensureAudio() {

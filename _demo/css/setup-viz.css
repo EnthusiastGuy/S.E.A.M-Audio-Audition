@@ -19,7 +19,7 @@
 #setup-panel .setup-card {
   position: relative;
   z-index: 1;
-  opacity: 1;
+  opacity: 0.95;
   transition: opacity 0.5s ease-out;
 }
 

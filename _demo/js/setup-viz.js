@@ -208,6 +208,56 @@
     noise.stop(t + 0.03);
   }
 
+  /** Short sub-bass drone on each bass hit — noticeable but restrained */
+  function playBassDrone() {
+    const ac = ensureAudio();
+    if (!ac || ac.state === 'suspended') return;
+
+    const now = ac.currentTime;
+    const dur = 1.28 + Math.random() * 0.15;
+    const f0 = 46 + Math.random() * 10;
+    const f1 = f0 * 1.019;
+
+    const master = ac.createGain();
+    master.connect(ac.destination);
+    master.gain.setValueAtTime(0, now);
+    master.gain.linearRampToValueAtTime(0.13, now + 0.07);
+    master.gain.linearRampToValueAtTime(0.1, now + 0.32);
+    master.gain.exponentialRampToValueAtTime(0.001, now + dur);
+
+    const lp = ac.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(220, now);
+    lp.frequency.exponentialRampToValueAtTime(95, now + dur * 0.85);
+    lp.Q.value = 0.65;
+    lp.connect(master);
+
+    function addOsc(freq, level) {
+      const osc = ac.createOscillator();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, now);
+      const g = ac.createGain();
+      g.gain.value = level;
+      osc.connect(g);
+      g.connect(lp);
+      osc.start(now);
+      osc.stop(now + dur + 0.04);
+    }
+
+    addOsc(f0, 0.52);
+    addOsc(f1, 0.48);
+
+    const sub = ac.createOscillator();
+    sub.type = 'sine';
+    sub.frequency.setValueAtTime(f0 * 0.5, now);
+    const sg = ac.createGain();
+    sg.gain.value = 0.22;
+    sub.connect(sg);
+    sg.connect(lp);
+    sub.start(now);
+    sub.stop(now + dur + 0.04);
+  }
+
   function bassShakeOffsetPx(nx, t, h) {
     if (bassEnergy < 0.02) return 0;
     let s = 0;
@@ -411,6 +461,7 @@
       });
     }
     spawnBassParticles(t, layerStates);
+    playBassDrone();
     nextBassAt = t + 3.5 + Math.random() * 5.5;
   }
 

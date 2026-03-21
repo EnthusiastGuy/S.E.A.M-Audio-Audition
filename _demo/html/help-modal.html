@@ -1,69 +1,104 @@
-<!-- S.E.A.M — Help Modal Content (loaded by index.html) -->
+<!-- S.E.A.M — Help Modal Content (mirror of #help-modal in index.html for editing/reference) -->
 <div class="modal-box">
   <button class="modal-close" id="help-close">&times;</button>
   <h2>&#8505; S.E.A.M — Help &amp; Reference</h2>
 
-  <h3>Getting Started</h3>
-  <p>Click <strong>Select Folder</strong> on the welcome screen and choose the root folder of your sample pack — the one that contains the <code>wav</code> sub-directory. The app reads all files in-browser; nothing is uploaded anywhere.</p>
+  <h3>What this app does</h3>
+  <p><strong>S.E.A.M</strong> (Segmented Evaluation &amp; Audition Module) is a browser-based player for <strong>dynamic / branching music</strong> stored as WAV segments. It builds a timeline from your filenames, plays transitions in order, supports per-part looping and crossfades between tracks, and can <strong>export</strong> stitched mixes or single files — all on your machine.</p>
 
-  <h3>Song List</h3>
-  <p>The song list shows items discovered in the <code>wav</code> folder. Each row shows the song number, name, total duration, part count, and transport controls.</p>
+  <h3>Privacy &amp; requirements</h3>
   <ul>
-    <li><strong>Drag rows</strong> up or down to reorder the playlist.</li>
-    <li>A row shown in <span style="color:var(--accent2)">amber</span> means the main (full) song file is missing; only loop parts are available. Hover the name for a tip.</li>
-    <li>If neither the main file nor any parts exist, the song is hidden.</li>
+    <li>Audio is read from folders you choose; <strong>nothing is uploaded</strong> to a server.</li>
+    <li>Use a <strong>Chromium-based</strong> browser (Chrome, Edge, etc.) with the <strong>File System Access API</strong> so you can pick folders and reopen recent projects.</li>
+    <li>First-time <strong>MP3 / OGG</strong> export may load encoder scripts from a CDN; WAV export is fully offline once buffers are loaded.</li>
   </ul>
 
-  <h3>Playing a Song</h3>
-  <p>Press the <strong>▶ Play</strong> button on any row. The button changes to <strong>⏸ Pause</strong> + <strong>■ Stop</strong>. The seek bar expands below the row. Multiple songs can play simultaneously — useful for auditioning layers.</p>
-  <p>When a song finishes, the next one in the playlist starts automatically. After the last song the queue wraps back to the top.</p>
-
-  <h3>Seek Bar</h3>
+  <h3>Opening a project</h3>
   <ul>
-    <li>Coloured bricks represent each part in proportion to its duration.</li>
-    <li>Click any brick to jump to that part's start.</li>
-    <li>Drag the white handle anywhere to seek.</li>
-    <li>The time label above the handle shows <em>total played time</em>, including repeated loops.</li>
-    <li>The percentage on the right shows position relative to the original (unlooped) duration.</li>
+    <li><strong>Select Folder</strong> — choose the <em>root</em> of your sample pack: the folder that directly contains a <code>wav</code> directory. If <code>wav/</code> is missing, the app reports an error.</li>
+    <li><strong>Recent projects</strong> — up to ten previously opened folders appear on the welcome screen. Pick one to restore permission and reload (handles are stored in <strong>IndexedDB</strong>).</li>
+    <li><strong>Change Folder</strong> — after loading, use the header dropdown to switch to another recent project, <strong>Browse…</strong> for a new folder, or stay on the current one.</li>
   </ul>
 
-  <h3>Loop Controls</h3>
-  <p>Loopable parts (those whose filename contains <code>-&gt;</code> and list themselves as a next destination) show a <strong>Loop</strong> button centred below their brick. Click it to open the loop dropdown:</p>
-  <ul>
-    <li><strong>Continue (once)</strong> — plays through without looping.</li>
-    <li><strong>2× … 10×</strong> — loops that part N times before moving on.</li>
-    <li><strong>Forever ∞</strong> — loops indefinitely until you manually seek past that part.</li>
-  </ul>
-  <p>The button label updates in real-time to show loop progress, e.g. <em>Loop 2/3</em>.</p>
+  <h3>Folder layout &amp; discovery</h3>
+  <p>Under <code>wav/</code>, each <strong>subfolder name</strong> is a song title. Inside each song folder, only <code>.wav</code> files are used. The app scans those files and groups them by the naming rules below.</p>
 
-  <h3>Part Sheet / Timeline Editor</h3>
-  <p>Click the numbered <strong>Parts badge</strong> in the Parts column to expand the part sheet. You will see:</p>
+  <h3>Song list</h3>
+  <p>Each row shows <strong>number</strong>, <strong>name</strong>, <strong>duration</strong>, <strong>part count</strong>, and <strong>actions</strong> (play / export when available).</p>
   <ul>
-    <li>A list of all available files for that song at the top.</li>
-    <li>The current timeline (bricks) at the bottom, which you can edit by drag-and-drop.</li>
-    <li><strong>Drag a brick in the timeline</strong> left/right to reposition it.</li>
-    <li><strong>Drag a file from the list above onto the timeline</strong> to insert it between existing bricks.</li>
-    <li>Hovering a file highlights its instances in the timeline (and vice-versa).</li>
+    <li><strong>Drag rows</strong> to reorder the playlist.</li>
+    <li><span style="color:var(--accent2)">Amber</span> highlighting means the <strong>main (full) WAV</strong> is missing; only segment files are available. Hover the name for a short tip.</li>
+    <li>Songs with <strong>no main file and no parts</strong> are omitted entirely.</li>
+    <li>Click the row (anywhere except the action buttons) to open or close the <strong>part sheet</strong> for that song.</li>
   </ul>
 
-  <h3>Crossfade</h3>
-  <p>The <strong>Crossfade</strong> slider at the bottom (0 – 5000 ms) controls the overlap between consecutive playlist songs. When the current song has fewer than <em>N</em> ms remaining, the next song begins quietly and fades in while the current one fades out.</p>
-
-  <h3>Playback Speed Knob</h3>
-  <p>The rotary knob controls playback rate for all active audio. Turn <strong>clockwise</strong> to increase speed, <strong>counter-clockwise</strong> to slow, reverse, or stop.</p>
+  <h3>Playing &amp; queue behaviour</h3>
   <ul>
-    <li>North-East: 100% (default)</li>
-    <li>South-East: 200% (max forward)</li>
-    <li>North: 0% (stopped)</li>
-    <li>North-West: −100% (reverse)</li>
-    <li>South-West: −200%</li>
-    <li>South: −250% (max reverse)</li>
+    <li><strong>▶ Play</strong> starts playback; controls become <strong>⏸ Pause</strong> and <strong>■ Stop</strong>, and the seek bar appears under the row.</li>
+    <li><strong>Several songs can play at once</strong> — useful for layering cues.</li>
+    <li>When a song ends, the <strong>next row in playlist order</strong> starts. After the last song, playback <strong>wraps to the top</strong>.</li>
+    <li>The <strong>Crossfade</strong> knob (sidebar) overlaps the tail of the current song with the start of the next: when less than <em>N</em> seconds remain, the next track fades in while the current one fades out.</li>
   </ul>
-  <p>The knob snaps in 5% increments with a click sound. It cannot jump directly from South-East to South — you must turn it counter-clockwise through the North positions.</p>
 
-  <h3>Session Persistence</h3>
-  <p>All playlist order, loop settings, crossfade value, speed, and part arrangements are saved to <code>localStorage</code> automatically. Reopen the page (with the same folder) and find everything exactly as you left it.</p>
+  <h3>Crossfade knob</h3>
+  <p>Range <strong>0.0 – 20.0 seconds</strong> in <strong>100&nbsp;ms</strong> steps. Drag the indicator along the top arc, use the <strong>mouse wheel</strong> over the knob, or click the tick marks at <strong>0 / 5 / 10 / 15 / 20&nbsp;s</strong>. The value label shows seconds with one decimal place.</p>
 
-  <h3>File Naming Convention</h3>
-  <p>Parts follow the pattern: <code>Song Name N -&gt; A, B, C.ext</code> where N is the part number and A, B, C are the part numbers that may follow it. The main (full) song file has just the song name with no part number.</p>
+  <h3>Seek bar</h3>
+  <ul>
+    <li><strong>Coloured bricks</strong> show each segment in proportion to its duration along the edited timeline.</li>
+    <li><strong>Click a brick</strong> to jump to that segment’s start.</li>
+    <li><strong>Drag the white handle</strong> to seek anywhere.</li>
+    <li>The time above the handle is <em>cumulative played time</em>, including loop repeats.</li>
+    <li>The <strong>percentage</strong> on the right is position versus the timeline length <em>without</em> extra loop passes (the “unlooped” layout length).</li>
+  </ul>
+
+  <h3>Loop controls</h3>
+  <p>A <strong>Loop</strong> button appears under a brick only when that part’s metadata says it may <strong>transition to itself</strong> (its own part number appears in the “next” list after the arrow). Open the menu to choose:</p>
+  <ul>
+    <li><strong>Continue (once)</strong> — play through once, then follow the timeline.</li>
+    <li><strong>2× … 10×</strong> — repeat that segment N times, then continue.</li>
+    <li><strong>Forever ∞</strong> — repeat until you seek away.</li>
+  </ul>
+  <p>The button text updates during playback (e.g. <em>Loop 2/3</em>).</p>
+
+  <h3>Part sheet &amp; timeline editor</h3>
+  <p>With the part sheet open you see:</p>
+  <ul>
+    <li><strong>File list</strong> — every WAV for that song (full mix and segments), each with play/stop, optional mini progress bar for solo audition, and per-file download format.</li>
+    <li><strong>Timeline</strong> — the same bricks as the main seek bar; <strong>drag bricks</strong> horizontally to reorder; <strong>drag from the list onto the brick row</strong> to insert a segment between others.</li>
+    <li><strong>Hover</strong> a list entry to highlight matching bricks (and the reverse).</li>
+  </ul>
+
+  <h3>Export &amp; downloads</h3>
+  <ul>
+    <li><strong>Stitched composition</strong> — the download button beside transport (folder icon) renders the <strong>current timeline</strong> (including your reordering) to one file. It is only shown when a <strong>main full song WAV</strong> exists for that title, because the exporter uses the full project pipeline.</li>
+    <li>Choose format with the <strong>▾</strong> menu: <strong>WAV</strong>, <strong>MP3</strong>, or <strong>OGG</strong>. Your choice is remembered per song.</li>
+    <li><strong>Per-part download</strong> — in the part sheet, download any single file (main or segment) in WAV / MP3 / OGG.</li>
+    <li><strong>60-minute limit</strong> — if the stitched timeline would exceed one hour, preview rendering is blocked and you’ll see a message; shorten the arrangement and try again.</li>
+  </ul>
+
+  <h3>Encoding settings</h3>
+  <p>Open the <strong>gear</strong> (<code>&#9881;</code>) in the header to set <strong>MP3</strong> (bitrate, sample rate, channels) and <strong>OGG Vorbis</strong> (quality, sample rate, channels). Settings are saved <strong>per project</strong> (same folder name) with the rest of the session. <strong>Reset defaults</strong> restores built-in starting values.</p>
+
+  <h3>Playback speed</h3>
+  <p>The <strong>Playback speed</strong> knob applies to all active audio. Clockwise increases speed; counter-clockwise slows, stops, or reverses.</p>
+  <ul>
+    <li>North-East: <strong>100%</strong> (default)</li>
+    <li>South-East: <strong>200%</strong> (max forward)</li>
+    <li>North: <strong>0%</strong> (stopped)</li>
+    <li>North-West: <strong>−100%</strong> (reverse)</li>
+    <li>South-West: <strong>−200%</strong></li>
+    <li>South: <strong>−250%</strong> (max reverse)</li>
+  </ul>
+  <p>Values snap in <strong>5%</strong> steps with a short click sound. You cannot jump straight from max forward to max reverse — turn through the north side of the dial.</p>
+
+  <h3>Session persistence</h3>
+  <p>For each root folder, the app saves to <code>localStorage</code>: playlist order, crossfade, speed, per-song <strong>timeline edits</strong>, <strong>loop</strong> choices, <strong>export format</strong> preferences, <strong>encoding</strong> options, and which <strong>part sheets</strong> were left open. Reload the page and reopen the same folder to continue where you left off.</p>
+
+  <h3>File naming convention</h3>
+  <ul>
+    <li><strong>Full song</strong> — <code>Song Name.wav</code> (base name matches the folder; no part index).</li>
+    <li><strong>Segment with branches</strong> — <code>Song Name N -&gt; A, B, C.wav</code> or the same with a single hyphen before the arrow: <code>Song Name N - A, B, C.wav</code>. <em>N</em> is this part’s index; <em>A, B, C</em> are allowed next part indices.</li>
+    <li><strong>Terminal segment</strong> — <code>Song Name N.wav</code> (number only, no arrow list) if there are no further branches.</li>
+  </ul>
 </div>

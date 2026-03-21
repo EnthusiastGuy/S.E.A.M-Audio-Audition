@@ -7,7 +7,11 @@
 // ─── Global AudioContext ─────────────────────────────────────
 const AC = new (window.AudioContext || window.webkitAudioContext)();
 const masterGain = AC.createGain();
-masterGain.connect(AC.destination);
+const masterAnalyser = AC.createAnalyser();
+masterAnalyser.fftSize = 1024;
+masterAnalyser.smoothingTimeConstant = 0.72;
+masterGain.connect(masterAnalyser);
+masterAnalyser.connect(AC.destination);
 
 // ─── State ───────────────────────────────────────────────────
 const STATE = {

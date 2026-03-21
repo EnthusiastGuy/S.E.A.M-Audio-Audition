@@ -21,13 +21,16 @@
 
 <!-- HEADER -->
 <header class="app-header">
-  <div>
-    <div class="app-logo">S.E.A.M<span>Audio Audition Player</span></div>
-  </div>
-  <div class="header-actions">
-    <select class="folder-switcher" id="folder-switcher" style="display:none;" aria-label="Change folder"></select>
-    <button class="btn btn-sm btn-icon" id="btn-settings" title="Encoding settings" aria-label="Encoding settings">&#9881;</button>
-    <button class="btn btn-sm" id="btn-help">&#8505; Help</button>
+  <canvas class="app-header-viz" id="header-viz" aria-hidden="true"></canvas>
+  <div class="app-header-inner">
+    <div>
+      <div class="app-logo">S.E.A.M<span>Audio Audition Player</span></div>
+    </div>
+    <div class="header-actions">
+      <select class="folder-switcher" id="folder-switcher" style="display:none;" aria-label="Change folder"></select>
+      <button class="btn btn-sm btn-icon" id="btn-settings" title="Encoding settings" aria-label="Encoding settings">&#9881;</button>
+      <button class="btn btn-sm" id="btn-help">&#8505; Help</button>
+    </div>
   </div>
 </header>
 
@@ -266,6 +269,7 @@
 
 <!-- Scripts (order matters: state first, then modules, app last) -->
 <script src="js/state.js"></script>
+<script src="js/header-viz.js"></script>
 <script src="js/file-parser.js"></script>
 <script src="js/playback.js"></script>
 <script src="js/seekbar.js"></script>

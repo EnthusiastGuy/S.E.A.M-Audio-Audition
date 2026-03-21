@@ -9,7 +9,7 @@
 
 /* ---- MAIN APP ---- */
 #main-app {
-  display: flex;
+  display: none; /* shown after a folder is opened (see app.js) */
   flex-direction: row;
   gap: 20px;
   padding: 20px 24px;

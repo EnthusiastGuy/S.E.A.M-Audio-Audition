@@ -63,6 +63,7 @@ function buildSongRow(fmt, songIdx, nr) {
 
   const row = document.createElement('div');
   row.className = 'song-row' + (missingMain ? ' missing-main' : '');
+  row.draggable = true;
   row.dataset.fmt = fmt;
   row.dataset.idx = songIdx;
   row.dataset.key = key;

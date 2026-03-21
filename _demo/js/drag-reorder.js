@@ -10,7 +10,18 @@ function initDragReorder(fmt) {
 
   body.querySelectorAll('.song-row').forEach(row => {
     row.addEventListener('dragstart', (e) => {
-      if (e.target.closest('.part-item') || e.target.closest('.part-brick')) return;
+      const t = e.target;
+      if (
+        t.closest('.part-item') ||
+        t.closest('.part-brick') ||
+        t.closest('.song-player-area') ||
+        t.closest('.col-action') ||
+        t.closest('button') ||
+        t.closest('a')
+      ) {
+        e.preventDefault();
+        return;
+      }
       dragSrc = row;
       row.classList.add('dragging');
       e.dataTransfer.setData('row-move', row.dataset.idx);

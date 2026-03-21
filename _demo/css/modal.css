@@ -71,6 +71,63 @@
   color: var(--accent4);
 }
 
+/* ---- SETTINGS MODAL ---- */
+.settings-modal-box { max-width: 900px; }
+.encoder-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 14px;
+  margin-top: 14px;
+}
+.encoder-card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px;
+}
+.encoder-card h3 { margin-top: 0; }
+.settings-row {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.settings-row span {
+  color: var(--text2);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.settings-row select,
+.settings-row input[type="range"] {
+  width: 100%;
+  background: var(--card2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  padding: 7px 10px;
+}
+.settings-slider-wrap {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: center;
+}
+.settings-slider-wrap output {
+  min-width: 44px;
+  text-align: right;
+  color: var(--accent4);
+  font-family: 'Space Mono', monospace;
+  font-size: 12px;
+}
+.settings-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+}
+
 /* ---- TOOLTIP ---- */
 [data-tip] { position: relative; }
 [data-tip]:hover::after {

@@ -211,6 +211,26 @@ function floatTo16BitPCM(float32) {
   return out;
 }
 
+function resolveEncoderChannels(bufferChannels, mode) {
+  if (mode === 'mono') return 1;
+  if (mode === 'stereo') return 2;
+  return Math.max(1, Math.min(2, bufferChannels || 1));
+}
+
+async function maybeResampleBuffer(audioBuffer, targetRate, channels) {
+  const shouldResample = Number.isFinite(targetRate) && targetRate > 0 && audioBuffer.sampleRate !== targetRate;
+  const shouldRechannel = Math.max(1, Math.min(2, audioBuffer.numberOfChannels || 1)) !== channels;
+  if (!shouldResample && !shouldRechannel) return audioBuffer;
+
+  const outRate = shouldResample ? targetRate : audioBuffer.sampleRate;
+  const offline = new OfflineAudioContext(channels, Math.ceil(audioBuffer.duration * outRate), outRate);
+  const src = offline.createBufferSource();
+  src.buffer = audioBuffer;
+  src.connect(offline.destination);
+  src.start(0);
+  return offline.startRendering();
+}
+
 let _lameJsPromise = null;
 async function loadLameJs() {
   if (window.lamejs && window.lamejs.Mp3Encoder) return window.lamejs;
@@ -250,21 +270,17 @@ async function audioBufferToMp3Blob(audioBuffer) {
     const lame = await loadLameJs();
     const Mp3Encoder = lame.Mp3Encoder;
 
-    const channels = Math.min(2, audioBuffer.numberOfChannels || 1);
-    // lamejs is most stable at 44.1kHz input; render into that rate first.
-    const targetRate = 44100;
-    let workBuffer = audioBuffer;
-    if (audioBuffer.sampleRate !== targetRate) {
-      const offline = new OfflineAudioContext(channels, Math.ceil(audioBuffer.duration * targetRate), targetRate);
-      const src = offline.createBufferSource();
-      src.buffer = audioBuffer;
-      src.connect(offline.destination);
-      src.start(0);
-      workBuffer = await offline.startRendering();
-    }
+    const mp3Cfg = STATE.encoding?.mp3 || {};
+    const channels = resolveEncoderChannels(audioBuffer.numberOfChannels, mp3Cfg.channels);
+    const targetRate = mp3Cfg.sampleRateMode === 'source'
+      ? audioBuffer.sampleRate
+      : Number(mp3Cfg.sampleRateMode) || 44100;
+    const workBuffer = await maybeResampleBuffer(audioBuffer, targetRate, channels);
 
     const sampleRate = workBuffer.sampleRate;
-    const kbps = 192;
+    const kbps = [96, 128, 160, 192, 224, 256, 320].includes(Number(mp3Cfg.bitrateKbps))
+      ? Number(mp3Cfg.bitrateKbps)
+      : 192;
     const encoder = new Mp3Encoder(channels, sampleRate, kbps);
     const left = floatTo16BitPCM(workBuffer.getChannelData(0));
     const right = channels > 1
@@ -301,15 +317,23 @@ async function audioBufferToOggBlob(audioBuffer) {
       mod.default;
     if (!Encoder) throw new Error('Vorbis encoder unavailable');
 
-    const channels = Math.min(2, audioBuffer.numberOfChannels || 1);
-    const encoder = new Encoder(audioBuffer.sampleRate, channels, 0.5, {});
+    const oggCfg = STATE.encoding?.ogg || {};
+    const channels = resolveEncoderChannels(audioBuffer.numberOfChannels, oggCfg.channels);
+    const targetRate = oggCfg.sampleRateMode === 'source'
+      ? audioBuffer.sampleRate
+      : Number(oggCfg.sampleRateMode) || audioBuffer.sampleRate;
+    const quality = Number.isFinite(Number(oggCfg.quality))
+      ? Math.max(0, Math.min(1, Number(oggCfg.quality)))
+      : 0.5;
+    const workBuffer = await maybeResampleBuffer(audioBuffer, targetRate, channels);
+    const encoder = new Encoder(workBuffer.sampleRate, channels, quality, {});
     const channelData = [];
     for (let c = 0; c < channels; c++) {
-      channelData.push(audioBuffer.getChannelData(c));
+      channelData.push(workBuffer.getChannelData(c));
     }
 
     const frame = 4096;
-    for (let i = 0; i < audioBuffer.length; i += frame) {
+    for (let i = 0; i < workBuffer.length; i += frame) {
       const block = [];
       for (let c = 0; c < channels; c++) {
         block.push(channelData[c].slice(i, i + frame));

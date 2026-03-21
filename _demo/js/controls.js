@@ -314,3 +314,96 @@ function initHelp() {
     }
   });
 }
+
+function getDefaultEncodingSettings() {
+  return {
+    mp3: {
+      bitrateKbps: 192,
+      sampleRateMode: '44100',
+      channels: 'auto',
+    },
+    ogg: {
+      quality: 0.5,
+      sampleRateMode: 'source',
+      channels: 'auto',
+    },
+  };
+}
+
+function initEncodingSettings() {
+  const modal = document.getElementById('settings-modal');
+  const btnOpen = document.getElementById('btn-settings');
+  const btnClose = document.getElementById('settings-close');
+  const btnDone = document.getElementById('btn-settings-close');
+  const btnReset = document.getElementById('btn-settings-reset');
+  if (!modal || !btnOpen || !btnClose || !btnDone || !btnReset) return;
+
+  const mp3Bitrate = document.getElementById('setting-mp3-bitrate');
+  const mp3Rate = document.getElementById('setting-mp3-samplerate');
+  const mp3Channels = document.getElementById('setting-mp3-channels');
+  const oggQuality = document.getElementById('setting-ogg-quality');
+  const oggQualityLabel = document.getElementById('setting-ogg-quality-label');
+  const oggRate = document.getElementById('setting-ogg-samplerate');
+  const oggChannels = document.getElementById('setting-ogg-channels');
+
+  function applyStateToControls() {
+    const defaults = getDefaultEncodingSettings();
+    const enc = STATE.encoding || defaults;
+    mp3Bitrate.value = String(enc.mp3?.bitrateKbps ?? defaults.mp3.bitrateKbps);
+    mp3Rate.value = enc.mp3?.sampleRateMode ?? defaults.mp3.sampleRateMode;
+    mp3Channels.value = enc.mp3?.channels ?? defaults.mp3.channels;
+    const q = Number(enc.ogg?.quality ?? defaults.ogg.quality);
+    oggQuality.value = String(Math.max(0, Math.min(1, q)));
+    oggQualityLabel.value = Number(oggQuality.value).toFixed(2);
+    oggRate.value = enc.ogg?.sampleRateMode ?? defaults.ogg.sampleRateMode;
+    oggChannels.value = enc.ogg?.channels ?? defaults.ogg.channels;
+  }
+
+  function saveControlsToState() {
+    STATE.encoding = {
+      mp3: {
+        bitrateKbps: Number(mp3Bitrate.value),
+        sampleRateMode: mp3Rate.value,
+        channels: mp3Channels.value,
+      },
+      ogg: {
+        quality: Math.max(0, Math.min(1, Number(oggQuality.value))),
+        sampleRateMode: oggRate.value,
+        channels: oggChannels.value,
+      },
+    };
+    oggQualityLabel.value = STATE.encoding.ogg.quality.toFixed(2);
+    saveSession();
+  }
+
+  function openModal() {
+    applyStateToControls();
+    modal.classList.remove('hidden');
+  }
+  function closeModal() {
+    modal.classList.add('hidden');
+  }
+
+  btnOpen.addEventListener('click', openModal);
+  btnClose.addEventListener('click', closeModal);
+  btnDone.addEventListener('click', closeModal);
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) closeModal();
+  });
+
+  [mp3Bitrate, mp3Rate, mp3Channels, oggRate, oggChannels].forEach((el) => {
+    el.addEventListener('change', saveControlsToState);
+  });
+  oggQuality.addEventListener('input', () => {
+    oggQualityLabel.value = Number(oggQuality.value).toFixed(2);
+    saveControlsToState();
+  });
+
+  btnReset.addEventListener('click', () => {
+    STATE.encoding = getDefaultEncodingSettings();
+    applyStateToControls();
+    saveSession();
+  });
+
+  applyStateToControls();
+}

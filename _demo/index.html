@@ -26,6 +26,7 @@
   </div>
   <div class="header-actions">
     <select class="folder-switcher" id="folder-switcher" style="display:none;" aria-label="Change folder"></select>
+    <button class="btn btn-sm btn-icon" id="btn-settings" title="Encoding settings" aria-label="Encoding settings">&#9881;</button>
     <button class="btn btn-sm" id="btn-help">&#8505; Help</button>
   </div>
 </header>
@@ -79,6 +80,81 @@
   <div class="loop-option" data-val="5">5×</div>
   <div class="loop-option" data-val="10">10×</div>
   <div class="loop-option" data-val="-1">Forever ∞</div>
+</div>
+
+<!-- ENCODING SETTINGS MODAL -->
+<div class="modal-overlay hidden" id="settings-modal">
+  <div class="modal-box settings-modal-box">
+    <button class="modal-close" id="settings-close">&times;</button>
+    <h2>&#9881; Encoding Settings</h2>
+    <p>Configure MP3 and OGG export behavior. These settings are saved per project and restored automatically.</p>
+
+    <div class="encoder-grid">
+      <section class="encoder-card">
+        <h3>MP3 (lamejs)</h3>
+        <label class="settings-row">
+          <span>Bitrate (kbps)</span>
+          <select id="setting-mp3-bitrate">
+            <option value="96">96</option>
+            <option value="128">128</option>
+            <option value="160">160</option>
+            <option value="192">192</option>
+            <option value="224">224</option>
+            <option value="256">256</option>
+            <option value="320">320</option>
+          </select>
+        </label>
+        <label class="settings-row">
+          <span>Sample rate</span>
+          <select id="setting-mp3-samplerate">
+            <option value="source">Source file</option>
+            <option value="44100">44.1 kHz</option>
+            <option value="48000">48 kHz</option>
+          </select>
+        </label>
+        <label class="settings-row">
+          <span>Channels</span>
+          <select id="setting-mp3-channels">
+            <option value="auto">Auto (use source)</option>
+            <option value="mono">Mono</option>
+            <option value="stereo">Stereo</option>
+          </select>
+        </label>
+      </section>
+
+      <section class="encoder-card">
+        <h3>OGG (Vorbis)</h3>
+        <label class="settings-row">
+          <span>Quality</span>
+          <div class="settings-slider-wrap">
+            <input type="range" id="setting-ogg-quality" min="0" max="1" step="0.05" />
+            <output id="setting-ogg-quality-label">0.50</output>
+          </div>
+        </label>
+        <label class="settings-row">
+          <span>Sample rate</span>
+          <select id="setting-ogg-samplerate">
+            <option value="source">Source file</option>
+            <option value="44100">44.1 kHz</option>
+            <option value="48000">48 kHz</option>
+          </select>
+        </label>
+        <label class="settings-row">
+          <span>Channels</span>
+          <select id="setting-ogg-channels">
+            <option value="auto">Auto (use source)</option>
+            <option value="mono">Mono</option>
+            <option value="stereo">Stereo</option>
+          </select>
+        </label>
+      </section>
+    </div>
+
+    <div class="settings-actions">
+      <button class="btn btn-sm" id="btn-settings-reset">Reset defaults</button>
+      <button class="btn btn-sm btn-accent" id="btn-settings-close">Done</button>
+    </div>
+  </div>
 </div>
 
 <!-- HELP MODAL -->

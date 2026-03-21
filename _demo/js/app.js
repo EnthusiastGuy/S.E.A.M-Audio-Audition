@@ -236,6 +236,9 @@ async function discoverSongs(rootHandle) {
     STATE.crossfade    = saved.crossfade    ?? 0;
     STATE.speedPercent = saved.speedPercent ?? 100;
     STATE.currentFormat = 'wav';
+    if (saved.encoding) {
+      STATE.encoding = saved.encoding;
+    }
 
     if (saved.order && saved.order.wav) {
       const validOrder = saved.order.wav.filter(i => STATE.songs.wav[i] !== undefined);
@@ -269,3 +272,4 @@ async function discoverSongs(rootHandle) {
 
 // ─── INIT ────────────────────────────────────────────────────
 initHelp();
+initEncodingSettings();

@@ -18,6 +18,18 @@ const STATE = {
   order: { wav: [] },
   crossfade: 0,
   speedPercent: 100,
+  encoding: {
+    mp3: {
+      bitrateKbps: 192,
+      sampleRateMode: '44100',
+      channels: 'auto',
+    },
+    ogg: {
+      quality: 0.5,
+      sampleRateMode: 'source',
+      channels: 'auto',
+    },
+  },
   players: {},
 };
 
@@ -68,6 +80,7 @@ function saveSession() {
       downloadFormats: {},
       currentFormat: STATE.currentFormat,
       openSheets: Array.from(openPartSheets),
+      encoding: STATE.encoding,
     };
     for (const [key, ps] of Object.entries(STATE.players)) {
       data.loopSettings[key] = ps.loopSettings;
@@ -83,6 +96,33 @@ function loadSession() {
   try {
     let raw = localStorage.getItem(getSessionKey());
     if (!raw) return null;
-    return JSON.parse(raw);
+    const parsed = JSON.parse(raw);
+    const mp3Saved = parsed?.encoding?.mp3 || {};
+    const oggSaved = parsed?.encoding?.ogg || {};
+    parsed.encoding = {
+      mp3: {
+        bitrateKbps: [96, 128, 160, 192, 224, 256, 320].includes(Number(mp3Saved.bitrateKbps))
+          ? Number(mp3Saved.bitrateKbps)
+          : 192,
+        sampleRateMode: ['source', '44100', '48000'].includes(mp3Saved.sampleRateMode)
+          ? mp3Saved.sampleRateMode
+          : '44100',
+        channels: ['auto', 'mono', 'stereo'].includes(mp3Saved.channels)
+          ? mp3Saved.channels
+          : 'auto',
+      },
+      ogg: {
+        quality: Number.isFinite(Number(oggSaved.quality))
+          ? Math.max(0, Math.min(1, Number(oggSaved.quality)))
+          : 0.5,
+        sampleRateMode: ['source', '44100', '48000'].includes(oggSaved.sampleRateMode)
+          ? oggSaved.sampleRateMode
+          : 'source',
+        channels: ['auto', 'mono', 'stereo'].includes(oggSaved.channels)
+          ? oggSaved.channels
+          : 'auto',
+      },
+    };
+    return parsed;
   } catch(e) { return null; }
 }

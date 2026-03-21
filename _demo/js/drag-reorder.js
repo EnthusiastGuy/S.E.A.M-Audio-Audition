@@ -11,9 +11,12 @@ function initDragReorder(fmt) {
   body.querySelectorAll('.song-row').forEach(row => {
     row.addEventListener('dragstart', (e) => {
       const t = e.target;
+      // Part list → timeline and brick reorder use HTML5 drag; dragstart bubbles to the row.
+      // Do not preventDefault here or the inner drag is cancelled.
+      if (t.closest('.part-item') || t.closest('.part-brick')) {
+        return;
+      }
       if (
-        t.closest('.part-item') ||
-        t.closest('.part-brick') ||
         t.closest('.song-player-area') ||
         t.closest('.col-action') ||
         t.closest('button') ||

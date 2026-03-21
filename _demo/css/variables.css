@@ -44,3 +44,13 @@ body {
   overflow-x: hidden;
   padding-bottom: var(--footer-h);
 }
+
+/* Text selection — teal wash to match accent3 / dark UI (not default system blue) */
+::selection {
+  background: color-mix(in srgb, var(--accent3) 42%, transparent);
+  color: var(--text);
+}
+::-moz-selection {
+  background: color-mix(in srgb, var(--accent3) 42%, transparent);
+  color: var(--text);
+}

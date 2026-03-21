@@ -9,31 +9,45 @@
   if (!panel || !canvas || !card) return;
 
   const ctx = canvas.getContext('2d', { alpha: true });
-  const IDLE_MS = 5000;
+  const IDLE_DIM_MS = 5000;
+  /** After first idle dim, wait this long before full cinema (opacity 0 + header hidden). */
+  const IDLE_CINEMA_AFTER_DIM_MS = 15000;
 
-  let idleTimer = null;
+  let idleDimTimer = null;
+  let idleCinemaTimer = null;
 
   function isPanelVisible() {
     return panel.style.display !== 'none' && panel.offsetParent !== null;
   }
 
-  function clearIdleTimer() {
-    if (idleTimer) {
-      clearTimeout(idleTimer);
-      idleTimer = null;
+  function clearWelcomeIdleClasses() {
+    document.body.classList.remove('welcome-idle-dim', 'welcome-idle-cinema');
+  }
+
+  function clearIdleTimers() {
+    if (idleDimTimer) {
+      clearTimeout(idleDimTimer);
+      idleDimTimer = null;
     }
+    if (idleCinemaTimer) {
+      clearTimeout(idleCinemaTimer);
+      idleCinemaTimer = null;
+    }
+    clearWelcomeIdleClasses();
   }
 
   function armIdleTimer() {
-    clearIdleTimer();
-    idleTimer = window.setTimeout(() => {
-      card.classList.add('setup-idle-dimmed');
-    }, IDLE_MS);
+    clearIdleTimers();
+    idleDimTimer = window.setTimeout(() => {
+      document.body.classList.add('welcome-idle-dim');
+      idleCinemaTimer = window.setTimeout(() => {
+        document.body.classList.add('welcome-idle-cinema');
+      }, IDLE_CINEMA_AFTER_DIM_MS);
+    }, IDLE_DIM_MS);
   }
 
   function onActivity(ev) {
     if (!isPanelVisible()) return;
-    card.classList.remove('setup-idle-dimmed');
     armIdleTimer();
     // Browsers do not treat mousemove as a user gesture for AudioContext.resume();
     // Calling resume on every move spams the console (thousands of warnings).
@@ -627,8 +641,7 @@
     particles = [];
     bassEnergy = 0;
     bassRegions = [];
-    clearIdleTimer();
-    card.classList.remove('setup-idle-dimmed');
+    clearIdleTimers();
   }
 
   const mo = new MutationObserver(() => {

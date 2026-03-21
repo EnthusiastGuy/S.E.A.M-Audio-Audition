@@ -10,6 +10,11 @@
   min-height: calc(100vh - 80px - var(--footer-h));
   gap: 24px;
   padding: 32px 24px;
+  transition: min-height 0.55s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+body.welcome-idle-cinema #setup-panel {
+  min-height: calc(100vh - var(--footer-h));
 }
 .setup-card {
   background: var(--card);
@@ -123,6 +128,17 @@
   color: var(--text);
   white-space: pre-wrap;
   word-break: break-all;
+  opacity: 1;
+  transition: opacity 3s ease-in-out;
+}
+
+body.welcome-idle-dim .recent-path-popover {
+  opacity: 0.05;
+}
+
+body.welcome-idle-cinema .recent-path-popover {
+  opacity: 0;
+  transition: opacity 0.75s ease-in-out;
 }
 .recent-path-popover-label {
   font-family: 'DM Sans', sans-serif;

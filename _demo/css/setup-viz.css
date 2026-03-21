@@ -23,7 +23,13 @@
   transition: opacity 0.5s ease-out;
 }
 
-#setup-panel .setup-card.setup-idle-dimmed {
-  opacity: 0.1;
+body.welcome-idle-dim #setup-panel .setup-card {
+  opacity: 0.05;
   transition: opacity 3s ease-in-out;
+}
+
+body.welcome-idle-cinema #setup-panel .setup-card {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.75s ease-in-out;
 }

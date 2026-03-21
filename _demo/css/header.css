@@ -12,6 +12,23 @@
   border-bottom: 2px solid var(--accent);
   box-shadow: var(--shadow);
   background: linear-gradient(135deg, var(--bg2) 0%, var(--bg3) 100%);
+  max-height: 200px;
+  transition:
+    max-height 0.55s cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 0.55s ease,
+    padding 0.55s ease,
+    border-bottom-width 0.55s ease,
+    box-shadow 0.55s ease;
+}
+
+body.welcome-idle-cinema .app-header {
+  max-height: 0;
+  opacity: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  border-bottom-width: 0;
+  box-shadow: none;
+  pointer-events: none;
 }
 
 .app-header-viz {

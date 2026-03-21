@@ -120,6 +120,90 @@ async function buildPreviewBuffer(fmt, songIdx) {
   return rendered;
 }
 
+function sanitizeFileName(name) {
+  return String(name || '')
+    .replace(/[<>:"/\\|?*\x00-\x1F]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function getCompositionDownloadName(fmt, songIdx) {
+  const song = STATE.songs[fmt][songIdx];
+  const ps = STATE.players[`${fmt}_${songIdx}`];
+  if (!song || !ps) return 'composition';
+
+  const partsText = ps.sequence
+    .map(item => {
+      if (item.partIndex === -1) return 'Full';
+      const p = song.parts[item.partIndex];
+      return p ? String(p.num) : null;
+    })
+    .filter(Boolean)
+    .join(', ');
+
+  const raw = partsText ? `${song.name} ${partsText}` : song.name;
+  return sanitizeFileName(raw) || 'composition';
+}
+
+function audioBufferToWavBlob(audioBuffer) {
+  const numChannels = audioBuffer.numberOfChannels;
+  const sampleRate = audioBuffer.sampleRate;
+  const numFrames = audioBuffer.length;
+  const bytesPerSample = 2;
+  const dataSize = numFrames * numChannels * bytesPerSample;
+  const wavBuffer = new ArrayBuffer(44 + dataSize);
+  const view = new DataView(wavBuffer);
+
+  function writeStr(offset, str) {
+    for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+  }
+
+  writeStr(0, 'RIFF');
+  view.setUint32(4, 36 + dataSize, true);
+  writeStr(8, 'WAVE');
+  writeStr(12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, numChannels, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * numChannels * bytesPerSample, true);
+  view.setUint16(32, numChannels * bytesPerSample, true);
+  view.setUint16(34, 16, true);
+  writeStr(36, 'data');
+  view.setUint32(40, dataSize, true);
+
+  let offset = 44;
+  for (let i = 0; i < numFrames; i++) {
+    for (let ch = 0; ch < numChannels; ch++) {
+      const sample = Math.max(-1, Math.min(1, audioBuffer.getChannelData(ch)[i]));
+      const int16 = sample < 0 ? sample * 0x8000 : sample * 0x7FFF;
+      view.setInt16(offset, int16, true);
+      offset += 2;
+    }
+  }
+
+  return new Blob([wavBuffer], { type: 'audio/wav' });
+}
+
+async function downloadCompositionPreview(fmt, songIdx) {
+  const ps = ensurePlayerState(fmt, songIdx);
+  await preloadSong(fmt, songIdx);
+
+  const preview = await buildPreviewBuffer(fmt, songIdx);
+  if (!preview) return;
+
+  const blob = audioBufferToWavBlob(preview);
+  const fileName = `${getCompositionDownloadName(fmt, songIdx)}.wav`;
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 500);
+}
+
 function startPreviewPlayback(fmt, songIdx, offsetSecs) {
   const key = `${fmt}_${songIdx}`;
   const ps = STATE.players[key];

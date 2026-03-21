@@ -137,6 +137,8 @@ function buildSongRow(fmt, songIdx, nr) {
   colAction.className = 'col-action';
   colAction.id = `action-${key}`;
   colAction.appendChild(makePlayButton(fmt, songIdx));
+  const dlBtn = makeDownloadButton(fmt, songIdx);
+  if (dlBtn) colAction.appendChild(dlBtn);
   main.appendChild(colAction);
 
   row.appendChild(main);
@@ -157,6 +159,18 @@ function makePlayButton(fmt, songIdx) {
   btn.title = 'Play';
   btn.innerHTML = '&#9654;';
   btn.addEventListener('click', () => startPlaying(fmt, songIdx));
+  return btn;
+}
+
+function makeDownloadButton(fmt, songIdx) {
+  const song = STATE.songs[fmt][songIdx];
+  if (!song || !song.mainHandle) return null;
+
+  const btn = document.createElement('button');
+  btn.className = 't-btn';
+  btn.title = 'Download stitched composition';
+  btn.innerHTML = '&#128229;';
+  btn.addEventListener('click', () => downloadCompositionPreview(fmt, songIdx));
   return btn;
 }
 
@@ -206,6 +220,8 @@ function updateActionButtons(fmt, songIdx, state) {
     colAct.appendChild(stopBtn);
   } else {
     colAct.appendChild(makePlayButton(fmt, songIdx));
+    const dlBtn = makeDownloadButton(fmt, songIdx);
+    if (dlBtn) colAct.appendChild(dlBtn);
   }
 }
 

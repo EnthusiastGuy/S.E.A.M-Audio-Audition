@@ -702,6 +702,7 @@ async function discoverSongs(rootHandle) {
       allLoaders.push(
         getFileDuration(song.mainHandle).then(d => {
           song.duration = d;
+          song._mainFileDur = d;
         })
       );
     } else if (song.parts.length > 0) {
@@ -743,6 +744,11 @@ async function discoverSongs(rootHandle) {
   buildUI(saved);
   initKnob();
   initCrossfade();
+
+  STATE.order[fmt].forEach(songIdx => {
+    ensurePlayerState(fmt, songIdx);
+    syncSongCompositeDuration(fmt, songIdx);
+  });
 
   // Restore open part sheets
   if (saved && saved.openSheets) {

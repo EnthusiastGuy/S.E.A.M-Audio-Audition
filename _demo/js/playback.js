@@ -78,6 +78,34 @@ function getSequenceTotalDuration(ps) {
   return ps.sequence.reduce((sum, item) => sum + (ps.partDurations[item.partIndex] || 0), 0);
 }
 
+/** Playlist / totals duration: sum of current timeline, using decoded lengths when available else file metadata. */
+function syncSongCompositeDuration(fmt, songIdx) {
+  const key = `${fmt}_${songIdx}`;
+  const ps = STATE.players[key];
+  const song = STATE.songs[fmt]?.[songIdx];
+  if (!ps || !song) return;
+
+  let total = 0;
+  for (const item of ps.sequence) {
+    const pi = item.partIndex;
+    let d = ps.partDurations[pi];
+    if (isFinite(d) && d > 0) {
+      total += d;
+      continue;
+    }
+    if (pi === -1) d = song._mainFileDur ?? song.duration ?? 0;
+    else d = song.parts[pi]?._dur || 0;
+    if (isFinite(d) && d > 0) total += d;
+  }
+
+  if (total <= 0) return;
+
+  song.duration = total;
+  const el = document.getElementById(`dur-${key}`);
+  if (el) el.innerHTML = fmtTimeHTML(total);
+  updateTotals(fmt);
+}
+
 function showPreviewTooLongMessage(totalSecs) {
   const durationText = fmtTime(totalSecs);
   alert(
@@ -515,6 +543,7 @@ async function preloadSong(fmt, songIdx) {
   song.parts.forEach((p,i) => indices.push(i));
 
   await Promise.all(indices.map(i => loadPartBuffer(fmt, songIdx, i)));
+  syncSongCompositeDuration(fmt, songIdx);
 }
 
 // ─── PLAYBACK ────────────────────────────────────────────────

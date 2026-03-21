@@ -74,6 +74,8 @@ function renderSeekBar(fmt, songIdx) {
 
   // Drag-over on bricks row (for part list → timeline drops)
   setupBricksDropZone(fmt, songIdx);
+
+  syncSongCompositeDuration(fmt, songIdx);
 }
 
 function renderBricks(fmt, songIdx, totalDur) {
@@ -341,6 +343,7 @@ function reRenderSeek(fmt, songIdx) {
   renderBricks(fmt, songIdx, totalDur);
   renderLoopButtons(fmt, songIdx, totalDur);
   setupBricksDropZone(fmt, songIdx);
+  syncSongCompositeDuration(fmt, songIdx);
 }
 
 // ─── LOOP DROPDOWN ───────────────────────────────────────────

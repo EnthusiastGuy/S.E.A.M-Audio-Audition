@@ -27,6 +27,23 @@
 }
 .app-logo span { color: var(--text2); font-size: 12px; letter-spacing: 2px; display: block; margin-top: 2px; }
 .header-actions { display: flex; gap: 8px; align-items: center; }
+.folder-switcher {
+  background: var(--card2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 5px 28px 5px 10px;
+  border-radius: var(--radius-sm);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 12px;
+  line-height: 1.2;
+  min-width: 220px;
+  cursor: pointer;
+}
+.folder-switcher:hover { border-color: var(--accent3); }
+.folder-switcher:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
 
 /* ---- BUTTONS ---- */
 .btn {

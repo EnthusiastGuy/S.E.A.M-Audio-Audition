@@ -4,7 +4,7 @@
 
 // ─── FOLDER SELECT ───────────────────────────────────────────
 document.getElementById('btn-select').addEventListener('click', selectFolder);
-document.getElementById('btn-reselect').addEventListener('click', selectFolder);
+document.getElementById('folder-switcher').addEventListener('change', onFolderSwitcherChange);
 
 const RECENT_PROJECTS_MAX = 10;
 const RECENT_DB_NAME = 'seam_recent_projects_db';
@@ -75,6 +75,7 @@ async function addRecentProject(handle) {
 
 function initRecentProjectsUI() {
   renderRecentProjects();
+  renderFolderSwitcher();
 }
 
 function renderRecentProjects() {
@@ -101,6 +102,47 @@ function renderRecentProjects() {
   }
 }
 
+function renderFolderSwitcher() {
+  const switcher = document.getElementById('folder-switcher');
+  if (!switcher) return;
+
+  const items = loadRecentProjectMeta().slice(0, RECENT_PROJECTS_MAX);
+  switcher.innerHTML = '';
+
+  const labelOpt = document.createElement('option');
+  labelOpt.value = '';
+  labelOpt.textContent = 'Change Folder';
+  switcher.appendChild(labelOpt);
+
+  for (const item of items) {
+    const opt = document.createElement('option');
+    opt.value = `recent:${item.id}`;
+    opt.textContent = item.name;
+    switcher.appendChild(opt);
+  }
+
+  const browseOpt = document.createElement('option');
+  browseOpt.value = 'browse';
+  browseOpt.textContent = 'Browse…';
+  switcher.appendChild(browseOpt);
+
+  switcher.value = '';
+}
+
+async function onFolderSwitcherChange(e) {
+  const value = e.target.value;
+  e.target.value = '';
+  if (!value) return;
+  if (value === 'browse') {
+    await selectFolder();
+    return;
+  }
+  if (value.startsWith('recent:')) {
+    const projectId = value.slice('recent:'.length);
+    await openRecentProject(projectId);
+  }
+}
+
 async function openRecentProject(projectId) {
   const statusEl = document.getElementById('select-status');
   try {
@@ -123,6 +165,7 @@ async function openRecentProject(projectId) {
     STATE.rootDir = handle;
     await addRecentProject(handle);
     renderRecentProjects();
+    renderFolderSwitcher();
     statusEl.textContent = `Loading: ${handle.name} …`;
     await discoverSongs(handle);
   } catch (e) {
@@ -136,6 +179,7 @@ async function selectFolder() {
     STATE.rootDir   = dirHandle;
     await addRecentProject(dirHandle);
     renderRecentProjects();
+    renderFolderSwitcher();
     document.getElementById('select-status').textContent = `Loading: ${dirHandle.name} …`;
     await discoverSongs(dirHandle);
   } catch(e) {
@@ -208,7 +252,7 @@ async function discoverSongs(rootHandle) {
   // Switch to main app
   document.getElementById('setup-panel').style.display = 'none';
   document.getElementById('main-app').style.display    = 'flex';
-  document.getElementById('btn-reselect').style.display = '';
+  document.getElementById('folder-switcher').style.display = '';
 
   buildUI(saved);
   initKnob();

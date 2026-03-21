@@ -137,8 +137,8 @@ function buildSongRow(fmt, songIdx, nr) {
   colAction.className = 'col-action';
   colAction.id = `action-${key}`;
   colAction.appendChild(makePlayButton(fmt, songIdx));
-  const dlBtn = makeDownloadButton(fmt, songIdx);
-  if (dlBtn) colAction.appendChild(dlBtn);
+  const dlCtl = makeDownloadControl(fmt, songIdx);
+  if (dlCtl) colAction.appendChild(dlCtl);
   main.appendChild(colAction);
 
   row.appendChild(main);
@@ -153,25 +153,86 @@ function buildSongRow(fmt, songIdx, nr) {
 }
 
 function makePlayButton(fmt, songIdx) {
-  const key = `${fmt}_${songIdx}`;
   const btn = document.createElement('button');
   btn.className = 't-btn play';
   btn.title = 'Play';
   btn.innerHTML = '&#9654;';
-  btn.addEventListener('click', () => startPlaying(fmt, songIdx));
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    startPlaying(fmt, songIdx);
+  });
   return btn;
 }
 
-function makeDownloadButton(fmt, songIdx) {
-  const song = STATE.songs[fmt][songIdx];
-  if (!song || !song.mainHandle) return null;
+let activeDownloadDropdown = null;
 
-  const btn = document.createElement('button');
-  btn.className = 't-btn';
-  btn.title = 'Download stitched composition';
-  btn.innerHTML = '&#128229;';
-  btn.addEventListener('click', () => downloadCompositionPreview(fmt, songIdx));
-  return btn;
+function closeActiveDownloadDropdown() {
+  if (!activeDownloadDropdown) return;
+  activeDownloadDropdown.classList.add('hidden');
+  activeDownloadDropdown = null;
+}
+
+function makeDownloadControl(fmt, songIdx) {
+  const song = STATE.songs[fmt][songIdx];
+  const key = `${fmt}_${songIdx}`;
+  const ps = ensurePlayerState(fmt, songIdx);
+  if (!song || !song.mainHandle || !ps) return null;
+
+  const wrap = document.createElement('div');
+  wrap.className = 'download-split';
+
+  const mainBtn = document.createElement('button');
+  mainBtn.className = 't-btn dl-main';
+  mainBtn.title = 'Download stitched composition';
+  const fmtLabel = (ps.downloadFormat || 'wav').toUpperCase();
+  mainBtn.innerHTML = `&#128229; <span class="dl-fmt">${fmtLabel}</span>`;
+  mainBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    downloadCompositionPreview(fmt, songIdx, ps.downloadFormat || 'wav');
+  });
+  wrap.appendChild(mainBtn);
+
+  const arrowBtn = document.createElement('button');
+  arrowBtn.className = 't-btn dl-arrow';
+  arrowBtn.title = 'Select download format';
+  arrowBtn.innerHTML = '&#9662;';
+  wrap.appendChild(arrowBtn);
+
+  const dd = document.createElement('div');
+  dd.className = 'download-format-dropdown hidden';
+  ['wav', 'mp3', 'ogg'].forEach((fmtOpt) => {
+    const opt = document.createElement('button');
+    opt.className = 'download-format-option';
+    opt.textContent = fmtOpt.toUpperCase();
+    if ((ps.downloadFormat || 'wav') === fmtOpt) opt.classList.add('selected');
+    opt.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      ps.downloadFormat = fmtOpt;
+      const lbl = mainBtn.querySelector('.dl-fmt');
+      if (lbl) lbl.textContent = fmtOpt.toUpperCase();
+      dd.querySelectorAll('.download-format-option').forEach(o => o.classList.remove('selected'));
+      opt.classList.add('selected');
+      saveSession();
+      closeActiveDownloadDropdown();
+    });
+    dd.appendChild(opt);
+  });
+  wrap.appendChild(dd);
+
+  arrowBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const willOpen = dd.classList.contains('hidden');
+    closeActiveDownloadDropdown();
+    if (willOpen) {
+      dd.classList.remove('hidden');
+      activeDownloadDropdown = dd;
+      setTimeout(() => {
+        document.addEventListener('click', closeActiveDownloadDropdown, { once: true });
+      }, 0);
+    }
+  });
+
+  return wrap;
 }
 
 // ─── ACTION BUTTONS UPDATE ───────────────────────────────────
@@ -189,13 +250,19 @@ function updateActionButtons(fmt, songIdx, state) {
     pauseBtn.className = 't-btn pause';
     pauseBtn.title = 'Pause';
     pauseBtn.innerHTML = '&#9646;&#9646;';
-    pauseBtn.addEventListener('click', () => pausePlaying(fmt, songIdx));
+    pauseBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      pausePlaying(fmt, songIdx);
+    });
 
     const stopBtn = document.createElement('button');
     stopBtn.className = 't-btn stop';
     stopBtn.title = 'Stop';
     stopBtn.innerHTML = '&#9632;';
-    stopBtn.addEventListener('click', () => stopPlaying(fmt, songIdx));
+    stopBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      stopPlaying(fmt, songIdx);
+    });
 
     const dot = document.createElement('span');
     dot.className = 'status-dot';
@@ -203,25 +270,35 @@ function updateActionButtons(fmt, songIdx, state) {
     colAct.appendChild(pauseBtn);
     colAct.appendChild(stopBtn);
     colAct.appendChild(dot);
+    const dlCtl = makeDownloadControl(fmt, songIdx);
+    if (dlCtl) colAct.appendChild(dlCtl);
   } else if (state === 'paused') {
     const playBtn = document.createElement('button');
     playBtn.className = 't-btn play';
     playBtn.title = 'Resume';
     playBtn.innerHTML = '&#9654;';
-    playBtn.addEventListener('click', () => resumePlaying(fmt, songIdx));
+    playBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      resumePlaying(fmt, songIdx);
+    });
 
     const stopBtn = document.createElement('button');
     stopBtn.className = 't-btn stop';
     stopBtn.title = 'Stop';
     stopBtn.innerHTML = '&#9632;';
-    stopBtn.addEventListener('click', () => stopPlaying(fmt, songIdx));
+    stopBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      stopPlaying(fmt, songIdx);
+    });
 
     colAct.appendChild(playBtn);
     colAct.appendChild(stopBtn);
+    const dlCtl = makeDownloadControl(fmt, songIdx);
+    if (dlCtl) colAct.appendChild(dlCtl);
   } else {
     colAct.appendChild(makePlayButton(fmt, songIdx));
-    const dlBtn = makeDownloadButton(fmt, songIdx);
-    if (dlBtn) colAct.appendChild(dlBtn);
+    const dlCtl = makeDownloadControl(fmt, songIdx);
+    if (dlCtl) colAct.appendChild(dlCtl);
   }
 }
 

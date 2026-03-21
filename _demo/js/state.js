@@ -56,12 +56,14 @@ function saveSession() {
       order: STATE.order,
       loopSettings: {},
       sequences: {},
+      downloadFormats: {},
       currentFormat: STATE.currentFormat,
       openSheets: Array.from(openPartSheets),
     };
     for (const [key, ps] of Object.entries(STATE.players)) {
       data.loopSettings[key] = ps.loopSettings;
       data.sequences[key] = ps.sequence.map(b => b.partIndex);
+      data.downloadFormats[key] = ps.downloadFormat || 'wav';
     }
     localStorage.setItem(getSessionKey(), JSON.stringify(data));
   } catch(e) {}

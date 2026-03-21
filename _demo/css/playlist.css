@@ -13,7 +13,7 @@
 }
 .playlist-header {
   display: grid;
-  grid-template-columns: 42px 1fr 110px 60px 130px;
+  grid-template-columns: 42px 1fr 110px 60px 220px;
   padding: 10px 14px;
   background: var(--bg3);
   font-family: 'Space Mono', monospace;
@@ -41,7 +41,7 @@
 
 .song-row-main {
   display: grid;
-  grid-template-columns: 42px 1fr 110px 60px 130px;
+  grid-template-columns: 42px 1fr 110px 60px 220px;
   padding: 10px 14px;
   align-items: center;
   gap: 8px;
@@ -90,4 +90,69 @@
   gap: 6px;
   align-items: center;
   justify-content: flex-end;
+  position: relative;
+}
+
+.download-split {
+  display: inline-flex;
+  align-items: center;
+  position: relative;
+  gap: 0;
+}
+
+.t-btn.dl-main {
+  width: auto;
+  min-width: 66px;
+  padding: 0 8px;
+  gap: 4px;
+}
+
+.t-btn.dl-arrow {
+  width: 24px;
+  margin-left: 2px;
+  font-size: 10px;
+}
+
+.dl-fmt {
+  font-family: 'Space Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.4px;
+}
+
+.download-format-dropdown {
+  position: absolute;
+  top: 34px;
+  right: 0;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow);
+  z-index: 520;
+  min-width: 82px;
+  overflow: hidden;
+}
+
+.download-format-dropdown.hidden { display: none; }
+
+.download-format-option {
+  display: block;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--text2);
+  padding: 7px 10px;
+  text-align: left;
+  cursor: pointer;
+  font-size: 11px;
+  font-family: 'DM Sans', sans-serif;
+}
+
+.download-format-option:hover {
+  background: var(--card2);
+  color: var(--text);
+}
+
+.download-format-option.selected {
+  color: var(--accent3);
+  background: rgba(78,205,196,0.08);
 }

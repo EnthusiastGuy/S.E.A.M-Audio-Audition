@@ -29,6 +29,7 @@ function ensurePlayerState(fmt, songIdx) {
       previewSignature: '',
       previewNeedsRebuild: true,
       usingPreviewBuffer: false,
+      downloadFormat: 'wav',
     };
     STATE.players[key].gainNode.connect(masterGain);
 
@@ -46,6 +47,9 @@ function ensurePlayerState(fmt, songIdx) {
       }
       if (ss.loopSettings && ss.loopSettings[key]) {
         STATE.players[key].loopSettings = ss.loopSettings[key];
+      }
+      if (ss.downloadFormats && ss.downloadFormats[key]) {
+        STATE.players[key].downloadFormat = ss.downloadFormats[key];
       }
     }
   }
@@ -185,15 +189,116 @@ function audioBufferToWavBlob(audioBuffer) {
   return new Blob([wavBuffer], { type: 'audio/wav' });
 }
 
-async function downloadCompositionPreview(fmt, songIdx) {
+function floatTo16BitPCM(float32) {
+  const out = new Int16Array(float32.length);
+  for (let i = 0; i < float32.length; i++) {
+    const s = Math.max(-1, Math.min(1, float32[i]));
+    out[i] = s < 0 ? (s * 0x8000) : (s * 0x7FFF);
+  }
+  return out;
+}
+
+let _lameJsPromise = null;
+async function loadLameJs() {
+  if (!_lameJsPromise) {
+    _lameJsPromise = import('https://esm.sh/lamejs@1.2.1');
+  }
+  const mod = await _lameJsPromise;
+  return mod.default || mod;
+}
+
+let _vorbisPromise = null;
+async function loadVorbisEncoder() {
+  if (!_vorbisPromise) {
+    _vorbisPromise = import('https://esm.sh/vorbis-encoder-js@1.0.2');
+  }
+  return _vorbisPromise;
+}
+
+async function audioBufferToMp3Blob(audioBuffer) {
+  try {
+    const lame = await loadLameJs();
+    const Mp3Encoder = lame.Mp3Encoder || lame.default?.Mp3Encoder;
+    if (!Mp3Encoder) throw new Error('Mp3Encoder unavailable');
+
+    const channels = Math.min(2, audioBuffer.numberOfChannels || 1);
+    const sampleRate = audioBuffer.sampleRate;
+    const kbps = 192;
+    const encoder = new Mp3Encoder(channels, sampleRate, kbps);
+    const left = floatTo16BitPCM(audioBuffer.getChannelData(0));
+    const right = channels > 1
+      ? floatTo16BitPCM(audioBuffer.getChannelData(1))
+      : null;
+
+    const blockSize = 1152;
+    const mp3Chunks = [];
+    for (let i = 0; i < left.length; i += blockSize) {
+      const l = left.subarray(i, i + blockSize);
+      const out = channels > 1
+        ? encoder.encodeBuffer(l, right.subarray(i, i + blockSize))
+        : encoder.encodeBuffer(l);
+      if (out && out.length > 0) mp3Chunks.push(new Uint8Array(out));
+    }
+
+    const flush = encoder.flush();
+    if (flush && flush.length > 0) mp3Chunks.push(new Uint8Array(flush));
+    if (mp3Chunks.length === 0) return null;
+    return new Blob(mp3Chunks, { type: 'audio/mpeg' });
+  } catch (e) {
+    console.error('MP3 export failed', e);
+    alert('MP3 export failed in this browser. Please try WAV or OGG.');
+    return null;
+  }
+}
+
+async function audioBufferToOggBlob(audioBuffer) {
+  try {
+    const mod = await loadVorbisEncoder();
+    const Encoder =
+      mod.encoder ||
+      mod.default?.encoder ||
+      mod.default;
+    if (!Encoder) throw new Error('Vorbis encoder unavailable');
+
+    const channels = Math.min(2, audioBuffer.numberOfChannels || 1);
+    const encoder = new Encoder(audioBuffer.sampleRate, channels, 0.5, {});
+    const channelData = [];
+    for (let c = 0; c < channels; c++) {
+      channelData.push(audioBuffer.getChannelData(c));
+    }
+
+    const frame = 4096;
+    for (let i = 0; i < audioBuffer.length; i += frame) {
+      const block = [];
+      for (let c = 0; c < channels; c++) {
+        block.push(channelData[c].slice(i, i + frame));
+      }
+      encoder.encode(block);
+    }
+    return encoder.finish('audio/ogg');
+  } catch (e) {
+    console.error('OGG export failed', e);
+    alert('OGG export failed in this browser. Please try WAV or MP3.');
+    return null;
+  }
+}
+
+async function downloadCompositionPreview(fmt, songIdx, requestedFormat) {
   const ps = ensurePlayerState(fmt, songIdx);
   await preloadSong(fmt, songIdx);
 
   const preview = await buildPreviewBuffer(fmt, songIdx);
   if (!preview) return;
 
-  const blob = audioBufferToWavBlob(preview);
-  const fileName = `${getCompositionDownloadName(fmt, songIdx)}.wav`;
+  const format = (requestedFormat || ps.downloadFormat || 'wav').toLowerCase();
+  const blob =
+    format === 'wav' ? audioBufferToWavBlob(preview) :
+    format === 'mp3' ? await audioBufferToMp3Blob(preview) :
+    format === 'ogg' ? await audioBufferToOggBlob(preview) :
+    null;
+  if (!blob) return;
+
+  const fileName = `${getCompositionDownloadName(fmt, songIdx)}.${format}`;
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;

@@ -24,6 +24,8 @@ function ensurePlayerState(fmt, songIdx) {
       loopPlayCount: 0,
       rafId: null,
       crossfadeScheduled: false,
+      /** True once the next playlist track was started early for crossfade; suppresses duplicate startPlaying when this track ends. */
+      crossfadeHandoffToNext: false,
       locked: false,
       previewBuffer: null,
       previewSignature: '',
@@ -535,6 +537,7 @@ async function startPlaying(fmt, songIdx) {
   ps.paused          = false;
   ps.pausedAt        = 0;
   ps.crossfadeScheduled = false;
+  ps.crossfadeHandoffToNext = false;
   ps.usingPreviewBuffer = false;
 
   ps.gainNode.gain.cancelScheduledValues(AC.currentTime);
@@ -695,6 +698,12 @@ function onSongEnded(fmt, songIdx) {
   const curPos = order.indexOf(songIdx);
   const nextPos = (curPos + 1) % order.length;
   const nextIdx = order[nextPos];
+
+  const handedOff = ps.crossfadeHandoffToNext;
+  ps.crossfadeHandoffToNext = false;
+  if (handedOff) {
+    return;
+  }
 
   setTimeout(() => startPlaying(fmt, nextIdx), Math.max(0, STATE.crossfade));
 }
@@ -915,13 +924,18 @@ function triggerCrossfade(fmt, songIdx) {
   const nextPs = ensurePlayerState(fmt, nextIdx);
   nextPs.gainNode.gain.setValueAtTime(0, AC.currentTime);
 
-  preloadSong(fmt, nextIdx).then(() => {
+  preloadSong(fmt, nextIdx).then(async () => {
     nextPs.gainNode.gain.setValueAtTime(0.001, AC.currentTime);
-    startPlaying(fmt, nextIdx);
+    await startPlaying(fmt, nextIdx);
+
+    const curPs = STATE.players[`${fmt}_${songIdx}`];
+    const nps = STATE.players[`${fmt}_${nextIdx}`];
+    if (curPs && nps && !nps.paused && (nps.node || nps.usingPreviewBuffer)) {
+      curPs.crossfadeHandoffToNext = true;
+    }
 
     nextPs.gainNode.gain.exponentialRampToValueAtTime(1, AC.currentTime + fadeMs / 1000);
 
-    const curPs = STATE.players[`${fmt}_${songIdx}`];
     if (curPs && curPs.gainNode) {
       curPs.gainNode.gain.setValueAtTime(1, AC.currentTime);
       curPs.gainNode.gain.exponentialRampToValueAtTime(0.001, AC.currentTime + fadeMs / 1000);

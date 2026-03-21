@@ -401,17 +401,16 @@ function pickFolderViaWebkitDirectoryInput() {
 
     let done = false;
     let armFocusTimer = null;
-    function onWinFocus() {
-      setTimeout(() => {
-        window.removeEventListener('focus', onWinFocus);
-        if (done) return;
-        fail(Object.assign(new Error('Aborted'), { name: 'AbortError' }));
-      }, 200);
-    }
+    let pollTimer = null;
+
     const finish = () => {
       if (armFocusTimer !== null) {
         clearTimeout(armFocusTimer);
         armFocusTimer = null;
+      }
+      if (pollTimer !== null) {
+        clearTimeout(pollTimer);
+        pollTimer = null;
       }
       window.removeEventListener('focus', onWinFocus);
       if (input.parentNode) input.remove();
@@ -431,12 +430,10 @@ function pickFolderViaWebkitDirectoryInput() {
       resolve(files);
     };
 
-    input.addEventListener('change', () => {
+    function tryConsumeFiles() {
+      if (done) return true;
       const files = Array.from(input.files || []);
-      if (!files.length) {
-        fail(Object.assign(new Error('Aborted'), { name: 'AbortError' }));
-        return;
-      }
+      if (!files.length) return false;
       const rel0 = files[0].webkitRelativePath;
       if (typeof rel0 !== 'string' || !rel0.length) {
         fail(
@@ -444,14 +441,36 @@ function pickFolderViaWebkitDirectoryInput() {
             'Folder selection is not supported in this browser. Try Chrome or Edge, or open this page via http://localhost.'
           )
         );
-        return;
+        return true;
       }
       ok(files);
+      return true;
+    }
+
+    input.addEventListener('change', () => {
+      tryConsumeFiles();
     });
 
     input.addEventListener('cancel', () => {
       fail(Object.assign(new Error('Aborted'), { name: 'AbortError' }));
     });
+
+    function onWinFocus() {
+      window.removeEventListener('focus', onWinFocus);
+      let attempts = 0;
+      const maxAttempts = 80;
+      const poll = () => {
+        if (done) return;
+        if (tryConsumeFiles()) return;
+        attempts++;
+        if (attempts >= maxAttempts) {
+          fail(Object.assign(new Error('Aborted'), { name: 'AbortError' }));
+          return;
+        }
+        pollTimer = setTimeout(poll, 50);
+      };
+      setTimeout(poll, 0);
+    }
 
     document.body.appendChild(input);
     input.click();
@@ -465,6 +484,73 @@ function pickFolderViaWebkitDirectoryInput() {
 
 function newVirtualDirNode(displayName) {
   return { _name: displayName, _dirMap: new Map(), _fileMap: new Map(), _final: false };
+}
+
+/** Windows + webkitdirectory often uses WAV/Wav; app expects wav like Chrome's native picker (case-insensitive). */
+function findCaseInsensitiveDirKey(dirMap, name) {
+  const nl = name.toLowerCase();
+  for (const k of dirMap.keys()) {
+    if (k.toLowerCase() === nl) return k;
+  }
+  return null;
+}
+
+function getOrCreateVirtualSubdir(parent, seg) {
+  const existingKey = findCaseInsensitiveDirKey(parent._dirMap, seg);
+  if (existingKey !== null) return parent._dirMap.get(existingKey);
+  const child = newVirtualDirNode(seg);
+  parent._dirMap.set(seg, child);
+  return child;
+}
+
+function normalizeWebkitRelativeSegments(rel) {
+  const raw = (rel || '').replace(/\\/g, '/').split('/');
+  const out = [];
+  for (const p of raw) {
+    if (p === '' || p === '.') continue;
+    if (p === '..') {
+      out.pop();
+      continue;
+    }
+    out.push(p);
+  }
+  return out;
+}
+
+/** If the browser includes parents before wav/, keep from the format folder down (pack-relative). */
+function stripLeadingPathUntilWavSegment(segments) {
+  const idx = segments.findIndex(s => s.toLowerCase() === 'wav');
+  if (idx < 0) return segments;
+  return segments.slice(idx);
+}
+
+/** True when this level looks like wav/: song subfolders each containing .wav files (no nested wav/ name). */
+function virtualTreeLooksLikeWavFolder(raw) {
+  if (!raw || !raw._dirMap || raw._dirMap.size === 0) return false;
+  if (findCaseInsensitiveDirKey(raw._dirMap, 'wav') !== null) return false;
+  for (const dir of raw._dirMap.values()) {
+    if (!dir._fileMap || dir._fileMap.size === 0) continue;
+    const hasWav = [...dir._fileMap.keys()].some(f => f.toLowerCase().endsWith('.wav'));
+    if (hasWav) return true;
+  }
+  return false;
+}
+
+/**
+ * Brave/file:// sometimes prefixes an extra folder in webkitRelativePath, or the user picks an inner folder.
+ * Walk single-directory chains until we find a wav child or a layout that already is wav/ contents.
+ */
+function resolveVirtualPackRoot(rawRoot) {
+  let n = rawRoot;
+  const maxDepth = 32;
+  for (let depth = 0; depth < maxDepth; depth++) {
+    if (findCaseInsensitiveDirKey(n._dirMap, 'wav') !== null) return n;
+    if (virtualTreeLooksLikeWavFolder(n)) return n;
+    if (n._fileMap.size > 0) return rawRoot;
+    if (n._dirMap.size !== 1) return rawRoot;
+    n = n._dirMap.values().next().value;
+  }
+  return rawRoot;
 }
 
 function createVirtualFileHandle(name, file) {
@@ -484,14 +570,14 @@ function finalizeVirtualDirNode(node) {
   node.name = node._name;
 
   node.getDirectoryHandle = async function (name, opts = {}) {
-    const child = node._dirMap.get(name);
-    if (!child) {
+    const key = findCaseInsensitiveDirKey(node._dirMap, name);
+    if (key === null) {
       throw new DOMException(
         'A requested file or directory could not be found at the time an operation was processed.',
         'NotFoundError'
       );
     }
-    return finalizeVirtualDirNode(child);
+    return finalizeVirtualDirNode(node._dirMap.get(key));
   };
 
   node.entries = async function* () {
@@ -525,21 +611,22 @@ function folderLabelFromWebkitFiles(files) {
 function buildVirtualRootFromWebkitFiles(files, displayName) {
   const root = newVirtualDirNode(displayName);
   for (const file of files) {
-    let rel = (file.webkitRelativePath || file.name || '').replace(/\\/g, '/');
-    const segments = rel.split('/').filter(Boolean);
+    let segments = normalizeWebkitRelativeSegments(file.webkitRelativePath || file.name || '');
+    segments = stripLeadingPathUntilWavSegment(segments);
     if (segments.length < 2) continue;
 
     let node = root;
     for (let i = 0; i < segments.length - 1; i++) {
-      const seg = segments[i];
-      if (!node._dirMap.has(seg)) node._dirMap.set(seg, newVirtualDirNode(seg));
-      node = node._dirMap.get(seg);
+      node = getOrCreateVirtualSubdir(node, segments[i]);
     }
     const fname = segments[segments.length - 1];
     node._fileMap.set(fname, createVirtualFileHandle(fname, file));
   }
-  const sealed = finalizeVirtualDirNode(root);
+  const effective = resolveVirtualPackRoot(root);
+  const sealed = finalizeVirtualDirNode(effective);
   sealed.__seamWebkitFallback = true;
+  sealed.__seamVirtualRootIsWav =
+    findCaseInsensitiveDirKey(effective._dirMap, 'wav') === null && virtualTreeLooksLikeWavFolder(effective);
   return sealed;
 }
 
@@ -575,9 +662,11 @@ async function selectFolder() {
     statusEl.textContent = `Loading: ${rootHandle.name} …`;
     await discoverSongs(rootHandle);
   } catch (e) {
-    if (e.name !== 'AbortError') {
-      statusEl.textContent = 'Could not open folder: ' + e.message;
+    if (e.name === 'AbortError') {
+      statusEl.textContent = '';
+      return;
     }
+    statusEl.textContent = 'Could not open folder: ' + e.message;
   }
 }
 
@@ -587,10 +676,17 @@ async function discoverSongs(rootHandle) {
   let fmtHandle = null;
   try {
     fmtHandle = await rootHandle.getDirectoryHandle(fmt, { create: false });
-  } catch(e) {
+  } catch (e) {
+    if (rootHandle.__seamVirtualRootIsWav) {
+      fmtHandle = rootHandle;
+    }
+  }
+  if (!fmtHandle) {
     STATE.songs[fmt] = [];
     STATE.order[fmt] = [];
-    statusEl.textContent = 'Missing required wav/ directory.';
+    statusEl.textContent = rootHandle.__seamWebkitFallback
+      ? 'Missing required wav/ directory. Select the folder that contains wav (or select the wav folder if songs are directly inside it).'
+      : 'Missing required wav/ directory.';
     return;
   }
   statusEl.textContent = `Scanning ${fmt}/ …`;

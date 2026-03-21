@@ -49,7 +49,7 @@ async function scanFormat(formatHandle) {
     for await (const [fname, fileHandle] of dirHandle.entries()) {
       if (fileHandle.kind !== 'file') continue;
       const ext = fname.slice(fname.lastIndexOf('.')+1).toLowerCase();
-      if (!['mp3','ogg','wav'].includes(ext)) continue;
+      if (ext !== 'wav') continue;
 
       const parsed = parseFilename(fname);
       const entry  = ensureSong(songName);

@@ -12,10 +12,10 @@ masterGain.connect(AC.destination);
 // ─── State ───────────────────────────────────────────────────
 const STATE = {
   rootDir: null,
-  formats: ['mp3', 'ogg', 'wav'],
-  currentFormat: 'mp3',
-  songs: { mp3: [], ogg: [], wav: [] },
-  order: { mp3: [], ogg: [], wav: [] },
+  formats: ['wav'],
+  currentFormat: 'wav',
+  songs: { wav: [] },
+  order: { wav: [] },
   crossfade: 0,
   speedPercent: 100,
   players: {},

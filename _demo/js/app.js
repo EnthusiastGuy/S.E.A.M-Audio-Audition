@@ -191,43 +191,40 @@ async function selectFolder() {
 
 async function discoverSongs(rootHandle) {
   const statusEl = document.getElementById('select-status');
-
-  for (const fmt of STATE.formats) {
-    let fmtHandle = null;
-    try {
-      fmtHandle = await rootHandle.getDirectoryHandle(fmt, { create: false });
-    } catch(e) {
-      STATE.songs[fmt] = [];
-      continue;
-    }
-
-    statusEl.textContent = `Scanning ${fmt}/ …`;
-    const songs = await scanFormat(fmtHandle);
-    STATE.songs[fmt] = songs;
-    STATE.order[fmt] = songs.map((_,i) => i);
+  const fmt = 'wav';
+  let fmtHandle = null;
+  try {
+    fmtHandle = await rootHandle.getDirectoryHandle(fmt, { create: false });
+  } catch(e) {
+    STATE.songs[fmt] = [];
+    STATE.order[fmt] = [];
+    statusEl.textContent = 'Missing required wav/ directory.';
+    return;
   }
+  statusEl.textContent = `Scanning ${fmt}/ …`;
+  const songs = await scanFormat(fmtHandle);
+  STATE.songs[fmt] = songs;
+  STATE.order[fmt] = songs.map((_,i) => i);
 
   // Load durations
   statusEl.textContent = 'Loading durations …';
   const allLoaders = [];
-  for (const fmt of STATE.formats) {
-    for (const song of STATE.songs[fmt]) {
-      if (song.mainHandle) {
-        allLoaders.push(
-          getFileDuration(song.mainHandle).then(d => {
-            song.duration = d;
-          })
-        );
-      } else if (song.parts.length > 0) {
-        const pLoaders = song.parts.map(p =>
-          getFileDuration(p.handle).then(d => { p._dur = d; return d; })
-        );
-        allLoaders.push(
-          Promise.all(pLoaders).then(durs => {
-            song.duration = durs.reduce((a,b) => a+b, 0);
-          })
-        );
-      }
+  for (const song of STATE.songs.wav) {
+    if (song.mainHandle) {
+      allLoaders.push(
+        getFileDuration(song.mainHandle).then(d => {
+          song.duration = d;
+        })
+      );
+    } else if (song.parts.length > 0) {
+      const pLoaders = song.parts.map(p =>
+        getFileDuration(p.handle).then(d => { p._dur = d; return d; })
+      );
+      allLoaders.push(
+        Promise.all(pLoaders).then(durs => {
+          song.duration = durs.reduce((a,b) => a+b, 0);
+        })
+      );
     }
   }
   await Promise.all(allLoaders);
@@ -238,14 +235,12 @@ async function discoverSongs(rootHandle) {
   if (saved) {
     STATE.crossfade    = saved.crossfade    ?? 0;
     STATE.speedPercent = saved.speedPercent ?? 100;
-    STATE.currentFormat = saved.currentFormat ?? 'mp3';
+    STATE.currentFormat = 'wav';
 
-    for (const fmt of STATE.formats) {
-      if (saved.order && saved.order[fmt]) {
-        const validOrder = saved.order[fmt].filter(i => STATE.songs[fmt][i] !== undefined);
-        STATE.songs[fmt].forEach((_,i) => { if (!validOrder.includes(i)) validOrder.push(i); });
-        STATE.order[fmt] = validOrder;
-      }
+    if (saved.order && saved.order.wav) {
+      const validOrder = saved.order.wav.filter(i => STATE.songs.wav[i] !== undefined);
+      STATE.songs.wav.forEach((_,i) => { if (!validOrder.includes(i)) validOrder.push(i); });
+      STATE.order.wav = validOrder;
     }
   }
 

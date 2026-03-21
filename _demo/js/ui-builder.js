@@ -4,35 +4,10 @@
 
 // ─── BUILD UI ────────────────────────────────────────────────
 function buildUI(savedSession) {
-  const tabsNav  = document.getElementById('tabs-nav');
-  const tabsCont = document.getElementById('tabs-content');
-  tabsNav.innerHTML  = '';
-  tabsCont.innerHTML = '';
-
-  for (const fmt of STATE.formats) {
-    const btn = document.createElement('button');
-    btn.className = 'tab-btn' + (fmt === STATE.currentFormat ? ' active' : '');
-    btn.textContent = fmt.toUpperCase();
-    btn.dataset.fmt = fmt;
-    btn.addEventListener('click', () => switchTab(fmt));
-    tabsNav.appendChild(btn);
-
-    const div = document.createElement('div');
-    div.className = 'tab-content' + (fmt === STATE.currentFormat ? ' active' : '');
-    div.id = `tab-${fmt}`;
-    tabsCont.appendChild(div);
-
-    buildPlaylist(fmt, div);
-  }
-
+  const content = document.getElementById('tabs-content');
+  content.innerHTML = '';
+  buildPlaylist('wav', content);
   updateTotals();
-}
-
-function switchTab(fmt) {
-  STATE.currentFormat = fmt;
-  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.fmt === fmt));
-  document.querySelectorAll('.tab-content').forEach(c => c.classList.toggle('active', c.id === `tab-${fmt}`));
-  saveSession();
 }
 
 function buildPlaylist(fmt, container) {
@@ -304,7 +279,7 @@ function updateActionButtons(fmt, songIdx, state) {
 
 // ─── TOTALS ──────────────────────────────────────────────────
 function updateTotals(fmt) {
-  if (!fmt) { STATE.formats.forEach(f => updateTotals(f)); return; }
+  if (!fmt) fmt = 'wav';
   const el = document.getElementById(`totals-${fmt}`);
   if (!el) return;
 

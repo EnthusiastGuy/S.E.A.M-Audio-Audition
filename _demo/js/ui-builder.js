@@ -94,6 +94,12 @@ function buildSongRow(fmt, songIdx, nr) {
 
   const main = document.createElement('div');
   main.className = 'song-row-main';
+  main.title = 'Click to view/edit parts';
+  main.addEventListener('click', (e) => {
+    // Keep transport/action controls from toggling the parts panel.
+    if (e.target.closest('.col-action')) return;
+    togglePartSheet(fmt, songIdx);
+  });
 
   // Nr
   const colNr = document.createElement('div');
@@ -122,11 +128,7 @@ function buildSongRow(fmt, songIdx, nr) {
   const badge = document.createElement('span');
   badge.className = 'parts-badge';
   badge.textContent = song.parts.length;
-  badge.title = 'Click to view/edit parts';
-  badge.addEventListener('click', (e) => {
-    e.stopPropagation();
-    togglePartSheet(fmt, songIdx);
-  });
+  badge.title = 'Click row to view/edit parts';
   colParts.appendChild(badge);
   main.appendChild(colParts);
 

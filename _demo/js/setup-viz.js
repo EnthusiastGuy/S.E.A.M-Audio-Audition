@@ -16,6 +16,11 @@
   let idleDimTimer = null;
   let idleCinemaTimer = null;
 
+  /** Resize canvas only inside the draw loop so buffer clears never paint between frames. */
+  let pendingResize = false;
+  let lastSizedW = 0;
+  let lastSizedH = 0;
+
   function isPanelVisible() {
     return panel.style.display !== 'none' && panel.offsetParent !== null;
   }
@@ -560,6 +565,8 @@
     canvas.style.width = `${w}px`;
     canvas.style.height = `${h}px`;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    lastSizedW = w;
+    lastSizedH = h;
   }
 
   let lastNow = performance.now();
@@ -585,12 +592,13 @@
     const dt = Math.min(0.05, (now - lastNow) / 1000);
     lastNow = now;
     const t = (now - t0) * 0.001;
-    const w = panel.clientWidth;
-    const h = panel.clientHeight;
-    const sw = parseFloat(canvas.style.width);
-    const sh = parseFloat(canvas.style.height);
-    if (!Number.isFinite(sw) || !Number.isFinite(sh) || Math.abs(sw - w) > 1 || Math.abs(sh - h) > 1) {
+    let w = panel.clientWidth;
+    let h = panel.clientHeight;
+    if (pendingResize || w !== lastSizedW || h !== lastSizedH) {
+      pendingResize = false;
       resize();
+      w = panel.clientWidth;
+      h = panel.clientHeight;
     }
 
     const layerStates = WAVE_LAYERS.map(layer => ({
@@ -635,7 +643,9 @@
     nextBassAt = 0;
     bassEnergy = 0;
     particles = [];
-    resize();
+    pendingResize = true;
+    lastSizedW = 0;
+    lastSizedH = 0;
     rafId = requestAnimationFrame(frame);
   }
 
@@ -658,14 +668,14 @@
   window.addEventListener(
     'resize',
     () => {
-      if (running) resize();
+      if (running) pendingResize = true;
     },
     { passive: true }
   );
 
   if (typeof ResizeObserver !== 'undefined') {
     const ro = new ResizeObserver(() => {
-      if (running) resize();
+      if (running) pendingResize = true;
     });
     ro.observe(panel);
   }

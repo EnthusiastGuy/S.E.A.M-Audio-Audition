@@ -11,6 +11,7 @@
 <link rel="stylesheet" href="css/layout.css" />
 <link rel="stylesheet" href="css/header.css" />
 <link rel="stylesheet" href="css/setup.css" />
+<link rel="stylesheet" href="css/setup-viz.css" />
 <link rel="stylesheet" href="css/playlist.css" />
 <link rel="stylesheet" href="css/player.css" />
 <link rel="stylesheet" href="css/seekbar.css" />
@@ -37,6 +38,7 @@
 
 <!-- SETUP PANEL -->
 <div id="setup-panel">
+  <canvas class="setup-viz-canvas" id="setup-viz" width="800" height="600" aria-hidden="true"></canvas>
   <div class="setup-card">
     <div class="setup-icon">&#127925;</div>
     <h2>Select Sample Pack</h2>
@@ -335,6 +337,7 @@
 <script src="js/ui-builder.js"></script>
 <script src="js/knob.js"></script>
 <script src="js/controls.js"></script>
+<script src="js/setup-viz.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

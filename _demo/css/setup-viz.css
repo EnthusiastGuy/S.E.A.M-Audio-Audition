@@ -1,0 +1,29 @@
+/* =========================================================
+   Setup screen — full-bleed waveform ambience (canvas)
+   ========================================================= */
+
+#setup-panel {
+  position: relative;
+  overflow: hidden;
+}
+
+.setup-viz-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  pointer-events: none;
+}
+
+#setup-panel .setup-card {
+  position: relative;
+  z-index: 1;
+  opacity: 1;
+  transition: opacity 0.5s ease-out;
+}
+
+#setup-panel .setup-card.setup-idle-dimmed {
+  opacity: 0.1;
+  transition: opacity 3s ease-in-out;
+}

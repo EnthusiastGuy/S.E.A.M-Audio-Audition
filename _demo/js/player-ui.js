@@ -72,6 +72,17 @@ function makePartDownloadControl(fmt, songIdx, partIndex) {
   return wrap;
 }
 
+function formatPartRowDuration(ps, song, partIndex) {
+  const d = ps.partDurations[partIndex];
+  if (isFinite(d) && d > 0) return fmtTimeHTML(d);
+  if (partIndex >= 0) {
+    const pd = song.parts[partIndex]?._dur;
+    if (isFinite(pd) && pd > 0) return fmtTimeHTML(pd);
+  }
+  if (partIndex === -1 && song.duration > 0) return fmtTimeHTML(song.duration);
+  return '—';
+}
+
 // ─── SHOW / HIDE PLAYER AREA ─────────────────────────────────
 function showPlayerArea(fmt, songIdx) {
   const key  = `${fmt}_${songIdx}`;
@@ -118,15 +129,39 @@ function renderPlayerArea(fmt, songIdx) {
     item.dataset.partIndex = f.partIndex;
     item.draggable = true;
 
+    const colNr = document.createElement('div');
+    colNr.className = 'part-item-col-nr';
+    colNr.setAttribute('aria-hidden', 'true');
+    item.appendChild(colNr);
+
+    const nameCell = document.createElement('div');
+    nameCell.className = 'part-item-name';
+
     const dot = document.createElement('span');
     dot.className = 'part-color-dot';
     dot.style.background = f.isMain ? 'var(--text3)' : partColor(f.partIndex);
-    item.appendChild(dot);
+    nameCell.appendChild(dot);
 
     const lbl = document.createElement('span');
     lbl.className = 'part-label';
     lbl.textContent = f.label;
-    item.appendChild(lbl);
+    nameCell.appendChild(lbl);
+    item.appendChild(nameCell);
+
+    const durEl = document.createElement('span');
+    durEl.className = 'col-dur';
+    const durStr = formatPartRowDuration(ps, song, f.partIndex);
+    if (durStr === '—') durEl.textContent = durStr;
+    else durEl.innerHTML = durStr;
+    item.appendChild(durEl);
+
+    const colParts = document.createElement('div');
+    colParts.className = 'part-item-col-parts';
+    colParts.setAttribute('aria-hidden', 'true');
+    item.appendChild(colParts);
+
+    const actions = document.createElement('div');
+    actions.className = 'part-item-actions col-action';
 
     // Play part button
     const pBtn = document.createElement('button');
@@ -153,7 +188,7 @@ function renderPlayerArea(fmt, songIdx) {
         playPartDirectly(fmt, songIdx, f.partIndex, itemWrapper);
       }
     };
-    item.appendChild(pBtn);
+    actions.appendChild(pBtn);
 
     // Stop part button
     const sBtn = document.createElement('button');
@@ -169,10 +204,11 @@ function renderPlayerArea(fmt, songIdx) {
         resetDirectPartUI(ps, `${fmt}_${songIdx}`, f.partIndex, itemWrapper);
       }
     };
-    item.appendChild(sBtn);
+    actions.appendChild(sBtn);
 
     const dlCtl = makePartDownloadControl(fmt, songIdx, f.partIndex);
-    item.appendChild(dlCtl);
+    actions.appendChild(dlCtl);
+    item.appendChild(actions);
 
     itemWrapper.appendChild(item);
 

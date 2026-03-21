@@ -33,7 +33,7 @@ function renderSeekBar(fmt, songIdx) {
   const timeLabel = document.createElement('div');
   timeLabel.className = 'time-current-label';
   timeLabel.id = `time-label-${key}`;
-  timeLabel.textContent = '0:00';
+  timeLabel.innerHTML = fmtTimeHTML(0);
   timeDisp.appendChild(timeLabel);
   cont.appendChild(timeDisp);
 

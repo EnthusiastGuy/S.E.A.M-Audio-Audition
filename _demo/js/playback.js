@@ -780,7 +780,7 @@ function tickPlayer(fmt, songIdx) {
     if (fill)    fill.style.width = `${pct}%`;
     if (hnd)     hnd.style.left  = `${pct}%`;
     if (timeLbl) {
-      timeLbl.textContent = fmtTimeHundredths(posInPreview);
+      timeLbl.innerHTML = fmtTimeHTML(posInPreview);
       timeLbl.style.left  = `${pct}%`;
     }
     if (pctLbl)  pctLbl.textContent = `${pct.toFixed(1)}%`;
@@ -863,7 +863,7 @@ function tickPlayer(fmt, songIdx) {
   if (fill)    fill.style.width = `${pct}%`;
   if (hnd)     hnd.style.left  = `${pct}%`;
   if (timeLbl) {
-    timeLbl.textContent = fmtTimeHundredths(ps.totalPlayedTime + posInPart);
+    timeLbl.innerHTML = fmtTimeHTML(ps.totalPlayedTime + posInPart);
     timeLbl.style.left  = `${pct}%`;
   }
   if (pctLbl)  pctLbl.textContent = `${pct.toFixed(1)}%`;

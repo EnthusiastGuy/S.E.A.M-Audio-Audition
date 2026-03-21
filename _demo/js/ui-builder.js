@@ -94,7 +94,11 @@ function buildSongRow(fmt, songIdx, nr) {
   const colDur = document.createElement('div');
   colDur.className = 'col-dur';
   colDur.id = `dur-${key}`;
-  colDur.textContent = song.duration > 0 ? fmtTime(song.duration) : '—';
+  if (song.duration > 0) {
+    colDur.innerHTML = fmtTimeHTML(song.duration);
+  } else {
+    colDur.textContent = '—';
+  }
   main.appendChild(colDur);
 
   // Parts badge
@@ -295,6 +299,6 @@ function updateTotals(fmt) {
   });
 
   el.innerHTML = `<span>Songs: <span class="totals-val">${order.length}</span></span>` +
-    `<span>Total: <span class="totals-val">${fmtTime(totalDur)}</span></span>` +
+    `<span>Total: <span class="totals-val">${fmtTimeHTML(totalDur)}</span></span>` +
     `<span>Parts: <span class="totals-val">${totalParts}</span></span>`;
 }

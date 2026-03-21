@@ -47,23 +47,40 @@ const PART_COLORS = [
 ];
 function partColor(idx) { return PART_COLORS[idx % PART_COLORS.length]; }
 
-// ─── TIME FORMAT ─────────────────────────────────────────────
-function fmtTime(secs) {
-  if (!isFinite(secs) || secs < 0) return '0:00';
-  const h = Math.floor(secs / 3600);
-  const m = Math.floor((secs % 3600) / 60);
-  const s = Math.floor(secs % 60);
-  if (h > 0) return `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
-  return `${m}:${String(s).padStart(2,'0')}`;
+// ─── TIME FORMAT (mm:ss:xxx — milliseconds shown smaller via fmtTimeHTML) ──
+function splitTimeMs(secs) {
+  if (!isFinite(secs) || secs < 0) secs = 0;
+  const totalMs = Math.floor(secs * 1000 + 1e-6);
+  const ms = totalMs % 1000;
+  const totalSec = Math.floor(totalMs / 1000);
+  const s = totalSec % 60;
+  const mTotal = Math.floor(totalSec / 60);
+  const m = mTotal % 60;
+  const h = Math.floor(totalSec / 3600);
+  return { h, m, s, ms };
 }
 
-function fmtTimeHundredths(secs) {
-  if (!isFinite(secs) || secs < 0) return '00:00:00';
-  const totalHundredths = Math.floor(secs * 100);
-  const minutes = Math.floor(totalHundredths / 6000);
-  const seconds = Math.floor((totalHundredths % 6000) / 100);
-  const hundredths = totalHundredths % 100;
-  return `${String(minutes).padStart(2,'0')}:${String(seconds).padStart(2,'0')}:${String(hundredths).padStart(2,'0')}`;
+/** Plain text, all one size (e.g. alerts). */
+function fmtTime(secs) {
+  const { h, m, s, ms } = splitTimeMs(secs);
+  const msStr = String(ms).padStart(3, '0');
+  if (h > 0) {
+    return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}:${msStr}`;
+  }
+  return `${m}:${String(s).padStart(2, '0')}:${msStr}`;
+}
+
+/** HTML: mm:ss with :xxx milliseconds in a smaller span (class dur-ms). */
+function fmtTimeHTML(secs) {
+  const { h, m, s, ms } = splitTimeMs(secs);
+  const msStr = String(ms).padStart(3, '0');
+  let main;
+  if (h > 0) {
+    main = `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  } else {
+    main = `${m}:${String(s).padStart(2, '0')}`;
+  }
+  return `${main}<span class="dur-ms">:${msStr}</span>`;
 }
 
 // ─── SESSION PERSISTENCE (localStorage) ──────────────────────

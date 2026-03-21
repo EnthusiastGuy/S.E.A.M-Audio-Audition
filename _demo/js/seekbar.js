@@ -80,6 +80,7 @@ function renderBricks(fmt, songIdx, totalDur) {
   const ps       = STATE.players[key];
   const bricksRow = document.getElementById(`bricks-row-${key}`);
   if (!bricksRow) return;
+  disconnectBrickWaveObservers(ps);
   bricksRow.innerHTML = '';
 
   ps.sequence.forEach((item, seqIdx) => {
@@ -93,6 +94,11 @@ function renderBricks(fmt, songIdx, totalDur) {
     brick.dataset.key   = key;
     brick.dataset.part  = item.partIndex;
     brick.dataset.seqidx = seqIdx;
+
+    const wave = document.createElement('div');
+    wave.className = 'part-brick-wave';
+    brick.appendChild(wave);
+    wireBrickWaveform(wave, ps, item.partIndex);
 
     const lbl = document.createElement('span');
     lbl.className = 'part-brick-label';
@@ -130,6 +136,103 @@ function renderBricks(fmt, songIdx, totalDur) {
 
     bricksRow.appendChild(brick);
   });
+}
+
+/** One vertical line per CSS pixel of the wave area (capped); stroke scales so on-screen width stays constant. */
+const BRICK_WAVE_MAX_COLUMNS = 24000;
+const BRICK_WAVE_LINE_CSS_PX = 0.32;
+
+function disconnectBrickWaveObservers(ps) {
+  if (!ps || !ps._brickWaveObservers) return;
+  ps._brickWaveObservers.forEach((ro) => {
+    try { ro.disconnect(); } catch (e) {}
+  });
+  ps._brickWaveObservers = [];
+}
+
+function wireBrickWaveform(waveEl, ps, partIndex) {
+  if (!ps._brickWaveObservers) ps._brickWaveObservers = [];
+  let raf = null;
+  const run = () => {
+    updateBrickWaveformEl(waveEl, ps, partIndex);
+  };
+  const schedule = () => {
+    if (raf != null) cancelAnimationFrame(raf);
+    raf = requestAnimationFrame(() => {
+      raf = null;
+      run();
+    });
+  };
+
+  if (typeof ResizeObserver !== 'undefined') {
+    const ro = new ResizeObserver(() => schedule());
+    ro.observe(waveEl);
+    ps._brickWaveObservers.push(ro);
+  }
+  schedule();
+  requestAnimationFrame(schedule);
+}
+
+function updateBrickWaveformEl(waveEl, ps, partIndex) {
+  const w = Math.max(1, Math.floor(waveEl.getBoundingClientRect().width || waveEl.clientWidth));
+  const uri = getBrickWaveformDataUri(ps, partIndex, w);
+  if (uri) {
+    waveEl.style.backgroundImage = `url("${uri}")`;
+  } else {
+    waveEl.style.backgroundImage = 'none';
+  }
+}
+
+function getBrickWaveformDataUri(ps, partIndex, widthPx) {
+  if (!ps || !ps.buffers) return null;
+  if (!ps._brickWaveCache) ps._brickWaveCache = {};
+
+  const w = Math.max(1, Math.floor(widthPx));
+  const cacheKey = `${partIndex}_${w}`;
+  if (ps._brickWaveCache[cacheKey] !== undefined) return ps._brickWaveCache[cacheKey];
+
+  const buf = ps.buffers[partIndex];
+  if (!buf) {
+    ps._brickWaveCache[cacheKey] = null;
+    return null;
+  }
+
+  const channelData = buf.getChannelData(0);
+  if (!channelData || channelData.length === 0) {
+    ps._brickWaveCache[cacheKey] = null;
+    return null;
+  }
+
+  const n = channelData.length;
+  const columns = Math.max(8, Math.min(w, n, BRICK_WAVE_MAX_COLUMNS));
+  const halfHeight = 12;
+  const centerY = 14;
+  const floorAmp = 0.07;
+  const points = [];
+
+  for (let i = 0; i < columns; i++) {
+    const start = Math.floor((i * n) / columns);
+    const end = Math.floor(((i + 1) * n) / columns);
+    let peak = 0;
+    for (let j = start; j < end; j++) {
+      const v = Math.abs(channelData[j]);
+      if (v > peak) peak = v;
+    }
+    const amp = Math.max(floorAmp, peak);
+    const x = (i + 0.5).toFixed(3);
+    const yTop = (centerY - amp * halfHeight).toFixed(3);
+    const yBottom = (centerY + amp * halfHeight).toFixed(3);
+    points.push(`M ${x} ${yTop} L ${x} ${yBottom}`);
+  }
+
+  const strokeUser = BRICK_WAVE_LINE_CSS_PX * (columns / Math.max(1, w));
+  const svg =
+    `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 ${columns} 28' preserveAspectRatio='none' shape-rendering='crispEdges'>` +
+    `<path d='${points.join(' ')}' stroke='rgba(255,255,255,0.45)' stroke-width='${strokeUser}' stroke-linecap='butt' fill='none'/>` +
+    `</svg>`;
+  const uri = `data:image/svg+xml;base64,${btoa(svg)}`;
+  ps._brickWaveCache[cacheKey] = uri;
+  return uri;
 }
 
 function renderLoopButtons(fmt, songIdx, totalDur) {

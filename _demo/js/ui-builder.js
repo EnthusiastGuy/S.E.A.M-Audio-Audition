@@ -298,8 +298,14 @@ function updateActionButtons(fmt, songIdx, state) {
   if (row) row.classList.toggle('playing', state === 'playing' || state === 'paused');
 
   if (transportEl) {
-    transportEl.innerHTML = '';
-    appendTransportButtons(transportEl, fmt, songIdx, state);
+    const controlsEl = document.getElementById(`transport-controls-${key}`);
+    if (controlsEl) {
+      controlsEl.innerHTML = '';
+      appendTransportButtons(controlsEl, fmt, songIdx, state);
+    } else {
+      transportEl.innerHTML = '';
+      appendTransportButtons(transportEl, fmt, songIdx, state);
+    }
   }
 
   colAct.innerHTML = '';

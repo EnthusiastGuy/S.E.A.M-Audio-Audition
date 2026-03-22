@@ -474,6 +474,7 @@ function startPreviewPlayback(fmt, songIdx, offsetSecs) {
   ps.pausedAt = 0;
   ps.totalPlayedTime = 0;
   ps.loopPlayCount = 0;
+  ps._brickPreviewLastSeq = null;
 
   src.onended = () => {
     if (ps.node !== src) return;
@@ -810,6 +811,7 @@ function pausePlaying(fmt, songIdx) {
   cancelAnimationFrame(ps.rafId);
   ps.paused = true;
   updateActionButtons(fmt, songIdx, 'paused');
+  syncBrickPreview(fmt, songIdx);
 }
 
 function resumePlaying(fmt, songIdx) {
@@ -839,9 +841,36 @@ function stopPlaying(fmt, songIdx) {
   ps.loopPlayCount = 0;
   ps.currentSeqIdx = 0;
   ps.usingPreviewBuffer = false;
+  ps._brickPreviewLastSeq = null;
 
   updateActionButtons(fmt, songIdx, 'stopped');
   hidePlayerArea(fmt, songIdx);
+}
+
+/** Global timeline position (seconds) for UI (seek label, brick preview). */
+function getGlobalPlaybackPosition(ps) {
+  if (!ps) return 0;
+  if (ps.paused) {
+    if (ps.usingPreviewBuffer && ps.previewBuffer) {
+      return Math.min(Math.max(0, ps.pausedAt || 0), ps.previewBuffer.duration);
+    }
+    const seqItem = ps.sequence[ps.currentSeqIdx];
+    const durInPart = ps.partDurations[seqItem?.partIndex] || 0;
+    return ps.totalPlayedTime + Math.min(ps.pausedAt || 0, durInPart);
+  }
+  if (!ps.node && !ps.usingPreviewBuffer) {
+    return Math.max(0, ps.totalPlayedTime || 0);
+  }
+  const now = AC.currentTime;
+  if (ps.usingPreviewBuffer && ps.previewBuffer) {
+    const posInPreview = Math.min(Math.max(0, now - ps.startTime), ps.previewBuffer.duration);
+    return posInPreview;
+  }
+  const seqItem = ps.sequence[ps.currentSeqIdx];
+  if (!seqItem) return ps.totalPlayedTime || 0;
+  const durInPart = ps.partDurations[seqItem.partIndex] || 0;
+  const posInPart = Math.min(Math.max(0, now - ps.startTime), durInPart);
+  return ps.totalPlayedTime + posInPart;
 }
 
 /** Keeps .time-current-label (translateX(-50%)) inside the time strip so it is not clipped by the song row. */
@@ -907,6 +936,8 @@ function tickPlayer(fmt, songIdx) {
         triggerCrossfade(fmt, songIdx);
       }
     }
+
+    updateBrickPreview(fmt, songIdx, ps, posInPreview);
 
     ps.rafId = requestAnimationFrame(() => tickPlayer(fmt, songIdx));
     return;
@@ -998,6 +1029,8 @@ function tickPlayer(fmt, songIdx) {
     }
   }
 
+  updateBrickPreview(fmt, songIdx, ps, totalPos);
+
   ps.rafId = requestAnimationFrame(() => tickPlayer(fmt, songIdx));
 }
 
@@ -1067,6 +1100,7 @@ function seekToTime(fmt, songIdx, targetSecs, totalDur) {
       scheduleSegment(fmt, songIdx, offsetInPart);
     }
   }
+  syncBrickPreview(fmt, songIdx);
 }
 
 function seekToPart(fmt, songIdx, seqIdx) {

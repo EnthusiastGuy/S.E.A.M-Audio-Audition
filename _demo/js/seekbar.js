@@ -57,7 +57,40 @@ function renderSeekBar(fmt, songIdx) {
   const transportRow = document.createElement('div');
   transportRow.className = 'seek-transport-row';
   transportRow.id = `transport-${key}`;
+
+  const transportControls = document.createElement('div');
+  transportControls.className = 'transport-controls';
+  transportControls.id = `transport-controls-${key}`;
+
+  const previewWrap = document.createElement('div');
+  previewWrap.className = 'brick-preview-wrap';
+  previewWrap.id = `brick-preview-wrap-${key}`;
+  previewWrap.setAttribute('role', 'img');
+  previewWrap.setAttribute(
+    'aria-label',
+    'Zoomed timeline waveform: center is current playback; left is past, right is future.'
+  );
+
+  const previewCanvas = document.createElement('canvas');
+  previewCanvas.className = 'brick-preview-canvas';
+  previewCanvas.id = `brick-preview-canvas-${key}`;
+  previewCanvas.setAttribute('aria-hidden', 'true');
+
+  const previewCenter = document.createElement('div');
+  previewCenter.className = 'brick-preview-center-line';
+
+  const previewFlash = document.createElement('div');
+  previewFlash.className = 'brick-preview-flash';
+
+  previewWrap.appendChild(previewCanvas);
+  previewWrap.appendChild(previewCenter);
+  previewWrap.appendChild(previewFlash);
+
+  transportRow.appendChild(transportControls);
+  transportRow.appendChild(previewWrap);
   cont.appendChild(transportRow);
+
+  wireBrickPreview(fmt, songIdx);
 
   // Seek pct
   const pct = document.createElement('div');
@@ -355,6 +388,7 @@ function reRenderSeek(fmt, songIdx) {
   setupBricksDropZone(fmt, songIdx);
   syncSongCompositeDuration(fmt, songIdx);
   updateActionButtons(fmt, songIdx, inferTransportState(fmt, songIdx));
+  syncBrickPreview(fmt, songIdx);
 }
 
 // ─── LOOP DROPDOWN ───────────────────────────────────────────
@@ -501,4 +535,153 @@ function setupBricksDropZone(fmt, songIdx) {
     insertIdx = null;
     saveSession();
   });
+}
+
+// ─── BRICK PREVIEW (zoomed waveform, center = now) ─────────
+const BRICK_PREVIEW_PX_PER_SEC = 88;
+
+function wireBrickPreview(fmt, songIdx) {
+  const key = `${fmt}_${songIdx}`;
+  const wrap = document.getElementById(`brick-preview-wrap-${key}`);
+  if (!wrap || wrap.dataset.brickPreviewWired === '1') return;
+  wrap.dataset.brickPreviewWired = '1';
+
+  const ro = new ResizeObserver(() => syncBrickPreview(fmt, songIdx));
+  ro.observe(wrap);
+}
+
+function syncBrickPreview(fmt, songIdx) {
+  const ps = STATE.players[`${fmt}_${songIdx}`];
+  if (!ps) return;
+  const t = getGlobalPlaybackPosition(ps);
+  updateBrickPreview(fmt, songIdx, ps, t);
+}
+
+function triggerBrickPreviewFlash(flashEl) {
+  if (!flashEl) return;
+  flashEl.classList.remove('brick-preview-flash--pulse');
+  void flashEl.offsetWidth;
+  flashEl.classList.add('brick-preview-flash--pulse');
+  const onEnd = () => {
+    flashEl.classList.remove('brick-preview-flash--pulse');
+    flashEl.removeEventListener('animationend', onEnd);
+  };
+  flashEl.addEventListener('animationend', onEnd);
+}
+
+function partColorCss(partIndex) {
+  if (partIndex === -1) return '#546a8a';
+  return partColor(partIndex);
+}
+
+function samplePeakLocal(buf, localT) {
+  if (!buf || !isFinite(localT)) return 0;
+  const dur = buf.duration;
+  if (dur <= 0) return 0;
+  const ch = buf.getChannelData(0);
+  if (!ch || ch.length === 0) return 0;
+  const t = Math.max(0, Math.min(localT, dur - 1e-9));
+  const center = Math.floor((t / dur) * (ch.length - 1));
+  const span = Math.max(2, Math.floor(ch.length / 400));
+  let peak = 0;
+  const i0 = Math.max(0, center - span);
+  const i1 = Math.min(ch.length - 1, center + span);
+  for (let i = i0; i <= i1; i++) {
+    const v = Math.abs(ch[i]);
+    if (v > peak) peak = v;
+  }
+  return Math.max(0.07, peak);
+}
+
+function drawBrickPreviewCanvas(ctx, w, h, ps, centerGlobal, totalDur) {
+  const floorAmp = 0.07;
+  const halfAmpPx = (h * 0.38);
+  const cy = h * 0.5;
+  const windowSec = Math.max(2.5, w / BRICK_PREVIEW_PX_PER_SEC);
+  const tCenter = Math.max(0, Math.min(centerGlobal, totalDur));
+  const t0 = tCenter - windowSec * 0.5;
+  const t1 = tCenter + windowSec * 0.5;
+
+  ctx.fillStyle = 'rgba(15, 52, 96, 0.65)';
+  ctx.fillRect(0, 0, w, h);
+
+  if (totalDur <= 0 || !ps.sequence.length) return;
+
+  let acc = 0;
+  const segments = ps.sequence.map((item, seqIdx) => {
+    const dur = ps.partDurations[item.partIndex] || 0;
+    const start = acc;
+    acc += dur;
+    return { seqIdx, partIndex: item.partIndex, start, end: acc, dur };
+  });
+
+  function segmentForGlobalTime(tg) {
+    for (let i = 0; i < segments.length; i++) {
+      const s = segments[i];
+      const last = i === segments.length - 1;
+      const endBound = last ? totalDur : s.end;
+      if (tg >= s.start && (last ? tg <= endBound : tg < endBound)) return s;
+    }
+    return null;
+  }
+
+  for (let x = 0; x < w; x++) {
+    const tg = t0 + ((x + 0.5) / w) * (t1 - t0);
+    if (tg < 0 || tg > totalDur) continue;
+
+    const seg = segmentForGlobalTime(tg);
+    if (!seg) continue;
+
+    const buf = ps.buffers[seg.partIndex];
+    if (!buf) continue;
+    const localT = tg - seg.start;
+    const peak = samplePeakLocal(buf, localT);
+    const amp = Math.max(floorAmp, peak);
+    const barH = Math.max(1, amp * halfAmpPx * 2);
+    ctx.fillStyle = partColorCss(seg.partIndex);
+    ctx.globalAlpha = 0.92;
+    ctx.fillRect(x, cy - barH * 0.5, 1, barH);
+  }
+  ctx.globalAlpha = 1;
+}
+
+function updateBrickPreview(fmt, songIdx, ps, globalTime) {
+  const key = `${fmt}_${songIdx}`;
+  const canvas = document.getElementById(`brick-preview-canvas-${key}`);
+  const flashEl = document.querySelector(`#brick-preview-wrap-${key} .brick-preview-flash`);
+  if (!canvas || !ps) return;
+
+  const totalDur =
+    ps.sequence.reduce((s, item) => s + (ps.partDurations[item.partIndex] || 0), 0) || 0;
+  const wrap = canvas.parentElement;
+  const w = Math.max(1, Math.floor(wrap ? wrap.clientWidth : 0) || canvas.clientWidth || 1);
+  const h = Math.max(1, Math.floor(wrap ? wrap.clientHeight : 0) || canvas.clientHeight || 1);
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  const needResize =
+    canvas._brickPreviewW !== w ||
+    canvas._brickPreviewH !== h ||
+    canvas._brickPreviewDpr !== dpr;
+  if (needResize) {
+    canvas.width = Math.floor(w * dpr);
+    canvas.height = Math.floor(h * dpr);
+    canvas._brickPreviewW = w;
+    canvas._brickPreviewH = h;
+    canvas._brickPreviewDpr = dpr;
+  }
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  drawBrickPreviewCanvas(ctx, w, h, ps, globalTime, totalDur);
+
+  const seqIdx = ps.currentSeqIdx;
+  const transportPlaying = (ps.node != null || ps.usingPreviewBuffer) && !ps.paused;
+  if (
+    transportPlaying &&
+    ps._brickPreviewLastSeq != null &&
+    ps._brickPreviewLastSeq !== seqIdx
+  ) {
+    triggerBrickPreviewFlash(flashEl);
+  }
+  ps._brickPreviewLastSeq = seqIdx;
 }

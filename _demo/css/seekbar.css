@@ -61,11 +61,68 @@
 
 .seek-transport-row {
   display: flex;
-  align-items: center;
-  gap: 8px;
+  align-items: stretch;
+  gap: 10px;
   margin: 8px 0 10px;
   padding: 6px 0;
   border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+.transport-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* Zoomed brick waveform: center line = now; left = past, right = future */
+.brick-preview-wrap {
+  position: relative;
+  flex: 1;
+  min-width: 120px;
+  height: 44px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg3);
+  overflow: hidden;
+}
+.brick-preview-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  vertical-align: top;
+}
+.brick-preview-center-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 2px;
+  margin-left: -1px;
+  background: rgba(255, 255, 255, 0.55);
+  box-shadow: 0 0 8px rgba(233, 69, 96, 0.45);
+  pointer-events: none;
+  z-index: 2;
+}
+.brick-preview-flash {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 3;
+  background: rgba(255, 255, 255, 0);
+  border-radius: inherit;
+}
+.brick-preview-flash.brick-preview-flash--pulse {
+  animation: brickPreviewFlash 0.38s ease-out;
+}
+@keyframes brickPreviewFlash {
+  0% {
+    background: rgba(255, 255, 255, 0.42);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35);
+  }
+  100% {
+    background: rgba(255, 255, 255, 0);
+    box-shadow: inset 0 0 0 0 transparent;
+  }
 }
 
 /* ---- PART BRICKS ON SEEKBAR ---- */

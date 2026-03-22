@@ -262,6 +262,7 @@ function renderPlayerArea(fmt, songIdx) {
 
   renderSeekBar(fmt, songIdx);
   updateActionButtons(fmt, songIdx, inferTransportState(fmt, songIdx));
+  syncBrickPreview(fmt, songIdx);
 }
 
 // ─── HIGHLIGHT CROSS-REFERENCE ───────────────────────────────

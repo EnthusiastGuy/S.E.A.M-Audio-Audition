@@ -753,7 +753,103 @@ function updateBrickPreview(fmt, songIdx, ps, globalTime) {
   ps._brickPreviewLastSeq = seqIdx;
 }
 
-// ─── DIRECT PART MINI WAVEFORM (same lens + draw path as timeline brick preview) ─
+// ─── DIRECT PART MINI WAVEFORM (linear scroll, loop-tiled; playhead fixed center) ─
+
+/** Window width scale: min step × visible columns (sets how many seconds fit on screen). */
+const PART_MINI_MIN_GRID_SEC = 0.07;
+const PART_MINI_MAX_GRID_SEC = 0.42;
+const PART_MINI_VISIBLE_COLUMNS = 10;
+
+function partMiniGridStepSec(totalDur) {
+  if (totalDur <= 0) return PART_MINI_MAX_GRID_SEC;
+  return Math.max(
+    PART_MINI_MIN_GRID_SEC,
+    Math.min(PART_MINI_MAX_GRID_SEC, totalDur / 22)
+  );
+}
+
+/** Sample time for display: same part repeats — seamless loop preview to the right of the seam. */
+function wrapPartMiniTime(t, totalDur) {
+  if (totalDur <= 0 || !isFinite(t)) return 0;
+  let x = t % totalDur;
+  if (x < 0) x += totalDur;
+  return Math.min(x, totalDur - 1e-9);
+}
+
+/**
+ * Map absolute timeline time (seconds) to x (pixels). Playhead time sits at canvas center.
+ */
+function partMiniTimeToX(tTime, tCenter, windowSec, w) {
+  return ((tTime - tCenter) / windowSec + 0.5) * w;
+}
+
+/**
+ * Continuous horizontal time; waveform uses wrapped sample time so the next loop iteration
+ * appears to the right of the seam. No zebra — uniform background. Loop seams only at n×duration.
+ */
+function drawPartMiniScrollingBricks(ctx, w, h, buf, partIndex, totalDur, tPlay) {
+  const floorAmp = 0.07;
+  const halfAmpPx = h * 0.38;
+  const cy = h * 0.5;
+  const gridStep = partMiniGridStepSec(totalDur);
+  const windowSec = Math.min(totalDur, gridStep * PART_MINI_VISIBLE_COLUMNS);
+  if (windowSec <= 0) return;
+
+  const tCenter = Math.max(0, Math.min(tPlay, totalDur));
+  const halfSpan = windowSec * 0.5;
+  const tVisLo = tCenter - halfSpan;
+  const tVisHi = tCenter + halfSpan;
+
+  ctx.fillStyle = 'rgba(15, 52, 96, 0.65)';
+  ctx.fillRect(0, 0, w, h);
+
+  const color = partColorCss(partIndex);
+  for (let x = 0; x < w; x++) {
+    let peakSum = 0;
+    let n = 0;
+    for (let s = 0; s < BRICK_PREVIEW_AA_SAMPLES; s++) {
+      const u = (x + (s + 0.5) / BRICK_PREVIEW_AA_SAMPLES) / w;
+      const tAbs = tCenter + (u - 0.5) * windowSec;
+      if (!isFinite(tAbs)) continue;
+      const tl = wrapPartMiniTime(tAbs, totalDur);
+      peakSum += samplePeakLocal(buf, tl);
+      n++;
+    }
+    if (n === 0) continue;
+    const peak = peakSum / n;
+    const amp = Math.max(floorAmp, peak);
+    const barH = Math.max(1, amp * halfAmpPx * 2);
+    ctx.fillStyle = color;
+    ctx.globalAlpha = 0.92;
+    ctx.fillRect(x, cy - barH * 0.5, 1, barH);
+  }
+  ctx.globalAlpha = 1;
+
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.28)';
+  ctx.lineWidth = 1;
+  const nStart = Math.ceil(tVisLo / totalDur - 1e-9);
+  const nEnd = Math.floor(tVisHi / totalDur + 1e-9);
+  for (let n = nStart; n <= nEnd; n++) {
+    const bt = n * totalDur;
+    const px = partMiniTimeToX(bt, tCenter, windowSec, w);
+    if (px <= 0 || px >= w) continue;
+    ctx.beginPath();
+    ctx.moveTo(px + 0.5, 0);
+    ctx.lineTo(px + 0.5, h);
+    ctx.stroke();
+  }
+
+  const phx = w * 0.5;
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.75)';
+  ctx.lineWidth = 2;
+  ctx.shadowColor = 'rgba(233, 69, 96, 0.45)';
+  ctx.shadowBlur = 6;
+  ctx.beginPath();
+  ctx.moveTo(phx + 0.5, 0);
+  ctx.lineTo(phx + 0.5, h);
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+}
 
 function getDirectPartPlaybackPositionForPreview(ps) {
   if (!ps._directNode && !ps._directPaused) return ps._directSeekOffset || 0;
@@ -798,7 +894,7 @@ function updatePartMiniWaveformPreview(fmt, songIdx, partIndex, ps, globalTime) 
   const totalDur = buf.duration || 0;
   if (totalDur <= 0) return;
 
-  const t = globalTime != null ? globalTime : getDirectPartPlaybackPositionForPreview(ps);
+  const tPlay = globalTime != null ? globalTime : getDirectPartPlaybackPositionForPreview(ps);
 
   const wrap = canvas.parentElement;
   const w = Math.max(1, Math.floor(wrap ? wrap.clientWidth : 0) || canvas.clientWidth || 1);
@@ -821,10 +917,5 @@ function updatePartMiniWaveformPreview(fmt, songIdx, partIndex, ps, globalTime) 
   ctx.imageSmoothingQuality = 'high';
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-  const fakePs = {
-    sequence: [{ partIndex }],
-    partDurations: { [partIndex]: totalDur },
-    buffers: { [partIndex]: buf },
-  };
-  drawBrickPreviewCanvas(ctx, w, h, fakePs, t, totalDur);
+  drawPartMiniScrollingBricks(ctx, w, h, buf, partIndex, totalDur, tPlay);
 }

@@ -240,18 +240,15 @@ function renderPlayerArea(fmt, songIdx) {
     partPreviewWrap.setAttribute('role', 'img');
     partPreviewWrap.setAttribute(
       'aria-label',
-      'Part waveform: center shows detail around playback; left is part start, right is part end.'
+      'Part waveform: one loop tiles seamlessly; playhead at center; vertical lines mark loop repeats.'
     );
     const partPreviewCanvas = document.createElement('canvas');
     partPreviewCanvas.className = 'brick-preview-canvas';
     partPreviewCanvas.id = `part-mini-preview-canvas-${key}-${f.partIndex}`;
     partPreviewCanvas.setAttribute('aria-hidden', 'true');
-    const partPreviewCenter = document.createElement('div');
-    partPreviewCenter.className = 'brick-preview-center-line';
     const partPreviewFlash = document.createElement('div');
     partPreviewFlash.className = 'brick-preview-flash';
     partPreviewWrap.appendChild(partPreviewCanvas);
-    partPreviewWrap.appendChild(partPreviewCenter);
     partPreviewWrap.appendChild(partPreviewFlash);
     miniStack.appendChild(partPreviewWrap);
 

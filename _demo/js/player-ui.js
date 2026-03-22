@@ -118,7 +118,7 @@ function renderPlayerArea(fmt, songIdx) {
   if (song.mainHandle) allFiles.push({ label: song.mainFile || song.name, partIndex: -1, isMain: true });
   song.parts.forEach((p, i) => allFiles.push({ label: p.file, partIndex: i, isMain: false }));
 
-  allFiles.forEach(f => {
+  allFiles.forEach((f, rowIdx) => {
     // Wrapper for part item + mini bar
     const itemWrapper = document.createElement('div');
     itemWrapper.className = 'part-item-wrapper';
@@ -206,6 +206,19 @@ function renderPlayerArea(fmt, songIdx) {
     };
     actions.appendChild(sBtn);
 
+    const tlSingleBtn = document.createElement('button');
+    tlSingleBtn.type = 'button';
+    tlSingleBtn.className = 't-btn btn-sm timeline-place-btn timeline-place-btn--one';
+    tlSingleBtn.title = 'Add this file to the timeline';
+    tlSingleBtn.setAttribute('aria-label', 'Add this file to the timeline');
+    tlSingleBtn.innerHTML =
+      '<svg class="timeline-btn-svg" viewBox="0 0 20 20" aria-hidden="true"><rect x="2" y="7" width="3.5" height="9" rx="1" fill="currentColor"/><rect x="8.25" y="4" width="3.5" height="12" rx="1" fill="currentColor"/><rect x="14.5" y="5.5" width="3.5" height="10.5" rx="1" fill="currentColor"/><path d="M7 18h6l-3 3z" fill="currentColor"/></svg>';
+    tlSingleBtn.onclick = (e) => {
+      e.stopPropagation();
+      appendPartToTimeline(fmt, songIdx, f.partIndex);
+    };
+    actions.appendChild(tlSingleBtn);
+
     const dlCtl = makePartDownloadControl(fmt, songIdx, f.partIndex);
     actions.appendChild(dlCtl);
     item.appendChild(actions);
@@ -251,6 +264,7 @@ function renderPlayerArea(fmt, songIdx) {
   area.appendChild(seekContainer);
 
   renderSeekBar(fmt, songIdx);
+  updateActionButtons(fmt, songIdx, inferTransportState(fmt, songIdx));
 }
 
 // ─── HIGHLIGHT CROSS-REFERENCE ───────────────────────────────
@@ -277,6 +291,7 @@ function togglePartSheet(fmt, songIdx) {
     area.innerHTML = '';
     openPartSheets.delete(key);
     saveSession();
+    updateActionButtons(fmt, songIdx, inferTransportState(fmt, songIdx));
   } else {
     ensurePlayerState(fmt, songIdx);
     preloadSong(fmt, songIdx).then(() => {

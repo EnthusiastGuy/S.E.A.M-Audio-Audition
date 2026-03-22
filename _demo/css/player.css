@@ -24,7 +24,7 @@
 /* Same column layout as .playlist-header / .song-row-main */
 .part-item {
   display: grid;
-  grid-template-columns: 42px 1fr 110px 60px 220px;
+  grid-template-columns: 42px 1fr 110px 60px minmax(260px, 1fr);
   gap: 8px;
   align-items: center;
   padding: 5px 0;
@@ -59,6 +59,31 @@
 
 .part-download-split {
   margin-left: 4px;
+}
+
+.part-item-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  row-gap: 4px;
+}
+
+.timeline-place-btn {
+  min-width: 30px;
+  padding: 0 6px;
+  color: var(--accent3);
+}
+.timeline-place-btn:hover {
+  color: var(--text);
+  background: rgba(78, 205, 196, 0.12);
+}
+.timeline-btn-svg {
+  display: block;
+  width: 18px;
+  height: 18px;
+  vertical-align: middle;
+}
+.timeline-btn-svg--all {
+  width: 22px;
 }
 
 /* ---- PART MINI BAR ---- */

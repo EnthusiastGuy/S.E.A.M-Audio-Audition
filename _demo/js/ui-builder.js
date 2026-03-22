@@ -119,6 +119,8 @@ function buildSongRow(fmt, songIdx, nr) {
   colAction.appendChild(makePlayButton(fmt, songIdx));
   const dlCtl = makeDownloadControl(fmt, songIdx);
   if (dlCtl) colAction.appendChild(dlCtl);
+  const addAll = makeAddAllTimelineButton(fmt, songIdx);
+  if (addAll) colAction.appendChild(addAll);
   main.appendChild(colAction);
 
   row.appendChild(main);
@@ -215,16 +217,25 @@ function makeDownloadControl(fmt, songIdx) {
   return wrap;
 }
 
-// ─── ACTION BUTTONS UPDATE ───────────────────────────────────
-function updateActionButtons(fmt, songIdx, state) {
-  const key    = `${fmt}_${songIdx}`;
-  const colAct = document.getElementById(`action-${key}`);
-  if (!colAct) return;
-  colAct.innerHTML = '';
+function makeAddAllTimelineButton(fmt, songIdx) {
+  const song = STATE.songs[fmt][songIdx];
+  if (!song || !song.parts.length) return null;
 
-  const row = document.querySelector(`.song-row[data-key="${key}"]`);
-  if (row) row.classList.toggle('playing', state === 'playing' || state === 'paused');
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 't-btn btn-sm timeline-place-btn timeline-place-btn--all';
+  btn.title = 'Replace timeline with all parts in order (1 … n)';
+  btn.setAttribute('aria-label', 'Replace timeline with all parts in order');
+  btn.innerHTML =
+    '<svg class="timeline-btn-svg timeline-btn-svg--all" viewBox="0 0 26 20" aria-hidden="true"><rect x="1" y="6" width="2.5" height="10" rx="0.5" fill="currentColor"/><rect x="4.5" y="4" width="2.5" height="12" rx="0.5" fill="currentColor"/><rect x="8" y="6.5" width="2.5" height="9.5" rx="0.5" fill="currentColor"/><rect x="15.5" y="5.5" width="2.5" height="10.5" rx="0.5" fill="currentColor"/><rect x="19" y="3.5" width="2.5" height="12.5" rx="0.5" fill="currentColor"/><rect x="22.5" y="6" width="2.5" height="10" rx="0.5" fill="currentColor"/><path d="M10 18h6l-3 3z" fill="currentColor"/></svg>';
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    replaceTimelineWithAllPartsOrdered(fmt, songIdx);
+  });
+  return btn;
+}
 
+function appendTransportButtons(container, fmt, songIdx, state) {
   if (state === 'playing') {
     const pauseBtn = document.createElement('button');
     pauseBtn.className = 't-btn pause';
@@ -247,11 +258,9 @@ function updateActionButtons(fmt, songIdx, state) {
     const dot = document.createElement('span');
     dot.className = 'status-dot';
 
-    colAct.appendChild(pauseBtn);
-    colAct.appendChild(stopBtn);
-    colAct.appendChild(dot);
-    const dlCtl = makeDownloadControl(fmt, songIdx);
-    if (dlCtl) colAct.appendChild(dlCtl);
+    container.appendChild(pauseBtn);
+    container.appendChild(stopBtn);
+    container.appendChild(dot);
   } else if (state === 'paused') {
     const playBtn = document.createElement('button');
     playBtn.className = 't-btn play';
@@ -271,15 +280,36 @@ function updateActionButtons(fmt, songIdx, state) {
       stopPlaying(fmt, songIdx);
     });
 
-    colAct.appendChild(playBtn);
-    colAct.appendChild(stopBtn);
-    const dlCtl = makeDownloadControl(fmt, songIdx);
-    if (dlCtl) colAct.appendChild(dlCtl);
+    container.appendChild(playBtn);
+    container.appendChild(stopBtn);
   } else {
-    colAct.appendChild(makePlayButton(fmt, songIdx));
-    const dlCtl = makeDownloadControl(fmt, songIdx);
-    if (dlCtl) colAct.appendChild(dlCtl);
+    container.appendChild(makePlayButton(fmt, songIdx));
   }
+}
+
+// ─── ACTION BUTTONS UPDATE ───────────────────────────────────
+function updateActionButtons(fmt, songIdx, state) {
+  const key = `${fmt}_${songIdx}`;
+  const transportEl = document.getElementById(`transport-${key}`);
+  const colAct = document.getElementById(`action-${key}`);
+  if (!colAct) return;
+
+  const row = document.querySelector(`.song-row[data-key="${key}"]`);
+  if (row) row.classList.toggle('playing', state === 'playing' || state === 'paused');
+
+  if (transportEl) {
+    transportEl.innerHTML = '';
+    appendTransportButtons(transportEl, fmt, songIdx, state);
+  }
+
+  colAct.innerHTML = '';
+  if (!transportEl) {
+    appendTransportButtons(colAct, fmt, songIdx, state);
+  }
+  const dlCtl = makeDownloadControl(fmt, songIdx);
+  if (dlCtl) colAct.appendChild(dlCtl);
+  const addAll = makeAddAllTimelineButton(fmt, songIdx);
+  if (addAll) colAct.appendChild(addAll);
 }
 
 // ─── TOTALS ──────────────────────────────────────────────────

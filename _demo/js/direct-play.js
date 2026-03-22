@@ -27,6 +27,24 @@ function resumeDirectPart(ps) {
   }
 }
 
+function advanceDirectPartPlayToNext(fmt, songIdx, finishedPartIndex) {
+  const key = `${fmt}_${songIdx}`;
+  const list = document.getElementById(`parts-list-${key}`);
+  if (!list) return;
+  const wrappers = Array.from(list.querySelectorAll('.part-item-wrapper'));
+  const idx = wrappers.findIndex(w => parseInt(w.dataset.partIndex, 10) === finishedPartIndex);
+  if (idx < 0 || idx >= wrappers.length - 1) return;
+  const next = wrappers[idx + 1];
+  const nextPi = parseInt(next.dataset.partIndex, 10);
+  void playPartDirectly(fmt, songIdx, nextPi, next);
+}
+
+function onDirectPartSourceEnded(ps, key, src, fmt, songIdx, partIndex, listItem) {
+  if (ps._directNode !== src) return;
+  resetDirectPartUI(ps, key, partIndex, listItem);
+  advanceDirectPartPlayToNext(fmt, songIdx, partIndex);
+}
+
 function resetDirectPartUI(ps, key, partIndex, listItem) {
   ps._directNode = null;
   ps._directPartIndex = null;
@@ -153,10 +171,8 @@ async function playPartDirectly(fmt, songIdx, partIndex, listItem) {
         // Restart animation
         requestAnimationFrame(tickMini);
         
-        // Updated onended handler for new source
         newSrc.onended = () => {
-          if (ps._directNode !== newSrc) return;
-          resetDirectPartUI(ps, key, partIndex, listItem);
+          onDirectPartSourceEnded(ps, key, newSrc, fmt, songIdx, partIndex, listItem);
         };
       };
       
@@ -179,7 +195,6 @@ async function playPartDirectly(fmt, songIdx, partIndex, listItem) {
   }
 
   src.onended = () => {
-    if (ps._directNode !== src) return;
-    resetDirectPartUI(ps, key, partIndex, listItem);
+    onDirectPartSourceEnded(ps, key, src, fmt, songIdx, partIndex, listItem);
   };
 }

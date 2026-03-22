@@ -503,6 +503,56 @@ function buildDefaultSequence(song) {
   return placed;
 }
 
+/** One timeline entry for a part index (-1 = full mix). */
+function sequenceItemForPartIndex(fmt, songIdx, partIndex) {
+  const song = STATE.songs[fmt][songIdx];
+  if (!song) return null;
+  if (partIndex === -1) {
+    if (!song.mainHandle) return null;
+    return { partIndex: -1, label: song.mainFile || song.name || 'Full' };
+  }
+  const p = song.parts[partIndex];
+  if (!p) return null;
+  return { partIndex, label: p.file };
+}
+
+/** Parts sorted by part number (1, 2, …) for “place all on timeline”. */
+function buildOrderedPartsSequence(song) {
+  if (!song.parts.length) return [];
+  const entries = song.parts.map((p, idx) => ({ idx, num: p.num }));
+  entries.sort((a, b) => a.num - b.num);
+  return entries.map(({ idx }) => ({
+    partIndex: idx,
+    label: song.parts[idx].file,
+  }));
+}
+
+function appendPartToTimeline(fmt, songIdx, partIndex) {
+  const item = sequenceItemForPartIndex(fmt, songIdx, partIndex);
+  if (!item) return;
+  const ps = ensurePlayerState(fmt, songIdx);
+  ps.sequence.push(item);
+  markCompositionDirty(fmt, songIdx);
+  const key = `${fmt}_${songIdx}`;
+  if (document.getElementById(`seek-container-${key}`)) reRenderSeek(fmt, songIdx);
+  else syncSongCompositeDuration(fmt, songIdx);
+  saveSession();
+}
+
+function replaceTimelineWithAllPartsOrdered(fmt, songIdx) {
+  const song = STATE.songs[fmt][songIdx];
+  if (!song || !song.parts.length) return;
+  const ps = ensurePlayerState(fmt, songIdx);
+  ps.sequence = buildOrderedPartsSequence(song);
+  ps.loopSettings = {};
+  ps.currentSeqIdx = 0;
+  markCompositionDirty(fmt, songIdx);
+  const key = `${fmt}_${songIdx}`;
+  if (document.getElementById(`seek-container-${key}`)) reRenderSeek(fmt, songIdx);
+  else syncSongCompositeDuration(fmt, songIdx);
+  saveSession();
+}
+
 // ─── AUDIO LOADING ───────────────────────────────────────────
 async function loadPartBuffer(fmt, songIdx, partIndex) {
   const key = `${fmt}_${songIdx}`;
@@ -532,6 +582,14 @@ async function loadPartBuffer(fmt, songIdx, partIndex) {
     ps.buffers[partIndex] = null;
     return null;
   }
+}
+
+function inferTransportState(fmt, songIdx) {
+  const ps = STATE.players[`${fmt}_${songIdx}`];
+  if (!ps) return 'stopped';
+  if (ps.paused) return 'paused';
+  if (ps.node || ps.usingPreviewBuffer) return 'playing';
+  return 'stopped';
 }
 
 async function preloadSong(fmt, songIdx) {
@@ -579,9 +637,9 @@ async function startPlaying(fmt, songIdx) {
     return;
   }
 
-  updateActionButtons(fmt, songIdx, 'playing');
   showPlayerArea(fmt, songIdx);
   startPreviewPlayback(fmt, songIdx, 0);
+  updateActionButtons(fmt, songIdx, 'playing');
 }
 
 function cancelPreScheduled(ps) {

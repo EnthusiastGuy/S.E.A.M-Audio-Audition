@@ -54,6 +54,11 @@ function renderSeekBar(fmt, songIdx) {
   track.appendChild(handle);
   cont.appendChild(track);
 
+  const transportRow = document.createElement('div');
+  transportRow.className = 'seek-transport-row';
+  transportRow.id = `transport-${key}`;
+  cont.appendChild(transportRow);
+
   // Seek pct
   const pct = document.createElement('div');
   pct.className = 'seek-pct';
@@ -92,6 +97,7 @@ function renderBricks(fmt, songIdx, totalDur) {
 
     const brick = document.createElement('div');
     brick.className = 'part-brick' + (seqIdx === ps.currentSeqIdx ? ' active-brick' : '');
+    brick.title = 'Drag to reorder; Ctrl+drag (⌘ on Mac) to duplicate';
     brick.style.flexGrow = flexPct * ps.sequence.length;
     brick.style.background = item.partIndex === -1 ? 'var(--text3)' : partColor(item.partIndex);
     brick.dataset.key   = key;
@@ -133,8 +139,12 @@ function renderBricks(fmt, songIdx, totalDur) {
     // Drag to reorder bricks
     brick.draggable = true;
     brick.addEventListener('dragstart', (e) => {
-      e.dataTransfer.setData('brick-move', JSON.stringify({ fmt, songIdx, seqIdx }));
-      e.dataTransfer.effectAllowed = 'move';
+      const dup = !!(e.ctrlKey || e.metaKey);
+      e.dataTransfer.setData(
+        'brick-move',
+        JSON.stringify({ fmt, songIdx, seqIdx, duplicate: dup })
+      );
+      e.dataTransfer.effectAllowed = 'copyMove';
     });
 
     bricksRow.appendChild(brick);
@@ -344,6 +354,7 @@ function reRenderSeek(fmt, songIdx) {
   renderLoopButtons(fmt, songIdx, totalDur);
   setupBricksDropZone(fmt, songIdx);
   syncSongCompositeDuration(fmt, songIdx);
+  updateActionButtons(fmt, songIdx, inferTransportState(fmt, songIdx));
 }
 
 // ─── LOOP DROPDOWN ───────────────────────────────────────────
@@ -438,7 +449,7 @@ function setupBricksDropZone(fmt, songIdx) {
 
   bricksRow.addEventListener('dragover', (e) => {
     e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
+    e.dataTransfer.dropEffect = e.ctrlKey || e.metaKey ? 'copy' : 'move';
     showInsertLine(e.clientX);
   });
 
@@ -471,9 +482,16 @@ function setupBricksDropZone(fmt, songIdx) {
       try {
         const d = JSON.parse(brickMoveData);
         if (d.fmt === fmt && d.songIdx === songIdx && insertIdx !== null) {
-          const [moved] = ps.sequence.splice(d.seqIdx, 1);
-          const newIdx  = insertIdx > d.seqIdx ? insertIdx - 1 : insertIdx;
-          ps.sequence.splice(newIdx, 0, moved);
+          const src = ps.sequence[d.seqIdx];
+          if (!src) return;
+          if (d.duplicate) {
+            const copy = { partIndex: src.partIndex, label: src.label };
+            ps.sequence.splice(insertIdx, 0, copy);
+          } else {
+            const [moved] = ps.sequence.splice(d.seqIdx, 1);
+            const newIdx = insertIdx > d.seqIdx ? insertIdx - 1 : insertIdx;
+            ps.sequence.splice(newIdx, 0, moved);
+          }
           markCompositionDirty(fmt, songIdx);
           reRenderSeek(fmt, songIdx);
         }

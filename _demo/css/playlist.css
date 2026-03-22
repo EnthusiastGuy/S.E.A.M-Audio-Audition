@@ -8,7 +8,7 @@
 }
 .playlist-header {
   display: grid;
-  grid-template-columns: 42px 1fr 110px 60px 220px;
+  grid-template-columns: 42px 1fr 110px 60px minmax(260px, 1fr);
   padding: 10px 14px;
   background: var(--bg3);
   border: 1px solid var(--border);
@@ -49,7 +49,7 @@
 
 .song-row-main {
   display: grid;
-  grid-template-columns: 42px 1fr 110px 60px 220px;
+  grid-template-columns: 42px 1fr 110px 60px minmax(260px, 1fr);
   padding: 10px 14px;
   align-items: center;
   gap: 8px;

@@ -83,22 +83,14 @@ function formatPartRowDuration(ps, song, partIndex) {
   return '—';
 }
 
-// ─── SHOW / HIDE PLAYER AREA ─────────────────────────────────
-function showPlayerArea(fmt, songIdx) {
+// ─── PLAYER AREA (visibility: row toggle only; see togglePartSheet) ─────────────────
+/** Re-render parts list + seekbar when the sheet is open; does not show/hide (no tie to play/stop). */
+function refreshPlayerAreaIfVisible(fmt, songIdx) {
   const key  = `${fmt}_${songIdx}`;
   const area = document.getElementById(`player-area-${key}`);
-  if (!area) return;
-  area.innerHTML = '';
-  area.classList.add('visible');
+  if (!area || !area.classList.contains('visible')) return;
+  ensurePlayerState(fmt, songIdx);
   renderPlayerArea(fmt, songIdx);
-}
-
-function hidePlayerArea(fmt, songIdx) {
-  const key  = `${fmt}_${songIdx}`;
-  const area = document.getElementById(`player-area-${key}`);
-  if (!area) return;
-  area.classList.remove('visible');
-  area.innerHTML = '';
 }
 
 // ─── PLAYER AREA RENDER ──────────────────────────────────────

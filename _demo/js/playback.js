@@ -634,13 +634,13 @@ async function startPlaying(fmt, songIdx) {
   const preview = await buildPreviewBuffer(fmt, songIdx);
   if (!preview) {
     updateActionButtons(fmt, songIdx, 'stopped');
-    hidePlayerArea(fmt, songIdx);
+    refreshPlayerAreaIfVisible(fmt, songIdx);
     return;
   }
 
-  showPlayerArea(fmt, songIdx);
   startPreviewPlayback(fmt, songIdx, 0);
   updateActionButtons(fmt, songIdx, 'playing');
+  refreshPlayerAreaIfVisible(fmt, songIdx);
 }
 
 function cancelPreScheduled(ps) {
@@ -777,7 +777,7 @@ function onSongEnded(fmt, songIdx) {
   if (!ps) return;
 
   updateActionButtons(fmt, songIdx, 'stopped');
-  hidePlayerArea(fmt, songIdx);
+  refreshPlayerAreaIfVisible(fmt, songIdx);
   cancelPreScheduled(ps);
   cancelAnimationFrame(ps.rafId);
   ps.node = null;
@@ -844,7 +844,7 @@ function stopPlaying(fmt, songIdx) {
   ps._brickPreviewLastSeq = null;
 
   updateActionButtons(fmt, songIdx, 'stopped');
-  hidePlayerArea(fmt, songIdx);
+  refreshPlayerAreaIfVisible(fmt, songIdx);
 }
 
 /** Global timeline position (seconds) for UI (seek label, brick preview). */

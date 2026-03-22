@@ -125,7 +125,7 @@ function buildSongRow(fmt, songIdx, nr) {
 
   row.appendChild(main);
 
-  // Player area (expanded on play)
+  // Player area (parts + timeline; visibility from row toggle only)
   const playerArea = document.createElement('div');
   playerArea.className = 'song-player-area';
   playerArea.id = `player-area-${key}`;

@@ -77,9 +77,9 @@ function handleDirectPartLoopClick(fmt, songIdx, partIndex, itemWrapper) {
   void playPartDirectly(fmt, songIdx, partIndex, itemWrapper, { loop: true });
 }
 
-/** Matches `src.playbackRate` used when starting direct part playback (absolute speed only). */
+/** Matches `src.playbackRate` for direct part playback (signed; negative = reverse). */
 function getDirectPartPlaybackRate() {
-  return Math.max(0.01, Math.abs(STATE.speedPercent) / 100);
+  return playbackRateFromKnob();
 }
 
 /**
@@ -91,7 +91,10 @@ function applyPlaybackRateToDirectPart(ps) {
   const newRate = getDirectPartPlaybackRate();
   const elapsed = AC.currentTime - ps._directStartAC;
   const dur = ps._directDuration || 0;
-  const pos = Math.min(ps._directSeekOffset + elapsed * oldRate, dur > 0 ? dur : Infinity);
+    const pos = Math.min(
+      Math.max(0, ps._directSeekOffset + elapsed * oldRate),
+      dur > 0 ? dur : Infinity
+    );
   ps._directSeekOffset = pos;
   ps._directStartAC = AC.currentTime;
   ps._directNode.playbackRate.value = newRate;
@@ -143,7 +146,9 @@ function onDirectPartSourceEnded(ps, key, src, fmt, songIdx, partIndex, listItem
     return;
   }
   resetDirectPartUI(ps, key, partIndex, listItem);
-  advanceDirectPartPlayToNext(fmt, songIdx, partIndex);
+  if (playbackRateFromKnob() > 0) {
+    advanceDirectPartPlayToNext(fmt, songIdx, partIndex);
+  }
 }
 
 function resetDirectPartUI(ps, key, partIndex, listItem) {
@@ -178,17 +183,19 @@ function createTickFunction(fmt, songIdx, partIndex) {
     const dur = ps._directDuration;
     const elapsed = AC.currentTime - ps._directStartAC;
     const rate = ps._directNode.playbackRate.value;
-    const pos = Math.min(ps._directSeekOffset + elapsed * rate, dur);
-    const pct = (pos / dur) * 100;
-    
+    const pos = Math.min(Math.max(0, ps._directSeekOffset + elapsed * rate), dur);
+    const pct = dur > 0 ? (pos / dur) * 100 : 0;
+
     const fill = document.getElementById(`mini-fill-${key}-${partIndex}`);
     const hnd  = document.getElementById(`mini-handle-${key}-${partIndex}`);
     if (fill) fill.style.width  = `${pct}%`;
     if (hnd)  hnd.style.left = `${pct}%`;
 
     updatePartMiniWaveformPreview(fmt, songIdx, partIndex, ps, pos);
-    
-    if (pos < dur) requestAnimationFrame(tickMini);
+
+    const stillPlaying =
+      rate >= 0 ? pos < dur - 1e-4 : pos > 1e-4;
+    if (stillPlaying) requestAnimationFrame(tickMini);
   };
 }
 

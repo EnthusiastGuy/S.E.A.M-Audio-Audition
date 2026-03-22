@@ -860,7 +860,7 @@ function getDirectPartPlaybackPositionForPreview(ps) {
   if (ps._directPaused) return Math.min(ps._directSeekOffset || 0, dur);
   const elapsed = AC.currentTime - ps._directStartAC;
   const rate = ps._directNode.playbackRate.value;
-  return Math.min(ps._directSeekOffset + elapsed * rate, dur);
+  return Math.min(Math.max(0, ps._directSeekOffset + elapsed * rate), dur);
 }
 
 function wirePartMiniPreview(fmt, songIdx, partIndex) {

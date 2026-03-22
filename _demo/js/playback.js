@@ -464,7 +464,7 @@ function startPreviewPlayback(fmt, songIdx, offsetSecs) {
   cancelPreScheduled(ps);
   if (ps.node) { try { ps.node.stop(); } catch(e) {} ps.node.disconnect(); ps.node = null; }
 
-  const rate = Math.max(0.01, Math.abs(STATE.speedPercent) / 100);
+  const rate = playbackRateFromKnob();
   const src = AC.createBufferSource();
   src.buffer = ps.previewBuffer;
   src.playbackRate.value = rate;
@@ -659,6 +659,15 @@ function cancelPreScheduled(ps) {
   ps._nextLoopCount = null;
   ps._nextStartAC = null;
   ps._nextEndAC = null;
+  ps._nextSegmentBufferOffset = null;
+}
+
+/** Signed `playbackRate` from speed knob: negative = reverse. 0% detent uses tiny forward rate (legacy). */
+function playbackRateFromKnob() {
+  const pct = STATE.speedPercent;
+  const mag = Math.max(0.01, Math.abs(pct) / 100);
+  if (pct === 0) return 0.01;
+  return pct < 0 ? -mag : mag;
 }
 
 /** Re-anchor segment timing before changing `playbackRate` so buffer position stays continuous. */
@@ -666,7 +675,8 @@ function rebasePlaybackSegmentAnchor(ps, now = AC.currentTime) {
   if (!ps || ps.paused || !ps.node || ps.segmentAudioStartAC == null) return;
   const buf = ps.usingPreviewBuffer ? ps.previewBuffer : ps.buffers[ps.sequence[ps.currentSeqIdx]?.partIndex];
   if (!buf) return;
-  const oldRate = Math.max(0.001, ps.node.playbackRate.value);
+  const oldRate = ps.node.playbackRate.value;
+  if (oldRate === 0) return;
   let pos = ps.segmentBufferOffset + (now - ps.segmentAudioStartAC) * oldRate;
   pos = Math.min(Math.max(0, pos), buf.duration);
   ps.segmentBufferOffset = pos;
@@ -676,9 +686,10 @@ function rebasePlaybackSegmentAnchor(ps, now = AC.currentTime) {
 /** Seconds into the buffer currently playing (clamped); drives seek bar and brick preview. */
 function getPlayingBufferOffsetIntoCurrentPart(ps, now = AC.currentTime) {
   if (!ps?.node || ps.segmentAudioStartAC == null) return null;
-  const rate = Math.max(0.001, ps.node.playbackRate.value);
+  const rate = ps.node.playbackRate.value;
   const buf = ps.usingPreviewBuffer ? ps.previewBuffer : ps.buffers[ps.sequence[ps.currentSeqIdx]?.partIndex];
   if (!buf) return null;
+  if (rate === 0) return Math.min(Math.max(0, ps.segmentBufferOffset), buf.duration);
   let pos = ps.segmentBufferOffset + (now - ps.segmentAudioStartAC) * rate;
   return Math.min(Math.max(0, pos), buf.duration);
 }
@@ -709,7 +720,28 @@ function scheduleSegment(fmt, songIdx, offsetSecs) {
 
   if (ps.node) { try { ps.node.stop(); } catch(e){} ps.node.disconnect(); ps.node = null; }
 
-  const rate = Math.max(0.01, Math.abs(STATE.speedPercent) / 100);
+  const rate = playbackRateFromKnob();
+  const absR = Math.abs(rate);
+
+  if (rate < 0 && offsetSecs <= 1e-5) {
+    if (ps.currentSeqIdx <= 0) {
+      onSongEnded(fmt, songIdx);
+      return;
+    }
+    ps.currentSeqIdx--;
+    ps.loopPlayCount = 0;
+    const prevPi = ps.sequence[ps.currentSeqIdx]?.partIndex;
+    const prevBuf = ps.buffers[prevPi];
+    ps.totalPlayedTime -= ps.partDurations[prevPi] || 0;
+    if (!prevBuf) {
+      scheduleSegment(fmt, songIdx, 0);
+      return;
+    }
+    const tail = Math.max(prevBuf.duration - 1 / AC.sampleRate, 0);
+    scheduleSegment(fmt, songIdx, tail);
+    return;
+  }
+
   const src = AC.createBufferSource();
   src.buffer = buffer;
   src.playbackRate.value = rate;
@@ -725,8 +757,10 @@ function scheduleSegment(fmt, songIdx, offsetSecs) {
   ps.segmentBufferOffset = offsetSecs;
   ps.pausedAt  = 0;
 
-  // End time is now exact because startAt is guaranteed to be in the future
-  const segEndAC = startAt + (buffer.duration - offsetSecs) / rate;
+  const segEndAC =
+    rate > 0
+      ? startAt + (buffer.duration - offsetSecs) / rate
+      : startAt + offsetSecs / absR;
   ps._segmentEndAC = segEndAC;
 
   // Pre-schedule the NEXT segment's AudioBufferSourceNode to start
@@ -737,6 +771,21 @@ function scheduleSegment(fmt, songIdx, offsetSecs) {
   src.onended = () => {
     if (ps.node !== src) return;
     if (!ps._nextNode) {
+      const r = playbackRateFromKnob();
+      if (r < 0) {
+        if (ps.currentSeqIdx > 0) {
+          const pi = ps.sequence[ps.currentSeqIdx - 1].partIndex;
+          ps.currentSeqIdx--;
+          ps.totalPlayedTime -= ps.partDurations[pi] || 0;
+          ps.loopPlayCount = 0;
+          const b = ps.buffers[pi];
+          const tail = b ? Math.max(b.duration - 1 / AC.sampleRate, 0) : 0;
+          scheduleSegment(fmt, songIdx, tail);
+        } else {
+          onSongEnded(fmt, songIdx);
+        }
+        return;
+      }
       const item = ps.sequence[ps.currentSeqIdx];
       ps.totalPlayedTime += ps.partDurations[item?.partIndex] || 0;
       ps.currentSeqIdx++;
@@ -758,15 +807,39 @@ function preScheduleNext(fmt, songIdx, startAtAC) {
   const ps   = STATE.players[key];
   if (!ps || ps.paused) return;
 
+  const rate = playbackRateFromKnob();
+  const absR = Math.abs(rate);
+
+  if (rate < 0) {
+    const prevSeqIdx = ps.currentSeqIdx - 1;
+    if (prevSeqIdx < 0) return;
+    const prevItem = ps.sequence[prevSeqIdx];
+    const prevBuf = ps.buffers[prevItem.partIndex];
+    if (!prevBuf) return;
+    const startOffset = Math.max(0, prevBuf.duration - 1 / AC.sampleRate);
+    const nextSrc = AC.createBufferSource();
+    nextSrc.buffer = prevBuf;
+    nextSrc.playbackRate.value = rate;
+    nextSrc.connect(ps.gainNode);
+    nextSrc.start(startAtAC, startOffset);
+
+    ps._nextNode = nextSrc;
+    ps._nextSeqIdx = prevSeqIdx;
+    ps._nextLoopCount = 0;
+    ps._nextStartAC = startAtAC;
+    ps._nextEndAC = startAtAC + startOffset / absR;
+    ps._nextSegmentBufferOffset = startOffset;
+    return;
+  }
+
   const seqItem = ps.sequence[ps.currentSeqIdx];
   if (!seqItem) return;
 
-  // Determine what comes next (loop or advance)
-  const loopVal    = ps.loopSettings[ps.currentSeqIdx] ?? 1;
-  const part       = STATE.songs[fmt][songIdx].parts[seqItem.partIndex];
+  const loopVal = ps.loopSettings[ps.currentSeqIdx] ?? 1;
+  const part = STATE.songs[fmt][songIdx].parts[seqItem.partIndex];
   const isLoopable = part && part.nexts.includes(part.num);
 
-  let nextSeqIdx   = ps.currentSeqIdx;
+  let nextSeqIdx = ps.currentSeqIdx;
   let nextLoopCount = ps.loopPlayCount;
 
   if (isLoopable && loopVal !== 1) {
@@ -784,21 +857,21 @@ function preScheduleNext(fmt, songIdx, startAtAC) {
   if (nextSeqIdx >= ps.sequence.length) return;
 
   const nextItem = ps.sequence[nextSeqIdx];
-  const nextBuf  = ps.buffers[nextItem.partIndex];
+  const nextBuf = ps.buffers[nextItem.partIndex];
   if (!nextBuf) return;
 
-  const rate = Math.max(0.01, Math.abs(STATE.speedPercent) / 100);
   const nextSrc = AC.createBufferSource();
   nextSrc.buffer = nextBuf;
   nextSrc.playbackRate.value = rate;
   nextSrc.connect(ps.gainNode);
-  nextSrc.start(startAtAC, 0); // Queued in audio hardware — sample-accurate
+  nextSrc.start(startAtAC, 0);
 
-  ps._nextNode      = nextSrc;
-  ps._nextSeqIdx    = nextSeqIdx;
+  ps._nextNode = nextSrc;
+  ps._nextSeqIdx = nextSeqIdx;
   ps._nextLoopCount = nextLoopCount;
-  ps._nextStartAC   = startAtAC;
-  ps._nextEndAC     = startAtAC + nextBuf.duration / rate;
+  ps._nextStartAC = startAtAC;
+  ps._nextEndAC = startAtAC + nextBuf.duration / rate;
+  ps._nextSegmentBufferOffset = 0;
 }
 
 function onSongEnded(fmt, songIdx) {
@@ -836,8 +909,12 @@ function pausePlaying(fmt, songIdx) {
   const buf = ps.usingPreviewBuffer ? ps.previewBuffer : ps.buffers[ps.sequence[ps.currentSeqIdx]?.partIndex];
   let posInBuf = 0;
   if (buf && ps.node && ps.segmentAudioStartAC != null) {
-    const rate = Math.max(0.001, ps.node.playbackRate.value);
-    posInBuf = ps.segmentBufferOffset + (now - ps.segmentAudioStartAC) * rate;
+    const rate = ps.node.playbackRate.value;
+    if (rate === 0) {
+      posInBuf = Math.min(Math.max(0, ps.segmentBufferOffset), buf.duration);
+    } else {
+      posInBuf = ps.segmentBufferOffset + (now - ps.segmentAudioStartAC) * rate;
+    }
     posInBuf = Math.min(Math.max(0, posInBuf), buf.duration);
   } else if (buf) {
     posInBuf = Math.min(Math.max(0, now - ps.startTime), buf.duration);
@@ -972,8 +1049,10 @@ function tickPlayer(fmt, songIdx) {
     allBricks.forEach((b) => b.classList.toggle('active-brick', parseInt(b.dataset.seqidx) === ps.currentSeqIdx));
 
     if (!ps.crossfadeScheduled && STATE.crossfade > 0) {
-      const remaining = totalOrigDur - posInPreview;
-      if (remaining <= STATE.crossfade / 1000) {
+      const playRate = ps.node?.playbackRate?.value ?? 1;
+      const remainingToTail =
+        playRate < 0 ? posInPreview : totalOrigDur - posInPreview;
+      if (remainingToTail <= STATE.crossfade / 1000) {
         ps.crossfadeScheduled = true;
         triggerCrossfade(fmt, songIdx);
       }
@@ -990,7 +1069,13 @@ function tickPlayer(fmt, songIdx) {
   // This keeps the seek bar perfectly in sync — no waiting for async callbacks.
   if (ps._nextNode && ps._segmentEndAC && now >= ps._segmentEndAC - 0.005) {
     const oldItem = ps.sequence[ps.currentSeqIdx];
-    ps.totalPlayedTime += ps.partDurations[oldItem.partIndex] || 0;
+    const handoffRate = ps.node.playbackRate.value;
+    if (handoffRate > 0) {
+      ps.totalPlayedTime += ps.partDurations[oldItem.partIndex] || 0;
+    } else if (ps._nextSeqIdx != null) {
+      const pidx = ps.sequence[ps._nextSeqIdx]?.partIndex;
+      ps.totalPlayedTime -= ps.partDurations[pidx] || 0;
+    }
 
     // Promote next → current
     const prevNode = ps.node;
@@ -999,7 +1084,8 @@ function tickPlayer(fmt, songIdx) {
     ps.loopPlayCount  = ps._nextLoopCount;
     ps.startTime      = ps._nextStartAC;
     ps.segmentAudioStartAC = ps._nextStartAC;
-    ps.segmentBufferOffset = 0;
+    ps.segmentBufferOffset =
+      ps._nextSegmentBufferOffset != null ? ps._nextSegmentBufferOffset : 0;
     ps._segmentEndAC  = ps._nextEndAC;
 
     // Clear next-slot
@@ -1008,12 +1094,28 @@ function tickPlayer(fmt, songIdx) {
     ps._nextLoopCount = null;
     ps._nextStartAC   = null;
     ps._nextEndAC     = null;
+    ps._nextSegmentBufferOffset = null;
 
     // Wire onended for the new current node (fallback for end of song)
     const curSrc = ps.node;
     curSrc.onended = () => {
       if (ps.node !== curSrc) return;
       if (!ps._nextNode) {
+        const r = playbackRateFromKnob();
+        if (r < 0) {
+          if (ps.currentSeqIdx > 0) {
+            const pi = ps.sequence[ps.currentSeqIdx - 1].partIndex;
+            ps.currentSeqIdx--;
+            ps.totalPlayedTime -= ps.partDurations[pi] || 0;
+            ps.loopPlayCount = 0;
+            const b = ps.buffers[pi];
+            const tail = b ? Math.max(b.duration - 1 / AC.sampleRate, 0) : 0;
+            scheduleSegment(fmt, songIdx, tail);
+          } else {
+            onSongEnded(fmt, songIdx);
+          }
+          return;
+        }
         const item = ps.sequence[ps.currentSeqIdx];
         ps.totalPlayedTime += ps.partDurations[item?.partIndex] || 0;
         ps.currentSeqIdx++;
@@ -1067,8 +1169,12 @@ function tickPlayer(fmt, songIdx) {
   }
 
   if (!ps.crossfadeScheduled && STATE.crossfade > 0) {
-    const remaining = totalOrigDur - (ps.totalPlayedTime + posInPart);
-    if (remaining <= STATE.crossfade / 1000) {
+    const playRate = ps.node?.playbackRate?.value ?? 1;
+    const remainingToTail =
+      playRate < 0
+        ? ps.totalPlayedTime + posInPart
+        : totalOrigDur - (ps.totalPlayedTime + posInPart);
+    if (remainingToTail <= STATE.crossfade / 1000) {
       ps.crossfadeScheduled = true;
       triggerCrossfade(fmt, songIdx);
     }

@@ -218,8 +218,9 @@ function initKnob() {
     drawKnob(canvas, knobAngle);
     valEl.textContent = pct >= 0 ? `${pct}%` : `−${Math.abs(pct)}%`;
 
-    const newRate = Math.max(0.001, Math.abs(pct) / 100);
+    const newRate = playbackRateFromKnob();
     const tickNow = AC.currentTime;
+    const newAbs = Math.abs(newRate);
 
     for (const ps of Object.values(STATE.players)) {
       if (ps.node && !ps.paused) {
@@ -242,9 +243,12 @@ function initKnob() {
           } else {
             posInBuf = Math.min(Math.max(0, tickNow - ps.startTime), buf.duration);
           }
-          const remaining = buf.duration - posInBuf;
-          if (remaining > 0) {
-            const newEndAC = tickNow + remaining / newRate;
+          const remainingWall =
+            newRate > 0
+              ? (buf.duration - posInBuf) / newRate
+              : posInBuf / newAbs;
+          if (remainingWall > 0) {
+            const newEndAC = tickNow + remainingWall;
             ps._segmentEndAC = newEndAC;
             preScheduleNext(ps.fmt, ps.songIdx, newEndAC);
           }

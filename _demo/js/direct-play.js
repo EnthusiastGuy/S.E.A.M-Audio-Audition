@@ -2,6 +2,81 @@
    S.E.A.M Audio Audition — Direct Part Play
    ============================================================= */
 
+const DIRECT_PART_PLAY_ICON = '&#9654;';
+const DIRECT_PART_PAUSE_ICON = '&#9646;&#9646;';
+const DIRECT_PART_LOOP_IDLE_ICON =
+  `${DIRECT_PART_PLAY_ICON}<span class="part-loop-glyph" aria-hidden="true">&#8635;</span>`;
+
+function syncDirectPartTransportButtons(ps, key, partIndex, listItem) {
+  const playBtn = listItem.querySelector('.part-play-btn');
+  const loopBtn = listItem.querySelector('.part-play-loop-btn');
+  if (!playBtn || !loopBtn) return;
+  if (ps._directPartIndex !== partIndex || (!ps._directNode && !ps._directPaused)) return;
+
+  if (ps._directPaused) {
+    playBtn.innerHTML = DIRECT_PART_PLAY_ICON;
+    playBtn.title = ps._directLoop ? 'Play once' : 'Resume';
+    loopBtn.innerHTML = DIRECT_PART_LOOP_IDLE_ICON;
+    loopBtn.title = ps._directLoop ? 'Resume loop' : 'Play looped';
+    return;
+  }
+  if (ps._directLoop) {
+    playBtn.innerHTML = DIRECT_PART_PLAY_ICON;
+    playBtn.title = 'Play once';
+    loopBtn.innerHTML = DIRECT_PART_PAUSE_ICON;
+    loopBtn.title = 'Pause';
+  } else {
+    playBtn.innerHTML = DIRECT_PART_PAUSE_ICON;
+    playBtn.title = 'Pause';
+    loopBtn.innerHTML = DIRECT_PART_LOOP_IDLE_ICON;
+    loopBtn.title = 'Play looped';
+  }
+}
+
+function handleDirectPartPlayClick(fmt, songIdx, partIndex, itemWrapper) {
+  const key = `${fmt}_${songIdx}`;
+  const ps = STATE.players[key];
+  if (ps && ps._directNode && ps._directPartIndex === partIndex) {
+    if (ps._directLoop) {
+      void playPartDirectly(fmt, songIdx, partIndex, itemWrapper, { loop: false });
+      return;
+    }
+    if (!ps._directPaused) {
+      pauseDirectPart(ps);
+      syncDirectPartTransportButtons(ps, key, partIndex, itemWrapper);
+      return;
+    }
+    resumeDirectPart(ps);
+    syncDirectPartTransportButtons(ps, key, partIndex, itemWrapper);
+    const tickMini = createTickFunction(fmt, songIdx, partIndex);
+    requestAnimationFrame(tickMini);
+    return;
+  }
+  void playPartDirectly(fmt, songIdx, partIndex, itemWrapper, { loop: false });
+}
+
+function handleDirectPartLoopClick(fmt, songIdx, partIndex, itemWrapper) {
+  const key = `${fmt}_${songIdx}`;
+  const ps = STATE.players[key];
+  if (ps && ps._directNode && ps._directPartIndex === partIndex) {
+    if (ps._directLoop) {
+      if (!ps._directPaused) {
+        pauseDirectPart(ps);
+        syncDirectPartTransportButtons(ps, key, partIndex, itemWrapper);
+      } else {
+        resumeDirectPart(ps);
+        syncDirectPartTransportButtons(ps, key, partIndex, itemWrapper);
+        const tickMini = createTickFunction(fmt, songIdx, partIndex);
+        requestAnimationFrame(tickMini);
+      }
+      return;
+    }
+    void playPartDirectly(fmt, songIdx, partIndex, itemWrapper, { loop: true });
+    return;
+  }
+  void playPartDirectly(fmt, songIdx, partIndex, itemWrapper, { loop: true });
+}
+
 function stopDirectPart(ps) {
   if (ps._directNode) {
     try { ps._directNode.stop(); } catch(e) {}
@@ -41,6 +116,11 @@ function advanceDirectPartPlayToNext(fmt, songIdx, finishedPartIndex) {
 
 function onDirectPartSourceEnded(ps, key, src, fmt, songIdx, partIndex, listItem) {
   if (ps._directNode !== src) return;
+  if (ps._directLoop) {
+    ps._directNode = null;
+    void playPartDirectly(fmt, songIdx, partIndex, listItem, { loop: true });
+    return;
+  }
   resetDirectPartUI(ps, key, partIndex, listItem);
   advanceDirectPartPlayToNext(fmt, songIdx, partIndex);
 }
@@ -49,13 +129,19 @@ function resetDirectPartUI(ps, key, partIndex, listItem) {
   ps._directNode = null;
   ps._directPartIndex = null;
   ps._directPaused = false;
+  ps._directLoop = false;
   const partItem = listItem.querySelector('.part-item');
   const playBtn = listItem.querySelector('.part-play-btn');
+  const loopBtn = listItem.querySelector('.part-play-loop-btn');
   const stopBtn = listItem.querySelector('.part-stop-btn');
   const miniBar = document.getElementById(`mini-bar-${key}-${partIndex}`);
   if (playBtn) {
-    playBtn.innerHTML = '&#9654;';
+    playBtn.innerHTML = DIRECT_PART_PLAY_ICON;
     playBtn.title = 'Play this part';
+  }
+  if (loopBtn) {
+    loopBtn.innerHTML = DIRECT_PART_LOOP_IDLE_ICON;
+    loopBtn.title = 'Play looped';
   }
   if (stopBtn) stopBtn.style.display = 'none';
   if (miniBar) miniBar.classList.remove('visible');
@@ -82,7 +168,8 @@ function createTickFunction(fmt, songIdx, partIndex) {
   };
 }
 
-async function playPartDirectly(fmt, songIdx, partIndex, listItem) {
+async function playPartDirectly(fmt, songIdx, partIndex, listItem, opts = {}) {
+  const wantLoop = !!opts.loop;
   if (AC.state === 'suspended') await AC.resume();
   const key  = `${fmt}_${songIdx}`;
   const ps   = ensurePlayerState(fmt, songIdx);
@@ -92,16 +179,15 @@ async function playPartDirectly(fmt, songIdx, partIndex, listItem) {
   const buf = ps.buffers[partIndex];
   if (!buf) return;
 
-  // If already playing or paused, resume from pause
-  if (ps._directNode && ps._directPartIndex === partIndex) {
+  // Same part, same mode: resume from pause only
+  if (
+    ps._directPartIndex === partIndex &&
+    ps._directLoop === wantLoop &&
+    (ps._directNode || ps._directPaused)
+  ) {
     if (ps._directPaused) {
       resumeDirectPart(ps);
-      const playBtn = listItem.querySelector('.part-play-btn');
-      if (playBtn) {
-        playBtn.innerHTML = '&#9646;&#9646;';
-        playBtn.title = 'Pause';
-      }
-      // Resume the tick animation
+      syncDirectPartTransportButtons(ps, key, partIndex, listItem);
       const tickMini = createTickFunction(fmt, songIdx, partIndex);
       requestAnimationFrame(tickMini);
     }
@@ -121,16 +207,13 @@ async function playPartDirectly(fmt, songIdx, partIndex, listItem) {
   ps._directNode = src;
   ps._directPartIndex = partIndex;
   ps._directPaused = false;
+  ps._directLoop = wantLoop;
 
   // Update UI
   const partItem = listItem.querySelector('.part-item');
-  const playBtn = listItem.querySelector('.part-play-btn');
   const stopBtn = listItem.querySelector('.part-stop-btn');
   const miniBar = document.getElementById(`mini-bar-${key}-${partIndex}`);
-  if (playBtn) {
-    playBtn.innerHTML = '&#9646;&#9646;';
-    playBtn.title = 'Pause';
-  }
+  syncDirectPartTransportButtons(ps, key, partIndex, listItem);
   if (stopBtn) stopBtn.style.display = '';
   if (miniBar) miniBar.classList.add('visible');
   if (partItem) partItem.classList.add('playing-part');

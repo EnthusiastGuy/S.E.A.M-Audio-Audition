@@ -170,25 +170,22 @@ function renderPlayerArea(fmt, songIdx) {
     pBtn.innerHTML = '&#9654;';
     pBtn.onclick = (e) => {
       e.stopPropagation();
-      const ps = STATE.players[`${fmt}_${songIdx}`];
-      if (ps && ps._directNode && ps._directPartIndex === f.partIndex) {
-        // Currently playing: pause it
-        if (!ps._directPaused) {
-          pauseDirectPart(ps);
-          pBtn.innerHTML = '&#9654;';
-          pBtn.title = 'Resume';
-        } else {
-          // Currently paused: resume it
-          resumeDirectPart(ps);
-          pBtn.innerHTML = '&#9646;&#9646;';
-          pBtn.title = 'Pause';
-        }
-      } else {
-        // Not playing: start playing
-        playPartDirectly(fmt, songIdx, f.partIndex, itemWrapper);
-      }
+      handleDirectPartPlayClick(fmt, songIdx, f.partIndex, itemWrapper);
     };
     actions.appendChild(pBtn);
+
+    // Play looped (same track repeats until Stop)
+    const lpBtn = document.createElement('button');
+    lpBtn.className = 't-btn play btn-sm part-play-loop-btn';
+    lpBtn.title = 'Play looped';
+    lpBtn.setAttribute('aria-label', 'Play looped');
+    lpBtn.innerHTML =
+      '&#9654;<span class="part-loop-glyph" aria-hidden="true">&#8635;</span>';
+    lpBtn.onclick = (e) => {
+      e.stopPropagation();
+      handleDirectPartLoopClick(fmt, songIdx, f.partIndex, itemWrapper);
+    };
+    actions.appendChild(lpBtn);
 
     // Stop part button
     const sBtn = document.createElement('button');

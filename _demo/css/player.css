@@ -67,6 +67,19 @@
   row-gap: 4px;
 }
 
+.part-play-loop-btn {
+  min-width: 34px;
+  padding-left: 4px;
+  padding-right: 4px;
+  letter-spacing: -0.06em;
+}
+.part-loop-glyph {
+  font-size: 0.72em;
+  opacity: 0.92;
+  margin-left: 1px;
+  vertical-align: 0.08em;
+}
+
 .timeline-place-btn {
   min-width: 30px;
   padding: 0 6px;

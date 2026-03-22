@@ -77,6 +77,26 @@ function handleDirectPartLoopClick(fmt, songIdx, partIndex, itemWrapper) {
   void playPartDirectly(fmt, songIdx, partIndex, itemWrapper, { loop: true });
 }
 
+/** Matches `src.playbackRate` used when starting direct part playback (absolute speed only). */
+function getDirectPartPlaybackRate() {
+  return Math.max(0.01, Math.abs(STATE.speedPercent) / 100);
+}
+
+/**
+ * Keeps buffer timeline bookkeeping in sync when the speed knob changes during direct part play.
+ */
+function applyPlaybackRateToDirectPart(ps) {
+  if (!ps._directNode) return;
+  const oldRate = ps._directNode.playbackRate.value;
+  const newRate = getDirectPartPlaybackRate();
+  const elapsed = AC.currentTime - ps._directStartAC;
+  const dur = ps._directDuration || 0;
+  const pos = Math.min(ps._directSeekOffset + elapsed * oldRate, dur > 0 ? dur : Infinity);
+  ps._directSeekOffset = pos;
+  ps._directStartAC = AC.currentTime;
+  ps._directNode.playbackRate.value = newRate;
+}
+
 function stopDirectPart(ps) {
   if (ps._directNode) {
     try { ps._directNode.stop(); } catch(e) {}
@@ -156,7 +176,8 @@ function createTickFunction(fmt, songIdx, partIndex) {
     
     const dur = ps._directDuration;
     const elapsed = AC.currentTime - ps._directStartAC;
-    const pos = Math.min(ps._directSeekOffset + elapsed, dur);
+    const rate = ps._directNode.playbackRate.value;
+    const pos = Math.min(ps._directSeekOffset + elapsed * rate, dur);
     const pct = (pos / dur) * 100;
     
     const fill = document.getElementById(`mini-fill-${key}-${partIndex}`);
@@ -201,7 +222,7 @@ async function playPartDirectly(fmt, songIdx, partIndex, listItem, opts = {}) {
 
   const src = AC.createBufferSource();
   src.buffer = buf;
-  src.playbackRate.value = Math.max(0.01, Math.abs(STATE.speedPercent) / 100);
+  src.playbackRate.value = getDirectPartPlaybackRate();
   src.connect(ps.gainNode);
   src.start();
   ps._directNode = src;
@@ -243,7 +264,7 @@ async function playPartDirectly(fmt, songIdx, partIndex, listItem, opts = {}) {
         // Create new source at seek position
         const newSrc = AC.createBufferSource();
         newSrc.buffer = buf;
-        newSrc.playbackRate.value = Math.max(0.01, Math.abs(STATE.speedPercent) / 100);
+        newSrc.playbackRate.value = getDirectPartPlaybackRate();
         newSrc.connect(ps.gainNode);
         newSrc.start(0, seekPos);
         ps._directNode = newSrc;

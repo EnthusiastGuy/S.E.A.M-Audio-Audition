@@ -222,6 +222,7 @@ function initKnob() {
       if (ps.node) {
         ps.node.playbackRate.value = Math.max(0.001, Math.abs(pct) / 100);
       }
+      applyPlaybackRateToDirectPart(ps);
       // When speed changes, cancel and re-schedule the pre-scheduled next
       // segment since its timing is now invalid
       if (ps._nextNode && !ps.paused) {

@@ -18,6 +18,10 @@ function ensurePlayerState(fmt, songIdx) {
       node: null,
       gainNode: AC.createGain(),
       startTime: 0,
+      /** AudioContext time passed to `start(when, offset)` for the current buffer source. */
+      segmentAudioStartAC: null,
+      /** Buffer offset (seconds) at `segmentAudioStartAC` — timeline position uses `(now - segmentAudioStartAC) * rate + this`. */
+      segmentBufferOffset: 0,
       pausedAt: 0,
       paused: false,
       totalPlayedTime: 0,
@@ -471,6 +475,8 @@ function startPreviewPlayback(fmt, songIdx, offsetSecs) {
   const startAt = AC.currentTime + SCHEDULE_AHEAD;
   src.start(startAt, Math.max(0, offsetSecs || 0));
   ps.startTime = startAt - Math.max(0, offsetSecs || 0);
+  ps.segmentAudioStartAC = startAt;
+  ps.segmentBufferOffset = Math.max(0, offsetSecs || 0);
   ps.pausedAt = 0;
   ps.totalPlayedTime = 0;
   ps.loopPlayCount = 0;
@@ -655,6 +661,28 @@ function cancelPreScheduled(ps) {
   ps._nextEndAC = null;
 }
 
+/** Re-anchor segment timing before changing `playbackRate` so buffer position stays continuous. */
+function rebasePlaybackSegmentAnchor(ps, now = AC.currentTime) {
+  if (!ps || ps.paused || !ps.node || ps.segmentAudioStartAC == null) return;
+  const buf = ps.usingPreviewBuffer ? ps.previewBuffer : ps.buffers[ps.sequence[ps.currentSeqIdx]?.partIndex];
+  if (!buf) return;
+  const oldRate = Math.max(0.001, ps.node.playbackRate.value);
+  let pos = ps.segmentBufferOffset + (now - ps.segmentAudioStartAC) * oldRate;
+  pos = Math.min(Math.max(0, pos), buf.duration);
+  ps.segmentBufferOffset = pos;
+  ps.segmentAudioStartAC = now;
+}
+
+/** Seconds into the buffer currently playing (clamped); drives seek bar and brick preview. */
+function getPlayingBufferOffsetIntoCurrentPart(ps, now = AC.currentTime) {
+  if (!ps?.node || ps.segmentAudioStartAC == null) return null;
+  const rate = Math.max(0.001, ps.node.playbackRate.value);
+  const buf = ps.usingPreviewBuffer ? ps.previewBuffer : ps.buffers[ps.sequence[ps.currentSeqIdx]?.partIndex];
+  if (!buf) return null;
+  let pos = ps.segmentBufferOffset + (now - ps.segmentAudioStartAC) * rate;
+  return Math.min(Math.max(0, pos), buf.duration);
+}
+
 // Small lookahead (seconds) to guarantee scheduled times are in the future.
 // Must exceed the audio rendering quantum (~2.67ms at 48kHz / ~2.9ms at 44.1kHz).
 const SCHEDULE_AHEAD = 0.005;
@@ -693,6 +721,8 @@ function scheduleSegment(fmt, songIdx, offsetSecs) {
   const startAt = AC.currentTime + SCHEDULE_AHEAD;
   src.start(startAt, offsetSecs);
   ps.startTime = startAt - offsetSecs;
+  ps.segmentAudioStartAC = startAt;
+  ps.segmentBufferOffset = offsetSecs;
   ps.pausedAt  = 0;
 
   // End time is now exact because startAt is guaranteed to be in the future
@@ -781,6 +811,7 @@ function onSongEnded(fmt, songIdx) {
   cancelPreScheduled(ps);
   cancelAnimationFrame(ps.rafId);
   ps.node = null;
+  ps.segmentAudioStartAC = null;
 
   const order = STATE.order[fmt];
   const curPos = order.indexOf(songIdx);
@@ -802,9 +833,16 @@ function pausePlaying(fmt, songIdx) {
   if (!ps || ps.paused) return;
 
   const now = AC.currentTime;
-  const elapsed = now - ps.startTime;
   const buf = ps.usingPreviewBuffer ? ps.previewBuffer : ps.buffers[ps.sequence[ps.currentSeqIdx]?.partIndex];
-  ps.pausedAt = buf ? Math.min(elapsed, buf.duration) : 0;
+  let posInBuf = 0;
+  if (buf && ps.node && ps.segmentAudioStartAC != null) {
+    const rate = Math.max(0.001, ps.node.playbackRate.value);
+    posInBuf = ps.segmentBufferOffset + (now - ps.segmentAudioStartAC) * rate;
+    posInBuf = Math.min(Math.max(0, posInBuf), buf.duration);
+  } else if (buf) {
+    posInBuf = Math.min(Math.max(0, now - ps.startTime), buf.duration);
+  }
+  ps.pausedAt = buf ? posInBuf : 0;
 
   if (ps.node) { try { ps.node.stop(); } catch(e){} ps.node.disconnect(); ps.node = null; }
   cancelPreScheduled(ps);
@@ -842,6 +880,7 @@ function stopPlaying(fmt, songIdx) {
   ps.currentSeqIdx = 0;
   ps.usingPreviewBuffer = false;
   ps._brickPreviewLastSeq = null;
+  ps.segmentAudioStartAC = null;
 
   updateActionButtons(fmt, songIdx, 'stopped');
   refreshPlayerAreaIfVisible(fmt, songIdx);
@@ -863,14 +902,16 @@ function getGlobalPlaybackPosition(ps) {
   }
   const now = AC.currentTime;
   if (ps.usingPreviewBuffer && ps.previewBuffer) {
-    const posInPreview = Math.min(Math.max(0, now - ps.startTime), ps.previewBuffer.duration);
-    return posInPreview;
+    const posInPreview = getPlayingBufferOffsetIntoCurrentPart(ps, now);
+    if (posInPreview != null) return posInPreview;
+    return Math.min(Math.max(0, now - ps.startTime), ps.previewBuffer.duration);
   }
   const seqItem = ps.sequence[ps.currentSeqIdx];
   if (!seqItem) return ps.totalPlayedTime || 0;
   const durInPart = ps.partDurations[seqItem.partIndex] || 0;
-  const posInPart = Math.min(Math.max(0, now - ps.startTime), durInPart);
-  return ps.totalPlayedTime + posInPart;
+  const posInPart = getPlayingBufferOffsetIntoCurrentPart(ps, now);
+  if (posInPart != null) return ps.totalPlayedTime + posInPart;
+  return ps.totalPlayedTime + Math.min(Math.max(0, now - ps.startTime), durInPart);
 }
 
 /** Keeps .time-current-label (translateX(-50%)) inside the time strip so it is not clipped by the song row. */
@@ -899,7 +940,8 @@ function tickPlayer(fmt, songIdx) {
 
   if (ps.usingPreviewBuffer && ps.previewBuffer) {
     const totalOrigDur = getSequenceTotalDuration(ps) || ps.previewBuffer.duration || 1;
-    const posInPreview = Math.min(Math.max(0, now - ps.startTime), ps.previewBuffer.duration);
+    const posInPreview = getPlayingBufferOffsetIntoCurrentPart(ps, now)
+      ?? Math.min(Math.max(0, now - ps.startTime), ps.previewBuffer.duration);
 
     let acc = 0;
     let activeIdx = 0;
@@ -956,6 +998,8 @@ function tickPlayer(fmt, songIdx) {
     ps.currentSeqIdx  = ps._nextSeqIdx;
     ps.loopPlayCount  = ps._nextLoopCount;
     ps.startTime      = ps._nextStartAC;
+    ps.segmentAudioStartAC = ps._nextStartAC;
+    ps.segmentBufferOffset = 0;
     ps._segmentEndAC  = ps._nextEndAC;
 
     // Clear next-slot
@@ -990,7 +1034,8 @@ function tickPlayer(fmt, songIdx) {
   if (!seqItem) return;
 
   const durInPart = ps.partDurations[seqItem.partIndex] || 0;
-  const posInPart = Math.min(Math.max(0, now - ps.startTime), durInPart);
+  const posInPart = getPlayingBufferOffsetIntoCurrentPart(ps, now)
+    ?? Math.min(Math.max(0, now - ps.startTime), durInPart);
 
   let totalPos = ps.totalPlayedTime + posInPart;
 

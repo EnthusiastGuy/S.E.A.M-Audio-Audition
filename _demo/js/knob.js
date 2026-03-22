@@ -218,9 +218,15 @@ function initKnob() {
     drawKnob(canvas, knobAngle);
     valEl.textContent = pct >= 0 ? `${pct}%` : `−${Math.abs(pct)}%`;
 
+    const newRate = Math.max(0.001, Math.abs(pct) / 100);
+    const tickNow = AC.currentTime;
+
     for (const ps of Object.values(STATE.players)) {
-      if (ps.node) {
-        ps.node.playbackRate.value = Math.max(0.001, Math.abs(pct) / 100);
+      if (ps.node && !ps.paused) {
+        rebasePlaybackSegmentAnchor(ps, tickNow);
+        ps.node.playbackRate.value = newRate;
+      } else if (ps.node) {
+        ps.node.playbackRate.value = newRate;
       }
       applyPlaybackRateToDirectPart(ps);
       // When speed changes, cancel and re-schedule the pre-scheduled next
@@ -228,12 +234,17 @@ function initKnob() {
       if (ps._nextNode && !ps.paused) {
         cancelPreScheduled(ps);
         const buf = ps.buffers[ps.sequence[ps.currentSeqIdx]?.partIndex];
-        if (buf && ps.startTime) {
-          const rate = Math.max(0.01, Math.abs(pct) / 100);
-          const elapsed = AC.currentTime - ps.startTime;
-          const remaining = buf.duration - elapsed;
+        if (buf) {
+          let posInBuf;
+          if (ps.segmentAudioStartAC != null) {
+            posInBuf = ps.segmentBufferOffset + (tickNow - ps.segmentAudioStartAC) * newRate;
+            posInBuf = Math.min(Math.max(0, posInBuf), buf.duration);
+          } else {
+            posInBuf = Math.min(Math.max(0, tickNow - ps.startTime), buf.duration);
+          }
+          const remaining = buf.duration - posInBuf;
           if (remaining > 0) {
-            const newEndAC = AC.currentTime + remaining / rate;
+            const newEndAC = tickNow + remaining / newRate;
             ps._segmentEndAC = newEndAC;
             preScheduleNext(ps.fmt, ps.songIdx, newEndAC);
           }

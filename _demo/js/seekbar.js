@@ -541,6 +541,8 @@ function setupBricksDropZone(fmt, songIdx) {
 const BRICK_PREVIEW_PX_PER_SEC = 88;
 /** Fraction of half-width on each side of center (0.2 → 40% width = lens). */
 const BRICK_PREVIEW_LENS_EDGE_FRAC = 0.2;
+/** Horizontal subsamples per column: smooths lens time-mapping (reduces banding / stair-steps). */
+const BRICK_PREVIEW_AA_SAMPLES = 4;
 
 function wireBrickPreview(fmt, songIdx) {
   const key = `${fmt}_${songIdx}`;
@@ -649,21 +651,37 @@ function drawBrickPreviewCanvas(ctx, w, h, ps, centerGlobal, totalDur) {
   }
 
   for (let x = 0; x < w; x++) {
-    const u = (x + 0.5) / w;
-    let tg = brickPreviewTimeAtU(u, windowSec, tCenter, totalDur);
-    if (!isFinite(tg)) continue;
-    tg = Math.max(0, Math.min(totalDur, tg));
+    const uC = (x + 0.5) / w;
+    let tgC = brickPreviewTimeAtU(uC, windowSec, tCenter, totalDur);
+    if (!isFinite(tgC)) continue;
+    tgC = Math.max(0, Math.min(totalDur, tgC));
 
-    const seg = segmentForGlobalTime(tg);
-    if (!seg) continue;
+    const segC = segmentForGlobalTime(tgC);
+    if (!segC) continue;
 
-    const buf = ps.buffers[seg.partIndex];
-    if (!buf) continue;
-    const localT = tg - seg.start;
-    const peak = samplePeakLocal(buf, localT);
+    const bufC = ps.buffers[segC.partIndex];
+    if (!bufC) continue;
+
+    let peakSum = 0;
+    let n = 0;
+    for (let k = 0; k < BRICK_PREVIEW_AA_SAMPLES; k++) {
+      const u = (x + (k + 0.5) / BRICK_PREVIEW_AA_SAMPLES) / w;
+      let tg = brickPreviewTimeAtU(u, windowSec, tCenter, totalDur);
+      if (!isFinite(tg)) continue;
+      tg = Math.max(0, Math.min(totalDur, tg));
+      const seg = segmentForGlobalTime(tg);
+      if (!seg || seg.partIndex !== segC.partIndex) continue;
+      const buf = ps.buffers[seg.partIndex];
+      if (!buf) continue;
+      const localT = tg - seg.start;
+      peakSum += samplePeakLocal(buf, localT);
+      n++;
+    }
+    const peak =
+      n > 0 ? peakSum / n : samplePeakLocal(bufC, tgC - segC.start);
     const amp = Math.max(floorAmp, peak);
     const barH = Math.max(1, amp * halfAmpPx * 2);
-    ctx.fillStyle = partColorCss(seg.partIndex);
+    ctx.fillStyle = partColorCss(segC.partIndex);
     ctx.globalAlpha = 0.92;
     ctx.fillRect(x, cy - barH * 0.5, 1, barH);
   }
@@ -703,7 +721,7 @@ function updateBrickPreview(fmt, songIdx, ps, globalTime) {
   const wrap = canvas.parentElement;
   const w = Math.max(1, Math.floor(wrap ? wrap.clientWidth : 0) || canvas.clientWidth || 1);
   const h = Math.max(1, Math.floor(wrap ? wrap.clientHeight : 0) || canvas.clientHeight || 1);
-  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  const dpr = Math.min(3, window.devicePixelRatio || 1);
   const needResize =
     canvas._brickPreviewW !== w ||
     canvas._brickPreviewH !== h ||
@@ -715,8 +733,10 @@ function updateBrickPreview(fmt, songIdx, ps, globalTime) {
     canvas._brickPreviewH = h;
     canvas._brickPreviewDpr = dpr;
   }
-  const ctx = canvas.getContext('2d');
+  const ctx = canvas.getContext('2d', { alpha: true });
   if (!ctx) return;
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
   drawBrickPreviewCanvas(ctx, w, h, ps, globalTime, totalDur);

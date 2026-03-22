@@ -101,6 +101,8 @@ function renderPlayerArea(fmt, songIdx) {
   const song = STATE.songs[fmt][songIdx];
   if (!area || !ps) return;
 
+  area.innerHTML = '';
+
   // Parts list
   const partsList = document.createElement('div');
   partsList.className = 'parts-list';

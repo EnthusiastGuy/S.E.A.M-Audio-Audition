@@ -107,8 +107,8 @@ function renderSeekBar(fmt, songIdx) {
 
   renderLoopButtons(fmt, songIdx, totalDur);
 
-  // Seekbar interaction
-  setupSeekbarInteraction(fmt, songIdx, track, totalDur);
+  // Seekbar interaction (duration must be read live on drag — reRenderSeek does not re-wire this)
+  setupSeekbarInteraction(fmt, songIdx, track);
 
   // Drag-over on bricks row (for part list → timeline drops)
   setupBricksDropZone(fmt, songIdx);
@@ -330,11 +330,13 @@ function formatLoopLabel(val, done) {
 }
 
 // ─── SEEK INTERACTION ────────────────────────────────────────
-function setupSeekbarInteraction(fmt, songIdx, track, totalDur) {
+function setupSeekbarInteraction(fmt, songIdx, track) {
   const key = `${fmt}_${songIdx}`;
   let dragging = false;
 
   function seek(x) {
+    const ps = STATE.players[key];
+    const totalDur = (ps && getSequenceTotalDuration(ps)) || 1;
     const rect  = track.getBoundingClientRect();
     const ratio = Math.max(0, Math.min(1, (x - rect.left) / rect.width));
     const targetSecs = ratio * totalDur;

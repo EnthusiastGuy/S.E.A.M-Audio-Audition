@@ -216,7 +216,11 @@ function renderPlayerArea(fmt, songIdx) {
 
     itemWrapper.appendChild(item);
 
-    // Mini bar (shown when this part is playing directly) - BELOW the item
+    // Mini seek + waveform (shown when this part is playing directly) — below the row
+    const miniStack = document.createElement('div');
+    miniStack.className = 'part-mini-stack';
+    miniStack.id = `part-mini-stack-${key}-${f.partIndex}`;
+
     const miniBar = document.createElement('div');
     miniBar.className = 'part-mini-bar';
     miniBar.id = `mini-bar-${key}-${f.partIndex}`;
@@ -228,7 +232,31 @@ function renderPlayerArea(fmt, songIdx) {
     miniHandle.id = `mini-handle-${key}-${f.partIndex}`;
     miniBar.appendChild(miniFill);
     miniBar.appendChild(miniHandle);
-    itemWrapper.appendChild(miniBar);
+    miniStack.appendChild(miniBar);
+
+    const partPreviewWrap = document.createElement('div');
+    partPreviewWrap.className = 'brick-preview-wrap part-mini-preview-wrap';
+    partPreviewWrap.id = `part-mini-preview-wrap-${key}-${f.partIndex}`;
+    partPreviewWrap.setAttribute('role', 'img');
+    partPreviewWrap.setAttribute(
+      'aria-label',
+      'Part waveform: center shows detail around playback; left is part start, right is part end.'
+    );
+    const partPreviewCanvas = document.createElement('canvas');
+    partPreviewCanvas.className = 'brick-preview-canvas';
+    partPreviewCanvas.id = `part-mini-preview-canvas-${key}-${f.partIndex}`;
+    partPreviewCanvas.setAttribute('aria-hidden', 'true');
+    const partPreviewCenter = document.createElement('div');
+    partPreviewCenter.className = 'brick-preview-center-line';
+    const partPreviewFlash = document.createElement('div');
+    partPreviewFlash.className = 'brick-preview-flash';
+    partPreviewWrap.appendChild(partPreviewCanvas);
+    partPreviewWrap.appendChild(partPreviewCenter);
+    partPreviewWrap.appendChild(partPreviewFlash);
+    miniStack.appendChild(partPreviewWrap);
+
+    itemWrapper.appendChild(miniStack);
+    wirePartMiniPreview(fmt, songIdx, f.partIndex);
 
     // Drag from parts list to timeline
     item.addEventListener('dragstart', (e) => {

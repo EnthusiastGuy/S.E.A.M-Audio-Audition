@@ -138,6 +138,7 @@ function onDirectPartSourceEnded(ps, key, src, fmt, songIdx, partIndex, listItem
   if (ps._directNode !== src) return;
   if (ps._directLoop) {
     ps._directNode = null;
+    triggerPartMiniPreviewFlash(fmt, songIdx, partIndex);
     void playPartDirectly(fmt, songIdx, partIndex, listItem, { loop: true });
     return;
   }
@@ -154,7 +155,7 @@ function resetDirectPartUI(ps, key, partIndex, listItem) {
   const playBtn = listItem.querySelector('.part-play-btn');
   const loopBtn = listItem.querySelector('.part-play-loop-btn');
   const stopBtn = listItem.querySelector('.part-stop-btn');
-  const miniBar = document.getElementById(`mini-bar-${key}-${partIndex}`);
+  const miniStack = document.getElementById(`part-mini-stack-${key}-${partIndex}`);
   if (playBtn) {
     playBtn.innerHTML = DIRECT_PART_PLAY_ICON;
     playBtn.title = 'Play this part';
@@ -164,7 +165,7 @@ function resetDirectPartUI(ps, key, partIndex, listItem) {
     loopBtn.title = 'Play looped';
   }
   if (stopBtn) stopBtn.style.display = 'none';
-  if (miniBar) miniBar.classList.remove('visible');
+  if (miniStack) miniStack.classList.remove('visible');
   if (partItem) partItem.classList.remove('playing-part');
 }
 
@@ -184,6 +185,8 @@ function createTickFunction(fmt, songIdx, partIndex) {
     const hnd  = document.getElementById(`mini-handle-${key}-${partIndex}`);
     if (fill) fill.style.width  = `${pct}%`;
     if (hnd)  hnd.style.left = `${pct}%`;
+
+    updatePartMiniWaveformPreview(fmt, songIdx, partIndex, ps, pos);
     
     if (pos < dur) requestAnimationFrame(tickMini);
   };
@@ -234,9 +237,10 @@ async function playPartDirectly(fmt, songIdx, partIndex, listItem, opts = {}) {
   const partItem = listItem.querySelector('.part-item');
   const stopBtn = listItem.querySelector('.part-stop-btn');
   const miniBar = document.getElementById(`mini-bar-${key}-${partIndex}`);
+  const miniStack = document.getElementById(`part-mini-stack-${key}-${partIndex}`);
   syncDirectPartTransportButtons(ps, key, partIndex, listItem);
   if (stopBtn) stopBtn.style.display = '';
-  if (miniBar) miniBar.classList.add('visible');
+  if (miniStack) miniStack.classList.add('visible');
   if (partItem) partItem.classList.add('playing-part');
 
   const dur = buf.duration;

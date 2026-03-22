@@ -99,18 +99,28 @@
   width: 22px;
 }
 
-/* ---- PART MINI BAR ---- */
-.part-mini-bar {
+/* ---- PART MINI SEEK + WAVEFORM (direct play) ---- */
+.part-mini-stack {
   display: none;
+  width: 100%;
+  margin-top: 4px;
+}
+.part-mini-stack.visible {
+  display: block;
+}
+.part-mini-bar {
   height: 10px;
   background: var(--bg3);
   border-radius: 5px;
-  margin: 4px 0 0 0;
   position: relative;
   cursor: pointer;
   width: 100%;
 }
-.part-mini-bar.visible { display: block; }
+.part-mini-preview-wrap {
+  margin-top: 6px;
+  height: 44px;
+  width: 100%;
+}
 .part-mini-fill {
   height: 100%;
   background: var(--green);

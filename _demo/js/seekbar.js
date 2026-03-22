@@ -752,3 +752,79 @@ function updateBrickPreview(fmt, songIdx, ps, globalTime) {
   }
   ps._brickPreviewLastSeq = seqIdx;
 }
+
+// ─── DIRECT PART MINI WAVEFORM (same lens + draw path as timeline brick preview) ─
+
+function getDirectPartPlaybackPositionForPreview(ps) {
+  if (!ps._directNode && !ps._directPaused) return ps._directSeekOffset || 0;
+  const dur = ps._directDuration || 0;
+  if (dur <= 0) return 0;
+  if (ps._directPaused) return Math.min(ps._directSeekOffset || 0, dur);
+  const elapsed = AC.currentTime - ps._directStartAC;
+  const rate = ps._directNode.playbackRate.value;
+  return Math.min(ps._directSeekOffset + elapsed * rate, dur);
+}
+
+function wirePartMiniPreview(fmt, songIdx, partIndex) {
+  const key = `${fmt}_${songIdx}`;
+  const wrap = document.getElementById(`part-mini-preview-wrap-${key}-${partIndex}`);
+  if (!wrap || wrap.dataset.partMiniPreviewWired === '1') return;
+  wrap.dataset.partMiniPreviewWired = '1';
+  const ro = new ResizeObserver(() => {
+    const ps = STATE.players[key];
+    if (!ps || ps._directPartIndex !== partIndex || (!ps._directNode && !ps._directPaused)) return;
+    updatePartMiniWaveformPreview(fmt, songIdx, partIndex, ps, null);
+  });
+  ro.observe(wrap);
+}
+
+function triggerPartMiniPreviewFlash(fmt, songIdx, partIndex) {
+  const key = `${fmt}_${songIdx}`;
+  const flashEl = document.querySelector(`#part-mini-preview-wrap-${key}-${partIndex} .brick-preview-flash`);
+  triggerBrickPreviewFlash(flashEl);
+}
+
+/**
+ * @param {number|null} globalTime — pass null to derive position from ps (e.g. resize).
+ */
+function updatePartMiniWaveformPreview(fmt, songIdx, partIndex, ps, globalTime) {
+  const key = `${fmt}_${songIdx}`;
+  const canvas = document.getElementById(`part-mini-preview-canvas-${key}-${partIndex}`);
+  if (!canvas || !ps) return;
+  if (ps._directPartIndex !== partIndex || (!ps._directNode && !ps._directPaused)) return;
+
+  const buf = ps.buffers[partIndex];
+  if (!buf) return;
+  const totalDur = buf.duration || 0;
+  if (totalDur <= 0) return;
+
+  const t = globalTime != null ? globalTime : getDirectPartPlaybackPositionForPreview(ps);
+
+  const wrap = canvas.parentElement;
+  const w = Math.max(1, Math.floor(wrap ? wrap.clientWidth : 0) || canvas.clientWidth || 1);
+  const h = Math.max(1, Math.floor(wrap ? wrap.clientHeight : 0) || canvas.clientHeight || 1);
+  const dpr = Math.min(3, window.devicePixelRatio || 1);
+  const needResize =
+    canvas._partMiniPreviewW !== w ||
+    canvas._partMiniPreviewH !== h ||
+    canvas._partMiniPreviewDpr !== dpr;
+  if (needResize) {
+    canvas.width = Math.floor(w * dpr);
+    canvas.height = Math.floor(h * dpr);
+    canvas._partMiniPreviewW = w;
+    canvas._partMiniPreviewH = h;
+    canvas._partMiniPreviewDpr = dpr;
+  }
+  const ctx = canvas.getContext('2d', { alpha: true });
+  if (!ctx) return;
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  const fakePs = {
+    sequence: [{ partIndex }],
+    partDurations: { [partIndex]: totalDur },
+    buffers: { [partIndex]: buf },
+  };
+  drawBrickPreviewCanvas(ctx, w, h, fakePs, t, totalDur);
+}

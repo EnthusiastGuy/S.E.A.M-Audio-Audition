@@ -68,7 +68,7 @@ function renderSeekBar(fmt, songIdx) {
   previewWrap.setAttribute('role', 'img');
   previewWrap.setAttribute(
     'aria-label',
-    'Zoomed timeline waveform: center is current playback; left is past, right is future.'
+    'Timeline magnifier: center shows detail around current playback; far left is song start, far right is song end.'
   );
 
   const previewCanvas = document.createElement('canvas');
@@ -537,8 +537,10 @@ function setupBricksDropZone(fmt, songIdx) {
   });
 }
 
-// ─── BRICK PREVIEW (zoomed waveform, center = now) ─────────
+// ─── BRICK PREVIEW (magnifier lens: center = high zoom, edges = full song) ─
 const BRICK_PREVIEW_PX_PER_SEC = 88;
+/** Fraction of half-width on each side of center (0.2 → 40% width = lens). */
+const BRICK_PREVIEW_LENS_EDGE_FRAC = 0.2;
 
 function wireBrickPreview(fmt, songIdx) {
   const key = `${fmt}_${songIdx}`;
@@ -593,14 +595,35 @@ function samplePeakLocal(buf, localT) {
   return Math.max(0.07, peak);
 }
 
+/**
+ * Maps normalized x (0..1) to global time (seconds). Center band keeps the same
+ * time span as the original full-width zoom; left edge → song start, right → end.
+ */
+function brickPreviewTimeAtU(u, windowSec, tCenter, totalDur) {
+  const edge = BRICK_PREVIEW_LENS_EDGE_FRAC;
+  const u0 = 0.5 - edge;
+  const u1 = 0.5 + edge;
+  const tL = tCenter - windowSec * 0.5;
+  const tR = tCenter + windowSec * 0.5;
+
+  if (u <= u0) {
+    const end = Math.max(0, tL);
+    return (u / u0) * end;
+  }
+  if (u >= u1) {
+    const start = Math.min(totalDur, tR);
+    if (totalDur <= start) return totalDur;
+    return start + ((u - u1) / (1 - u1)) * (totalDur - start);
+  }
+  return tCenter + ((u - 0.5) / (u1 - u0)) * windowSec;
+}
+
 function drawBrickPreviewCanvas(ctx, w, h, ps, centerGlobal, totalDur) {
   const floorAmp = 0.07;
   const halfAmpPx = (h * 0.38);
   const cy = h * 0.5;
   const windowSec = Math.max(2.5, w / BRICK_PREVIEW_PX_PER_SEC);
   const tCenter = Math.max(0, Math.min(centerGlobal, totalDur));
-  const t0 = tCenter - windowSec * 0.5;
-  const t1 = tCenter + windowSec * 0.5;
 
   ctx.fillStyle = 'rgba(15, 52, 96, 0.65)';
   ctx.fillRect(0, 0, w, h);
@@ -626,8 +649,10 @@ function drawBrickPreviewCanvas(ctx, w, h, ps, centerGlobal, totalDur) {
   }
 
   for (let x = 0; x < w; x++) {
-    const tg = t0 + ((x + 0.5) / w) * (t1 - t0);
-    if (tg < 0 || tg > totalDur) continue;
+    const u = (x + 0.5) / w;
+    let tg = brickPreviewTimeAtU(u, windowSec, tCenter, totalDur);
+    if (!isFinite(tg)) continue;
+    tg = Math.max(0, Math.min(totalDur, tg));
 
     const seg = segmentForGlobalTime(tg);
     if (!seg) continue;
@@ -643,6 +668,28 @@ function drawBrickPreviewCanvas(ctx, w, h, ps, centerGlobal, totalDur) {
     ctx.fillRect(x, cy - barH * 0.5, 1, barH);
   }
   ctx.globalAlpha = 1;
+
+  const edge = BRICK_PREVIEW_LENS_EDGE_FRAC;
+  const u0 = 0.5 - edge;
+  const u1 = 0.5 + edge;
+  const g = ctx.createLinearGradient(0, 0, w, 0);
+  g.addColorStop(0, 'rgba(0, 0, 0, 0.22)');
+  g.addColorStop(u0 * 0.85, 'rgba(0, 0, 0, 0.06)');
+  g.addColorStop(u0, 'rgba(0, 0, 0, 0)');
+  g.addColorStop(u1, 'rgba(0, 0, 0, 0)');
+  g.addColorStop(u1 + (1 - u1) * 0.15, 'rgba(0, 0, 0, 0.06)');
+  g.addColorStop(1, 'rgba(0, 0, 0, 0.22)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, w, h);
+
+  const lensGrad = ctx.createLinearGradient(0, 0, w, 0);
+  lensGrad.addColorStop(Math.max(0, u0 - 0.02), 'rgba(255, 255, 255, 0)');
+  lensGrad.addColorStop(u0, 'rgba(255, 255, 255, 0.04)');
+  lensGrad.addColorStop(0.5, 'rgba(255, 255, 255, 0.07)');
+  lensGrad.addColorStop(u1, 'rgba(255, 255, 255, 0.04)');
+  lensGrad.addColorStop(Math.min(1, u1 + 0.02), 'rgba(255, 255, 255, 0)');
+  ctx.fillStyle = lensGrad;
+  ctx.fillRect(0, 0, w, h);
 }
 
 function updateBrickPreview(fmt, songIdx, ps, globalTime) {

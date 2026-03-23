@@ -80,6 +80,30 @@
   vertical-align: 0.08em;
 }
 
+.part-play-seam-btn {
+  min-width: 34px;
+  padding-left: 4px;
+  padding-right: 4px;
+  letter-spacing: -0.06em;
+  color: #e8943a;
+}
+.part-play-seam-btn:hover {
+  color: #ffb04a;
+  background: rgba(232, 148, 58, 0.14);
+}
+.part-seam-glyph {
+  color: #e8943a;
+  opacity: 1;
+}
+.part-mini-stack.seam-ff-phase .part-mini-fill {
+  background: #e8943a;
+  transition: width 0.04s linear;
+}
+.part-mini-stack.seam-ff-phase .part-mini-handle {
+  background: #e8943a;
+  box-shadow: 0 0 6px rgba(232, 148, 58, 0.55);
+}
+
 .timeline-place-btn {
   min-width: 30px;
   padding: 0 6px;

@@ -24,6 +24,8 @@ const STATE = {
   speedPercent: 100,
   /** Parts longer than this (seconds) skip waveform UI; 0 = no limit. Default 20. */
   waveformMaxPartDurationSec: 20,
+  /** How much of each end of a part to play in seam preview (ms). Default 2000. */
+  seamPreviewMs: 2000,
   encoding: {
     mp3: {
       bitrateKbps: 192,
@@ -105,6 +107,7 @@ function saveSession() {
       openSheets: Array.from(openPartSheets),
       encoding: STATE.encoding,
       waveformMaxPartDurationSec: STATE.waveformMaxPartDurationSec,
+      seamPreviewMs: STATE.seamPreviewMs,
     };
     for (const [key, ps] of Object.entries(STATE.players)) {
       data.loopSettings[key] = ps.loopSettings;
@@ -153,6 +156,13 @@ function loadSession() {
       parsed.waveformMaxPartDurationSec = 20;
     } else {
       parsed.waveformMaxPartDurationSec = Math.min(86400, Math.max(0, wn));
+    }
+    const sp = parsed.seamPreviewMs;
+    const spn = Number(sp);
+    if (sp === undefined || sp === null || !Number.isFinite(spn)) {
+      parsed.seamPreviewMs = 2000;
+    } else {
+      parsed.seamPreviewMs = Math.min(60000, Math.max(50, Math.round(spn)));
     }
     return parsed;
   } catch(e) { return null; }

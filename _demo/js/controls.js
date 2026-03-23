@@ -351,6 +351,7 @@ function initEncodingSettings() {
   const oggRate = document.getElementById('setting-ogg-samplerate');
   const oggChannels = document.getElementById('setting-ogg-channels');
   const waveformMaxSec = document.getElementById('setting-waveform-max-sec');
+  const seamPreviewMs = document.getElementById('setting-seam-preview-ms');
 
   function applyStateToControls() {
     const defaults = getDefaultEncodingSettings();
@@ -366,6 +367,10 @@ function initEncodingSettings() {
     if (waveformMaxSec) {
       const wm = Number(STATE.waveformMaxPartDurationSec);
       waveformMaxSec.value = String(Number.isFinite(wm) ? wm : 20);
+    }
+    if (seamPreviewMs) {
+      const sm = Number(STATE.seamPreviewMs);
+      seamPreviewMs.value = String(Number.isFinite(sm) ? sm : 2000);
     }
   }
 
@@ -397,6 +402,12 @@ function initEncodingSettings() {
         refreshWaveformAfterMaxDurationChange();
       }
     }
+    if (seamPreviewMs) {
+      let sv = parseInt(seamPreviewMs.value, 10);
+      if (!Number.isFinite(sv)) sv = 2000;
+      STATE.seamPreviewMs = Math.min(60000, Math.max(50, sv));
+      seamPreviewMs.value = String(STATE.seamPreviewMs);
+    }
     saveSession();
   }
 
@@ -421,6 +432,9 @@ function initEncodingSettings() {
   if (waveformMaxSec) {
     waveformMaxSec.addEventListener('change', saveControlsToState);
   }
+  if (seamPreviewMs) {
+    seamPreviewMs.addEventListener('change', saveControlsToState);
+  }
   oggQuality.addEventListener('input', () => {
     oggQualityLabel.value = Number(oggQuality.value).toFixed(2);
     saveControlsToState();
@@ -429,6 +443,7 @@ function initEncodingSettings() {
   btnReset.addEventListener('click', () => {
     STATE.encoding = getDefaultEncodingSettings();
     STATE.waveformMaxPartDurationSec = 20;
+    STATE.seamPreviewMs = 2000;
     applyStateToControls();
     saveSession();
     if (typeof refreshWaveformAfterMaxDurationChange === 'function') {

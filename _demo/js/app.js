@@ -1009,6 +1009,12 @@ async function discoverSongs(rootHandle) {
         STATE.encoding = saved.encoding;
       }
       STATE.waveformMaxPartDurationSec = saved.waveformMaxPartDurationSec ?? 20;
+      const sp = saved.seamPreviewMs;
+      const spn = Number(sp);
+      STATE.seamPreviewMs =
+        sp === undefined || sp === null || !Number.isFinite(spn)
+          ? 2000
+          : Math.min(60000, Math.max(50, Math.round(spn)));
 
       if (saved.order && saved.order.wav) {
         const validOrder = saved.order.wav.filter(i => STATE.songs.wav[i] !== undefined);

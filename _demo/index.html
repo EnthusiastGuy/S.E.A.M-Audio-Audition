@@ -181,6 +181,11 @@
         <input type="number" id="setting-waveform-max-sec" min="0" max="86400" step="1" inputmode="numeric" />
       </label>
       <p class="settings-hint">Parts longer than this skip waveform drawing on timeline bricks, the seek-bar preview, and part mini views. Lower values reduce CPU use. <strong>0</strong> means no limit (always draw waveforms).</p>
+      <label class="settings-row">
+        <span>Seam preview length (ms)</span>
+        <input type="number" id="setting-seam-preview-ms" min="50" max="60000" step="50" inputmode="numeric" />
+      </label>
+      <p class="settings-hint">How much audio to play at the <strong>start</strong> and <strong>end</strong> of a part when using <strong>Seam preview</strong> (the orange transport control). The middle is fast-forwarded so you can hear how the loop joins. Default <strong>2000</strong> ms.</p>
     </section>
 
     <div class="encoder-grid">

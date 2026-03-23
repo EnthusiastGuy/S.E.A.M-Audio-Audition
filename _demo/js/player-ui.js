@@ -181,6 +181,18 @@ function renderPlayerArea(fmt, songIdx) {
     };
     actions.appendChild(lpBtn);
 
+    const seamBtn = document.createElement('button');
+    seamBtn.className = 't-btn play btn-sm part-play-seam-btn';
+    seamBtn.title = 'Seam preview';
+    seamBtn.setAttribute('aria-label', 'Seam preview — loop head and tail with a fast skip');
+    seamBtn.innerHTML =
+      '&#9654;<span class="part-loop-glyph part-seam-glyph" aria-hidden="true">&#8635;</span>';
+    seamBtn.onclick = (e) => {
+      e.stopPropagation();
+      handleDirectPartSeamClick(fmt, songIdx, f.partIndex, itemWrapper);
+    };
+    actions.appendChild(seamBtn);
+
     // Stop part button
     const sBtn = document.createElement('button');
     sBtn.className = 't-btn stop btn-sm part-stop-btn';

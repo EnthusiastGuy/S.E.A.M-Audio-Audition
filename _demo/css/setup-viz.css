@@ -35,15 +35,13 @@ body.welcome-idle-cinema #setup-panel .setup-card {
 }
 
 /* Keep the performance warning readable while it is actively expanded.
-   If the cursor/focus leaves it, normal dim/cinema behavior resumes. */
-body.welcome-idle-dim #setup-panel .setup-card:has(.setup-performance-note:hover),
-body.welcome-idle-dim #setup-panel .setup-card:has(.setup-performance-note:focus-within) {
+   If the user collapses it, normal dim/cinema behavior resumes. */
+body.welcome-idle-dim #setup-panel .setup-card:has(.setup-performance-note-toggle[aria-expanded="true"]) {
   opacity: 0.58;
   transition: opacity 0.25s ease-out;
 }
 
-body.welcome-idle-cinema #setup-panel .setup-card:has(.setup-performance-note:hover),
-body.welcome-idle-cinema #setup-panel .setup-card:has(.setup-performance-note:focus-within) {
+body.welcome-idle-cinema #setup-panel .setup-card:has(.setup-performance-note-toggle[aria-expanded="true"]) {
   opacity: 0.4;
   pointer-events: auto;
   transition: opacity 0.25s ease-out;

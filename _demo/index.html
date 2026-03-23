@@ -58,12 +58,12 @@
     <div class="setup-icon">&#127925;</div>
     <h2>Select Sample Pack</h2>
     <p>Click the button below and browse to the <strong>root directory</strong> of your sample pack - the folder that contains your <strong>song subfolders</strong> (either directly, or via a <code>wav</code> subdirectory).<br><br>No files leave your device; all processing happens in-browser.</p>
-    <div class="setup-performance-note" tabindex="0" role="note" aria-label="Performance guidance. Hover or focus for details.">
-      <div class="setup-performance-note-head">
+    <div class="setup-performance-note" id="setup-performance-note">
+      <button type="button" class="setup-performance-note-toggle" id="setup-performance-note-toggle" aria-expanded="false" aria-controls="setup-performance-note-details" aria-label="Performance tips. Click to show or hide guidance.">
         <span class="setup-performance-note-icon" aria-hidden="true">&#9888;</span>
-        <span class="setup-performance-note-text">Performance tips - hover for quick guidance</span>
-      </div>
-      <div class="setup-performance-note-details">
+        <span class="setup-performance-note-text">Performance tips — click for quick guidance</span>
+      </button>
+      <div class="setup-performance-note-details" id="setup-performance-note-details">
         <p><strong>Folder load time:</strong> Scanning and reading durations can take time with large libraries. Bigger folders and more files mean longer startup.</p>
         <p><strong>Waveform rendering:</strong> Long clips are expensive to draw. You can tune the waveform limit in <strong>Settings</strong> with <em>Max clip length for waveforms (seconds)</em> to match your hardware.</p>
         <p><strong>Large exports:</strong> MP3, OGG, and WAV exports of long timelines can pause the tab while encoding. If your browser asks to wait, choose <strong>Wait</strong> so export can finish.</p>

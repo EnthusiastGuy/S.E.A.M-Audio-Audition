@@ -688,3 +688,12 @@
 
   armIdleTimer();
 })();
+
+(function initSetupPerformanceNoteToggle() {
+  const btn = document.getElementById('setup-performance-note-toggle');
+  if (!btn) return;
+  btn.addEventListener('click', () => {
+    const open = btn.getAttribute('aria-expanded') === 'true';
+    btn.setAttribute('aria-expanded', open ? 'false' : 'true');
+  });
+})();

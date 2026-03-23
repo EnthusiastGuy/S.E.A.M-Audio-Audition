@@ -302,16 +302,21 @@ function initCrossfade() {
 
 // ─── HELP MODAL ──────────────────────────────────────────────
 function initHelp() {
-  document.getElementById('btn-help').addEventListener('click', () => {
-    document.getElementById('help-modal').classList.remove('hidden');
+  const helpModal = document.getElementById('help-modal');
+  const btnHelp = document.getElementById('btn-help');
+  const helpClose = document.getElementById('help-close');
+  if (!helpModal || !btnHelp || !helpClose) return;
+
+  btnHelp.addEventListener('click', () => {
+    helpModal.classList.remove('hidden');
   });
-  document.getElementById('help-close').addEventListener('click', () => {
-    document.getElementById('help-modal').classList.add('hidden');
+
+  helpClose.addEventListener('click', () => {
+    helpModal.classList.add('hidden');
   });
-  document.getElementById('help-modal').addEventListener('click', (e) => {
-    if (e.target === document.getElementById('help-modal')) {
-      document.getElementById('help-modal').classList.add('hidden');
-    }
+
+  helpModal.addEventListener('click', (e) => {
+    if (e.target === helpModal) helpModal.classList.add('hidden');
   });
 }
 

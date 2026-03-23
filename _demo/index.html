@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="referrer" content="strict-origin-when-cross-origin" />
 <title>S.E.A.M — Audio Audition</title>
 <link rel="icon" href="img/icon.png" type="image/png" />
 
@@ -206,11 +207,13 @@
 </div>
 
 <!-- HELP MODAL -->
-<div class="modal-overlay hidden" id="help-modal">
-  <div class="modal-box">
-    <button class="modal-close" id="help-close">&times;</button>
-    <h2>&#8505; S.E.A.M — Help &amp; Reference</h2>
+<div class="modal-overlay hidden" id="help-modal" role="dialog" aria-modal="true" aria-labelledby="help-modal-title">
+  <div class="modal-box help-modal-box">
+    <button type="button" class="modal-close" id="help-close" aria-label="Close help">&times;</button>
+    <h2 id="help-modal-title">&#8505; S.E.A.M — Help &amp; Reference</h2>
 
+    <div class="help-modal-body">
+    <div class="help-modal-text">
     <h3>What this app does</h3>
     <p><strong>S.E.A.M</strong> (Segmented Evaluation &amp; Audition Module) is a browser-based player for <strong>dynamic / branching music</strong> stored as WAV segments. It builds a timeline from your filenames, plays transitions in order, supports per-part looping and crossfades between tracks, and can <strong>export</strong> stitched mixes or single files — all on your machine.</p>
 
@@ -309,6 +312,26 @@
       <li><strong>Segment with branches</strong> — <code>Song Name N -&gt; A, B, C.wav</code> or the same with a single hyphen before the arrow: <code>Song Name N - A, B, C.wav</code>. <em>N</em> is this part’s index; <em>A, B, C</em> are allowed next part indices.</li>
       <li><strong>Terminal segment</strong> — <code>Song Name N.wav</code> (number only, no arrow list) if there are no further branches.</li>
     </ul>
+    </div>
+
+    <aside class="help-modal-videos" aria-label="Video tutorials">
+      <h3 class="help-modal-videos-title">Video tutorials</h3>
+      <div class="help-video-embed">
+        <video
+          id="help-local-video"
+          controls
+          preload="metadata"
+          playsinline
+        >
+          <source src="video/TestVideo.mkv" type="video/x-matroska" />
+        </video>
+      </div>
+      <p class="help-video-fallback">
+        If the browser cannot play this MKV, download:
+        <a href="video/TestVideo.mkv" download>TestVideo.mkv</a>.
+      </p>
+    </aside>
+    </div>
   </div>
 </div>
 

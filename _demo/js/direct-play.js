@@ -5,6 +5,18 @@
 const SEAM_SCHEDULE_AHEAD = 0.005;
 /** Target max wall-clock duration (s) for the fast-forward hop between head and tail. */
 const SEAM_FF_TARGET_WALL_SEC = 0.85;
+/** Gain during fast-forward (reduces pitch-shift chirp annoyance). Head/tail stay at unity. */
+const SEAM_FF_GAIN = 0.2;
+
+function getDirectPartUnmutedGain(ps) {
+  return ps._directSeamSkip && ps._directSeamPhase === 'ff' ? SEAM_FF_GAIN : 1;
+}
+
+function scheduleSeamPhaseGain(ps, linearGain, atAC) {
+  const t = AC.currentTime;
+  ps.gainNode.gain.cancelScheduledValues(t);
+  ps.gainNode.gain.setValueAtTime(linearGain, Math.max(atAC, t));
+}
 
 const DIRECT_PART_PLAY_ICON = '&#9654;';
 const DIRECT_PART_PAUSE_ICON = '&#9646;&#9646;';
@@ -42,6 +54,7 @@ function scheduleSeamHead(fmt, songIdx, partIndex, listItem, ps, buf, dur, edgeS
   ps._directNode = src;
   ps._directSeamPhase = 'head';
   setSeamFfMiniBarClass(ps, fmt, songIdx, partIndex, false);
+  scheduleSeamPhaseGain(ps, 1, startAt);
 
   const headWall = edgeSec / audRate;
   src.start(startAt, 0);
@@ -75,6 +88,7 @@ function scheduleSeamFF(fmt, songIdx, partIndex, listItem, ps, buf, dur, edgeSec
   ps._directNode = src;
   ps._directSeamPhase = 'ff';
   setSeamFfMiniBarClass(ps, fmt, songIdx, partIndex, true);
+  scheduleSeamPhaseGain(ps, SEAM_FF_GAIN, startAt);
 
   const wallFF = rem / ffRate;
   src.start(startAt, edgeSec);
@@ -102,6 +116,7 @@ function scheduleSeamTail(fmt, songIdx, partIndex, listItem, ps, buf, dur, edgeS
   ps._directNode = src;
   ps._directSeamPhase = 'tail';
   setSeamFfMiniBarClass(ps, fmt, songIdx, partIndex, false);
+  scheduleSeamPhaseGain(ps, 1, startAt);
 
   const tailWall = edgeSec / audRate;
   const tailOffset = Math.max(0, dur - edgeSec);
@@ -281,6 +296,11 @@ function stopDirectPart(ps) {
   if (ps._directPartIndex != null) {
     setSeamFfMiniBarClass(ps, ps.fmt, ps.songIdx, ps._directPartIndex, false);
   }
+  try {
+    const t = AC.currentTime;
+    ps.gainNode.gain.cancelScheduledValues(t);
+    ps.gainNode.gain.setValueAtTime(1, t);
+  } catch (e) {}
   if (ps._directNode) {
     try {
       ps._directNode.stop();
@@ -301,7 +321,7 @@ function pauseDirectPart(ps) {
 function resumeDirectPart(ps) {
   if (ps._directNode && ps._directPaused) {
     ps._directPaused = false;
-    ps.gainNode.gain.setValueAtTime(1, AC.currentTime);
+    ps.gainNode.gain.setValueAtTime(getDirectPartUnmutedGain(ps), AC.currentTime);
   }
 }
 

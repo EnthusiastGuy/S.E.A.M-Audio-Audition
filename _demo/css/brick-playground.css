@@ -1,0 +1,291 @@
+/* =========================================================
+   S.E.A.M — Brick Playground (Lego timeline)
+   ========================================================= */
+
+#playlist-view.hidden {
+  display: none !important;
+}
+
+.brick-playground {
+  display: none;
+  flex-direction: column;
+  min-height: min(70vh, calc(100vh - 140px));
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: linear-gradient(165deg, rgba(22, 33, 62, 0.55), rgba(15, 26, 48, 0.85));
+  overflow: hidden;
+}
+
+.brick-playground.active {
+  display: flex;
+}
+
+.main-content--playground {
+  overflow: hidden;
+}
+
+.bp-header {
+  flex-shrink: 0;
+  padding: 8px 12px;
+  font-size: 11px;
+  color: var(--text3);
+  border-bottom: 1px solid rgba(45, 65, 112, 0.45);
+  font-family: 'Space Mono', monospace;
+}
+
+.bp-viewport {
+  flex: 1;
+  min-height: 320px;
+  cursor: grab;
+  overflow: hidden;
+  touch-action: none;
+  outline: none;
+}
+
+.bp-viewport:active {
+  cursor: grabbing;
+}
+
+.bp-world {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 2000px;
+  min-width: 2400px;
+  will-change: transform;
+}
+
+.bp-bricks-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
+
+.bp-hud-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.bp-brick {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 1;
+  cursor: grab;
+  border-radius: var(--radius-sm);
+  box-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  pointer-events: auto;
+  user-select: none;
+}
+
+.bp-brick:active {
+  cursor: grabbing;
+}
+
+.bp-brick-inner {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  padding: 4px 6px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  overflow: hidden;
+}
+
+.bp-brick-song {
+  font-size: 10px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.95);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.15;
+}
+
+.bp-brick-part {
+  font-size: 9px;
+  font-family: 'Space Mono', monospace;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+/* Sidebar view toggle */
+.view-mode-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+.view-mode-toggle {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.view-mode-btn {
+  width: 100%;
+  padding: 8px 6px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--card2);
+  color: var(--text2);
+  font-family: 'Space Mono', monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.view-mode-btn:hover {
+  color: var(--text);
+  border-color: rgba(78, 205, 196, 0.45);
+}
+
+.view-mode-btn.active {
+  background: linear-gradient(135deg, rgba(233, 69, 96, 0.35), rgba(78, 205, 196, 0.2));
+  border-color: rgba(233, 69, 96, 0.55);
+  color: #fff;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06) inset;
+}
+
+/* Cluster chrome */
+.bp-cluster-ui {
+  position: absolute;
+  pointer-events: none;
+  z-index: 3;
+}
+
+.bp-cluster-toolbar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  pointer-events: auto;
+}
+
+.bp-cluster-toolbar-left {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.bp-mini-btn {
+  padding: 4px 10px;
+  border-radius: 5px;
+  border: 1px solid rgba(77, 150, 255, 0.35);
+  background: rgba(30, 42, 69, 0.92);
+  color: var(--text2);
+  font-family: 'Space Mono', monospace;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.08s ease, border-color 0.15s, color 0.15s;
+}
+
+.bp-mini-btn:hover {
+  color: var(--text);
+  border-color: rgba(168, 218, 220, 0.55);
+}
+
+.bp-mini-btn:active {
+  transform: scale(0.97);
+}
+
+.bp-cluster-outline {
+  position: absolute;
+  left: 0;
+  border: 2px solid rgba(168, 218, 220, 0.55);
+  border-radius: 10px;
+  box-shadow:
+    0 0 0 3px rgba(78, 205, 196, 0.12),
+    0 0 24px rgba(78, 205, 196, 0.08);
+  pointer-events: none;
+  animation: bp-outline-pop 0.45s ease;
+}
+
+@keyframes bp-outline-pop {
+  0% {
+    box-shadow: 0 0 0 0 rgba(78, 205, 196, 0.35);
+    border-color: rgba(233, 69, 96, 0.7);
+  }
+  100% {
+    box-shadow:
+      0 0 0 3px rgba(78, 205, 196, 0.12),
+      0 0 24px rgba(78, 205, 196, 0.08);
+    border-color: rgba(168, 218, 220, 0.55);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bp-cluster-outline {
+    animation: none;
+  }
+}
+
+.bp-cluster-seek {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 22px;
+  pointer-events: auto;
+}
+
+.bp-seek-track {
+  position: relative;
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(15, 26, 48, 0.9);
+  border: 1px solid rgba(45, 65, 112, 0.65);
+  cursor: pointer;
+}
+
+.bp-seek-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 0%;
+  border-radius: 2px;
+  background: linear-gradient(90deg, rgba(233, 69, 96, 0.55), rgba(78, 205, 196, 0.65));
+  pointer-events: none;
+}
+
+.bp-seek-handle {
+  position: absolute;
+  top: 50%;
+  left: 0%;
+  width: 10px;
+  height: 14px;
+  margin: -7px 0 0 -5px;
+  border-radius: 3px;
+  background: linear-gradient(180deg, #eaf0fb, #8fa3c8);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+}
+
+.bp-cluster-footer {
+  position: absolute;
+  right: 0;
+  display: flex;
+  justify-content: flex-end;
+  pointer-events: auto;
+}
+
+.bp-btn-dl,
+.bp-dl {
+  font-size: 10px !important;
+}

@@ -1021,6 +1021,17 @@ async function discoverSongs(rootHandle) {
         STATE.songs.wav.forEach((_,i) => { if (!validOrder.includes(i)) validOrder.push(i); });
         STATE.order.wav = validOrder;
       }
+
+      if (saved.playground && typeof saved.playground === 'object') {
+        const pg = saved.playground;
+        STATE.playground = {
+          mode: !!pg.mode,
+          zoom: Number.isFinite(Number(pg.zoom)) ? Math.min(4, Math.max(0.12, Number(pg.zoom))) : 1,
+          panX: Number.isFinite(Number(pg.panX)) ? Number(pg.panX) : 0,
+          panY: Number.isFinite(Number(pg.panY)) ? Number(pg.panY) : 0,
+          bricks: Array.isArray(pg.bricks) ? pg.bricks : [],
+        };
+      }
     }
 
     // Switch to main app

@@ -20,6 +20,7 @@
 <link rel="stylesheet" href="css/controls.css" />
 <link rel="stylesheet" href="css/modal.css" />
 <link rel="stylesheet" href="css/utilities.css" />
+<link rel="stylesheet" href="css/brick-playground.css" />
 </head>
 <body>
 
@@ -95,6 +96,13 @@
       <div class="knob-label">PLAYBACK SPEED</div>
       <canvas class="knob-canvas" id="speed-knob" width="80" height="80"></canvas>
       <div class="knob-val" id="speed-val">100%</div>
+    </div>
+    <div class="view-mode-group" role="group" aria-label="Main view">
+      <div class="knob-label">VIEW</div>
+      <div class="view-mode-toggle">
+        <button type="button" id="btn-view-playlist" class="view-mode-btn active" title="Song playlist">Playlist</button>
+        <button type="button" id="btn-view-playground" class="view-mode-btn" title="Brick playground — snap parts from any song">Playground</button>
+      </div>
     </div>
   </div>
 
@@ -438,6 +446,7 @@
 <script src="js/header-viz.js"></script>
 <script src="js/file-parser.js"></script>
 <script src="js/playback.js"></script>
+<script src="js/brick-playground.js"></script>
 <script src="js/seekbar.js"></script>
 <script src="js/direct-play.js"></script>
 <script src="js/player-ui.js"></script>

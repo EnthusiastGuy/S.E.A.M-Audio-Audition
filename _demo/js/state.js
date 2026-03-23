@@ -39,6 +39,14 @@ const STATE = {
     },
   },
   players: {},
+  /** Brick playground (per folder via session key): view mode, pan/zoom, brick positions. */
+  playground: {
+    mode: false,
+    zoom: 1,
+    panX: 0,
+    panY: 0,
+    bricks: [],
+  },
 };
 
 // Part sheets currently open
@@ -108,6 +116,7 @@ function saveSession() {
       encoding: STATE.encoding,
       waveformMaxPartDurationSec: STATE.waveformMaxPartDurationSec,
       seamPreviewMs: STATE.seamPreviewMs,
+      playground: STATE.playground,
     };
     for (const [key, ps] of Object.entries(STATE.players)) {
       data.loopSettings[key] = ps.loopSettings;
@@ -163,6 +172,16 @@ function loadSession() {
       parsed.seamPreviewMs = 2000;
     } else {
       parsed.seamPreviewMs = Math.min(60000, Math.max(50, Math.round(spn)));
+    }
+    const pg = parsed.playground;
+    if (pg && typeof pg === 'object') {
+      parsed.playground = {
+        mode: !!pg.mode,
+        zoom: Number.isFinite(Number(pg.zoom)) ? Math.min(4, Math.max(0.12, Number(pg.zoom))) : 1,
+        panX: Number.isFinite(Number(pg.panX)) ? Number(pg.panX) : 0,
+        panY: Number.isFinite(Number(pg.panY)) ? Number(pg.panY) : 0,
+        bricks: Array.isArray(pg.bricks) ? pg.bricks : [],
+      };
     }
     return parsed;
   } catch(e) { return null; }

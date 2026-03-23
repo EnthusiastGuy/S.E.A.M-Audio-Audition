@@ -6,7 +6,11 @@
 function buildUI(savedSession) {
   const content = document.getElementById('tabs-content');
   content.innerHTML = '';
-  buildPlaylist('wav', content);
+  const playlistView = document.createElement('div');
+  playlistView.id = 'playlist-view';
+  content.appendChild(playlistView);
+  buildPlaylist('wav', playlistView);
+  initBrickPlayground(content);
   updateTotals();
 }
 

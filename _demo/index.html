@@ -325,7 +325,8 @@
     <h3>Part sheet &amp; timeline editor</h3>
     <p>With the part sheet open you see:</p>
     <ul>
-      <li><strong>File list</strong> — every WAV for that song (full mix and segments), each with play/stop, optional mini progress bar for solo audition, and per-file download format.</li>
+      <li><strong>File list</strong> — every WAV for that song (full mix and segments), each with <strong>play once</strong>, <strong>play looped</strong> (play + loop icon), <strong>Seam preview</strong> (orange play + loop), <strong>stop</strong>, optional mini seek bar and waveform when a row is soloing, and per-file download format.</li>
+      <li><strong>Seam preview</strong> — for auditioning loop seams: plays the <em>beginning</em> and <em>end</em> of the file (each for a duration you set in Settings), and fast-forwards the middle so you hear the join repeat. During the fast-forward hop, volume is lowered so the sped-up audio is less harsh. The mini bar highlights in orange for that hop; seeking on the mini bar is disabled while Seam preview is active.</li>
       <li><strong>Timeline</strong> — the same bricks as the main seek bar; <strong>drag bricks</strong> horizontally to reorder; <strong>drag from the list onto the brick row</strong> to insert a segment between others.</li>
       <li><strong>Hover</strong> a list entry to highlight matching bricks (and the reverse).</li>
     </ul>
@@ -339,7 +340,7 @@
     </ul>
 
     <h3>Settings</h3>
-    <p>Open the <strong>gear</strong> (<code>&#9881;</code>) in the header for <strong>MP3</strong> (bitrate, sample rate, channels), <strong>OGG Vorbis</strong> (quality, sample rate, channels), and <strong>timeline performance</strong> (max clip length for drawing waveforms). Settings are saved <strong>per project</strong> (same folder name) with the rest of the session. <strong>Reset defaults</strong> restores built-in starting values.</p>
+    <p>Open the <strong>gear</strong> (<code>&#9881;</code>) in the header for <strong>MP3</strong> (bitrate, sample rate, channels), <strong>OGG Vorbis</strong> (quality, sample rate, channels), <strong>timeline performance</strong> (max clip length for drawing waveforms), and <strong>Seam preview length</strong> (milliseconds played at the start and end of a part in Seam preview; default 2000&nbsp;ms). Settings are saved <strong>per project</strong> (same folder name) with the rest of the session. <strong>Reset defaults</strong> restores built-in starting values.</p>
 
     <h3>Playback speed</h3>
     <p>The <strong>Playback speed</strong> knob applies to all active audio. Clockwise increases speed; counter-clockwise slows, stops, or reverses.</p>
@@ -354,7 +355,7 @@
     <p>Values snap in <strong>5%</strong> steps with a short click sound. You cannot jump straight from max forward to max reverse — turn through the north side of the dial.</p>
 
     <h3>Session persistence</h3>
-    <p>For each root folder, the app saves to <code>localStorage</code>: playlist order, crossfade, speed, per-song <strong>timeline edits</strong>, <strong>loop</strong> choices, <strong>export format</strong> preferences, <strong>encoding</strong> and <strong>waveform performance</strong> options, and which <strong>part sheets</strong> were left open. Reload the page and reopen the same folder to continue where you left off.</p>
+    <p>For each root folder, the app saves to <code>localStorage</code>: playlist order, crossfade, speed, per-song <strong>timeline edits</strong>, <strong>loop</strong> choices, <strong>export format</strong> preferences, <strong>encoding</strong>, <strong>waveform performance</strong> and <strong>seam preview length</strong>, and which <strong>part sheets</strong> were left open. Reload the page and reopen the same folder to continue where you left off.</p>
 
     <h3>File naming convention</h3>
     <ul>

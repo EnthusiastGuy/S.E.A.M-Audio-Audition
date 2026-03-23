@@ -350,6 +350,7 @@ function initEncodingSettings() {
   const oggQualityLabel = document.getElementById('setting-ogg-quality-label');
   const oggRate = document.getElementById('setting-ogg-samplerate');
   const oggChannels = document.getElementById('setting-ogg-channels');
+  const waveformMaxSec = document.getElementById('setting-waveform-max-sec');
 
   function applyStateToControls() {
     const defaults = getDefaultEncodingSettings();
@@ -362,6 +363,10 @@ function initEncodingSettings() {
     oggQualityLabel.value = Number(oggQuality.value).toFixed(2);
     oggRate.value = enc.ogg?.sampleRateMode ?? defaults.ogg.sampleRateMode;
     oggChannels.value = enc.ogg?.channels ?? defaults.ogg.channels;
+    if (waveformMaxSec) {
+      const wm = Number(STATE.waveformMaxPartDurationSec);
+      waveformMaxSec.value = String(Number.isFinite(wm) ? wm : 20);
+    }
   }
 
   function saveControlsToState() {
@@ -378,6 +383,20 @@ function initEncodingSettings() {
       },
     };
     oggQualityLabel.value = STATE.encoding.ogg.quality.toFixed(2);
+    if (waveformMaxSec) {
+      let wv = parseInt(waveformMaxSec.value, 10);
+      if (!Number.isFinite(wv)) wv = 20;
+      const prev = STATE.waveformMaxPartDurationSec;
+      const next = Math.min(86400, Math.max(0, wv));
+      STATE.waveformMaxPartDurationSec = next;
+      waveformMaxSec.value = String(STATE.waveformMaxPartDurationSec);
+      if (
+        prev !== next &&
+        typeof refreshWaveformAfterMaxDurationChange === 'function'
+      ) {
+        refreshWaveformAfterMaxDurationChange();
+      }
+    }
     saveSession();
   }
 
@@ -399,6 +418,9 @@ function initEncodingSettings() {
   [mp3Bitrate, mp3Rate, mp3Channels, oggRate, oggChannels].forEach((el) => {
     el.addEventListener('change', saveControlsToState);
   });
+  if (waveformMaxSec) {
+    waveformMaxSec.addEventListener('change', saveControlsToState);
+  }
   oggQuality.addEventListener('input', () => {
     oggQualityLabel.value = Number(oggQuality.value).toFixed(2);
     saveControlsToState();
@@ -406,8 +428,12 @@ function initEncodingSettings() {
 
   btnReset.addEventListener('click', () => {
     STATE.encoding = getDefaultEncodingSettings();
+    STATE.waveformMaxPartDurationSec = 20;
     applyStateToControls();
     saveSession();
+    if (typeof refreshWaveformAfterMaxDurationChange === 'function') {
+      refreshWaveformAfterMaxDurationChange();
+    }
   });
 
   applyStateToControls();

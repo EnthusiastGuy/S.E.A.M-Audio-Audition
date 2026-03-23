@@ -32,7 +32,7 @@
     </div>
     <div class="header-actions">
       <select class="folder-switcher" id="folder-switcher" style="display:none;" aria-label="Change folder"></select>
-      <button class="btn btn-sm btn-icon" id="btn-settings" title="Encoding settings" aria-label="Encoding settings">&#9881;</button>
+      <button class="btn btn-sm btn-icon" id="btn-settings" title="Settings" aria-label="Settings">&#9881;</button>
       <button class="btn btn-sm" id="btn-help">&#8505; Help</button>
       <div class="more-btn-wrap">
         <button class="btn btn-sm" id="btn-more" aria-label="More news and promotions" aria-haspopup="dialog" aria-controls="more-modal">More</button>
@@ -145,8 +145,17 @@
 <div class="modal-overlay hidden" id="settings-modal">
   <div class="modal-box settings-modal-box">
     <button class="modal-close" id="settings-close">&times;</button>
-    <h2>&#9881; Encoding Settings</h2>
-    <p>Configure MP3 and OGG export behavior. These settings are saved per project and restored automatically.</p>
+    <h2>&#9881; Settings</h2>
+    <p>Export and performance options are saved per project and restored automatically.</p>
+
+    <section class="encoder-card settings-performance-card">
+      <h3>Timeline &amp; performance</h3>
+      <label class="settings-row">
+        <span>Max clip length for waveforms (seconds)</span>
+        <input type="number" id="setting-waveform-max-sec" min="0" max="86400" step="1" inputmode="numeric" />
+      </label>
+      <p class="settings-hint">Parts longer than this skip waveform drawing on timeline bricks, the seek-bar preview, and part mini views. Lower values reduce CPU use. <strong>0</strong> means no limit (always draw waveforms).</p>
+    </section>
 
     <div class="encoder-grid">
       <section class="encoder-card">
@@ -298,8 +307,8 @@
       <li><strong>60-minute limit</strong> — if the stitched timeline would exceed one hour, preview rendering is blocked and you’ll see a message; shorten the arrangement and try again.</li>
     </ul>
 
-    <h3>Encoding settings</h3>
-    <p>Open the <strong>gear</strong> (<code>&#9881;</code>) in the header to set <strong>MP3</strong> (bitrate, sample rate, channels) and <strong>OGG Vorbis</strong> (quality, sample rate, channels). Settings are saved <strong>per project</strong> (same folder name) with the rest of the session. <strong>Reset defaults</strong> restores built-in starting values.</p>
+    <h3>Settings</h3>
+    <p>Open the <strong>gear</strong> (<code>&#9881;</code>) in the header for <strong>MP3</strong> (bitrate, sample rate, channels), <strong>OGG Vorbis</strong> (quality, sample rate, channels), and <strong>timeline performance</strong> (max clip length for drawing waveforms). Settings are saved <strong>per project</strong> (same folder name) with the rest of the session. <strong>Reset defaults</strong> restores built-in starting values.</p>
 
     <h3>Playback speed</h3>
     <p>The <strong>Playback speed</strong> knob applies to all active audio. Clockwise increases speed; counter-clockwise slows, stops, or reverses.</p>
@@ -314,7 +323,7 @@
     <p>Values snap in <strong>5%</strong> steps with a short click sound. You cannot jump straight from max forward to max reverse — turn through the north side of the dial.</p>
 
     <h3>Session persistence</h3>
-    <p>For each root folder, the app saves to <code>localStorage</code>: playlist order, crossfade, speed, per-song <strong>timeline edits</strong>, <strong>loop</strong> choices, <strong>export format</strong> preferences, <strong>encoding</strong> options, and which <strong>part sheets</strong> were left open. Reload the page and reopen the same folder to continue where you left off.</p>
+    <p>For each root folder, the app saves to <code>localStorage</code>: playlist order, crossfade, speed, per-song <strong>timeline edits</strong>, <strong>loop</strong> choices, <strong>export format</strong> preferences, <strong>encoding</strong> and <strong>waveform performance</strong> options, and which <strong>part sheets</strong> were left open. Reload the page and reopen the same folder to continue where you left off.</p>
 
     <h3>File naming convention</h3>
     <ul>

@@ -22,6 +22,8 @@ const STATE = {
   order: { wav: [] },
   crossfade: 0,
   speedPercent: 100,
+  /** Parts longer than this (seconds) skip waveform UI; 0 = no limit. Default 20. */
+  waveformMaxPartDurationSec: 20,
   encoding: {
     mp3: {
       bitrateKbps: 192,
@@ -102,6 +104,7 @@ function saveSession() {
       currentFormat: STATE.currentFormat,
       openSheets: Array.from(openPartSheets),
       encoding: STATE.encoding,
+      waveformMaxPartDurationSec: STATE.waveformMaxPartDurationSec,
     };
     for (const [key, ps] of Object.entries(STATE.players)) {
       data.loopSettings[key] = ps.loopSettings;
@@ -144,6 +147,13 @@ function loadSession() {
           : 'auto',
       },
     };
+    const wm = parsed.waveformMaxPartDurationSec;
+    const wn = Number(wm);
+    if (wm === undefined || wm === null || !Number.isFinite(wn)) {
+      parsed.waveformMaxPartDurationSec = 20;
+    } else {
+      parsed.waveformMaxPartDurationSec = Math.min(86400, Math.max(0, wn));
+    }
     return parsed;
   } catch(e) { return null; }
 }

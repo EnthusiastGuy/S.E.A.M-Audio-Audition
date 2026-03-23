@@ -768,6 +768,7 @@ async function discoverSongs(rootHandle) {
     if (saved.encoding) {
       STATE.encoding = saved.encoding;
     }
+    STATE.waveformMaxPartDurationSec = saved.waveformMaxPartDurationSec ?? 20;
 
     if (saved.order && saved.order.wav) {
       const validOrder = saved.order.wav.filter(i => STATE.songs.wav[i] !== undefined);

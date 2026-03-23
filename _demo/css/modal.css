@@ -170,6 +170,17 @@
   padding: 14px;
 }
 .encoder-card h3 { margin-top: 0; }
+.settings-performance-card {
+  margin-top: 14px;
+  margin-bottom: 0;
+}
+.settings-hint {
+  margin: 0 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text2);
+}
+.settings-hint strong { color: var(--text); }
 .settings-row {
   display: grid;
   grid-template-columns: 1fr;
@@ -184,8 +195,10 @@
   letter-spacing: 0.5px;
 }
 .settings-row select,
-.settings-row input[type="range"] {
+.settings-row input[type="range"],
+.settings-row input[type="number"] {
   width: 100%;
+  max-width: 120px;
   background: var(--card2);
   border: 1px solid var(--border);
   border-radius: 6px;

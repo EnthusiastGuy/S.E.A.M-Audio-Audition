@@ -116,6 +116,31 @@ function renderSeekBar(fmt, songIdx) {
   syncSongCompositeDuration(fmt, songIdx);
 }
 
+/** Call after changing waveform max part duration (settings). Clears caches and re-renders open timelines. */
+function refreshWaveformAfterMaxDurationChange() {
+  for (const key of Object.keys(STATE.players)) {
+    const ps = STATE.players[key];
+    if (ps && ps._brickWaveCache) ps._brickWaveCache = {};
+    const cont = document.getElementById(`seek-container-${key}`);
+    if (!cont) continue;
+    const us = key.indexOf('_');
+    if (us < 0) continue;
+    const fmt = key.slice(0, us);
+    const songIdx = parseInt(key.slice(us + 1), 10);
+    if (!STATE.songs[fmt] || STATE.songs[fmt][songIdx] === undefined) continue;
+    reRenderSeek(fmt, songIdx);
+  }
+  for (const key of Object.keys(STATE.players)) {
+    const us = key.indexOf('_');
+    if (us < 0) continue;
+    const fmt = key.slice(0, us);
+    const songIdx = parseInt(key.slice(us + 1), 10);
+    if (typeof refreshPlayerAreaIfVisible === 'function') {
+      refreshPlayerAreaIfVisible(fmt, songIdx);
+    }
+  }
+}
+
 function renderBricks(fmt, songIdx, totalDur) {
   const key      = `${fmt}_${songIdx}`;
   const ps       = STATE.players[key];
@@ -191,12 +216,20 @@ function renderBricks(fmt, songIdx, totalDur) {
 /** One vertical line per CSS pixel of the wave area (capped); stroke scales so on-screen width stays constant. */
 const BRICK_WAVE_MAX_COLUMNS = 24000;
 const BRICK_WAVE_LINE_CSS_PX = 0.32;
-/** Skip waveform rendering for parts longer than this (expensive; large buffers). */
-const BRICK_WAVEFORM_MAX_DURATION_SEC = 20;
+/** @returns {number} Upper bound in seconds, or Infinity when STATE says no limit (0). */
+function getWaveformMaxPartDurationSec() {
+  const raw = STATE.waveformMaxPartDurationSec;
+  const v = Number(raw);
+  if (!Number.isFinite(v)) return 20;
+  if (v <= 0) return Infinity;
+  return Math.min(86400, Math.max(1, v));
+}
 
 function partShowsBrickWaveform(ps, partIndex) {
   const d = ps.partDurations[partIndex] || 0;
-  return d > 0 && d <= BRICK_WAVEFORM_MAX_DURATION_SEC;
+  const max = getWaveformMaxPartDurationSec();
+  if (max === Infinity) return d > 0;
+  return d > 0 && d <= max;
 }
 
 function disconnectBrickWaveObservers(ps) {

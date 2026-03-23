@@ -772,7 +772,7 @@ const SEAM_LAST_READ_VERSION_KEY = 'seam_last_read_version';
 let seamNewsFeed = null;
 let seamNewsLatestVersion = null;
 let seamNewsFetchPromise = null;
-let seamNewsRenderedOnce = false;
+let seamNewsRenderedVersion = null;
 
 function safeLocalStorageGet(key) {
   try {
@@ -842,7 +842,8 @@ function renderMoreArticle(article) {
 
   if (typeof article?.image_url === 'string' && article.image_url.trim().length) {
     const img = document.createElement('img');
-    img.src = article.image_url;
+    // Cache-bust so updated feeds don't leave the browser showing old bitmaps.
+    img.src = appendUrlParam(article.image_url, 'seam_version', seamNewsLatestVersion);
     img.alt = title || 'Promo image';
     el.appendChild(img);
   }
@@ -853,6 +854,14 @@ function renderMoreArticle(article) {
   el.appendChild(bodyEl);
 
   return el;
+}
+
+function appendUrlParam(url, key, value) {
+  if (typeof url !== 'string' || !url.trim()) return url;
+  if (value == null) return url;
+  const hasQuery = url.includes('?');
+  const sep = hasQuery ? '&' : '?';
+  return `${url}${sep}${encodeURIComponent(key)}=${encodeURIComponent(String(value))}`;
 }
 
 function renderMoreFeed(feed) {
@@ -948,16 +957,23 @@ function initMoreRemoteNewsPromo() {
     hideMoreBadge();
 
     try {
-      const feed = seamNewsFeed || await seamNewsFetchPromise;
+      // Always re-fetch when opening so a bumped `latest_version` discards old content.
+      const feed = await fetchSeamNewsFeed();
       seamNewsFeed = feed;
 
       seamNewsLatestVersion = feed?.latest_version ?? null;
-      if (seamNewsLatestVersion != null) safeLocalStorageSet(SEAM_LAST_READ_VERSION_KEY, seamNewsLatestVersion);
+      if (seamNewsLatestVersion != null) {
+        safeLocalStorageSet(SEAM_LAST_READ_VERSION_KEY, seamNewsLatestVersion);
+      }
       hideMoreBadge();
 
-      if (!seamNewsRenderedOnce) {
+      // If this is a new version, discard previous content and render fresh.
+      if (seamNewsLatestVersion !== seamNewsRenderedVersion) {
         renderMoreFeed(feed);
-        seamNewsRenderedOnce = true;
+        seamNewsRenderedVersion = seamNewsLatestVersion;
+      } else {
+        // Same version as last render: still show it (in case the modal content was cleared).
+        renderMoreFeed(feed);
       }
       showMoreContent();
     } catch {
@@ -998,6 +1014,8 @@ function initMoreRemoteNewsPromo() {
       }
 
       if (isLatestVersionNewer(seamNewsLatestVersion, storedLastRead)) {
+        // Feed has changed since last read; the next modal open should discard old content.
+        seamNewsRenderedVersion = null;
         const articles = Array.isArray(feed?.articles) ? feed.articles : [];
         const unreadNewsCount = articles.filter(a => a && a.type === 'news').length;
         updateMoreBadge(unreadNewsCount);

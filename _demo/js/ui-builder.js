@@ -58,11 +58,9 @@ function renderPlaylistRows(fmt) {
 function buildSongRow(fmt, songIdx, nr) {
   const song = STATE.songs[fmt][songIdx];
   const key  = `${fmt}_${songIdx}`;
-  const hasParts = song.parts.length > 0;
-  const missingMain = !song.mainHandle;
 
   const row = document.createElement('div');
-  row.className = 'song-row' + (missingMain ? ' missing-main' : '');
+  row.className = 'song-row';
   row.draggable = true;
   row.dataset.fmt = fmt;
   row.dataset.idx = songIdx;
@@ -85,10 +83,8 @@ function buildSongRow(fmt, songIdx, nr) {
 
   // Name
   const colName = document.createElement('div');
-  colName.className = 'col-name' + (missingMain ? ' missing' : '');
-  colName.innerHTML = missingMain
-    ? `${song.name}<span class="missing-tip">Main song file missing — only parts available</span>`
-    : song.name;
+  colName.className = 'col-name';
+  colName.textContent = song.name;
   main.appendChild(colName);
 
   // Duration

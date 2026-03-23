@@ -248,7 +248,7 @@
     <p>Each row shows <strong>number</strong>, <strong>name</strong>, <strong>duration</strong>, <strong>part count</strong>, and <strong>actions</strong> (play / export when available).</p>
     <ul>
       <li><strong>Drag rows</strong> to reorder the playlist.</li>
-      <li><span style="color:var(--accent2)">Amber</span> highlighting means the <strong>main (full) WAV</strong> is missing; only segment files are available. Hover the name for a short tip.</li>
+      <li>If the <code>Song Name.wav</code> main full mix is missing, the song still appears and the timeline defaults to all parts in order <code>1..n</code>.</li>
       <li>Songs with <strong>no main file and no parts</strong> are omitted entirely.</li>
       <li>Click the row (anywhere except the action buttons) to open or close the <strong>part sheet</strong> for that song.</li>
     </ul>
@@ -292,7 +292,7 @@
 
     <h3>Export &amp; downloads</h3>
     <ul>
-      <li><strong>Stitched composition</strong> — the download button beside transport (folder icon) renders the <strong>current timeline</strong> (including your reordering) to one file. It is only shown when a <strong>main full song WAV</strong> exists for that title, because the exporter uses the full project pipeline.</li>
+      <li><strong>Stitched composition</strong> — the download button beside transport (folder icon) renders the <strong>current timeline</strong> (including your reordering) to one file. It is only shown when a <code>Song Name.wav</code> main full mix exists for that title.</li>
       <li>Choose format with the <strong>▾</strong> menu: <strong>WAV</strong>, <strong>MP3</strong>, or <strong>OGG</strong>. Your choice is remembered per song.</li>
       <li><strong>Per-part download</strong> — in the part sheet, download any single file (main or segment) in WAV / MP3 / OGG.</li>
       <li><strong>60-minute limit</strong> — if the stitched timeline would exceed one hour, preview rendering is blocked and you’ll see a message; shorten the arrangement and try again.</li>
@@ -318,7 +318,7 @@
 
     <h3>File naming convention</h3>
     <ul>
-      <li><strong>Full song</strong> — <code>Song Name.wav</code> (base name matches the folder; no part index).</li>
+      <li><strong>Full song</strong> (optional) — <code>Song Name.wav</code> (base name matches the folder; no part index).</li>
       <li><strong>Segment with branches</strong> — <code>Song Name N -&gt; A, B, C.wav</code> or the same with a single hyphen before the arrow: <code>Song Name N - A, B, C.wav</code>. <em>N</em> is this part’s index; <em>A, B, C</em> are allowed next part indices.</li>
       <li><strong>Terminal segment</strong> — <code>Song Name N.wav</code> (number only, no arrow list) if there are no further branches.</li>
     </ul>

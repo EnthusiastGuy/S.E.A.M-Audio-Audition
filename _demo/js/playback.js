@@ -492,9 +492,13 @@ function startPreviewPlayback(fmt, songIdx, offsetSecs) {
 }
 
 function buildDefaultSequence(song) {
+  // If the full/main WAV is missing but parts exist, default to a straight
+  // 1..n timeline (ordered like the "all parts" button).
   if (song.parts.length === 0) {
+    if (!song.mainHandle) return [];
     return [{ partIndex: -1, label: 'Full Song' }];
   }
+  if (!song.mainHandle) return buildOrderedPartsSequence(song);
   const placed = [];
   const partByNum = new Map(song.parts.map(p => [p.num, p]));
   let cur = song.parts[0];

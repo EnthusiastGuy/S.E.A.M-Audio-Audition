@@ -931,6 +931,11 @@ function appendUrlParam(url, key, value) {
   return `${url}${sep}${encodeURIComponent(key)}=${encodeURIComponent(String(value))}`;
 }
 
+function getSeamNewsFeedUrlWithCacheBuster() {
+  // Cache-bust the JSON request to avoid browsers returning a stale GitHub raw response.
+  return appendUrlParam(SEAM_NEWS_FEED_URL, 'seam_cache_bust', Date.now().toString(36));
+}
+
 function renderMoreFeed(feed) {
   const articles = Array.isArray(feed?.articles) ? feed.articles : [];
   const news = articles.filter(a => a && a.type === 'news');
@@ -1001,7 +1006,10 @@ function hideMoreButton() {
 }
 
 async function fetchSeamNewsFeed() {
-  const res = await fetch(SEAM_NEWS_FEED_URL, { cache: 'no-store' });
+  const url = getSeamNewsFeedUrlWithCacheBuster();
+  // Keep this a "simple" GET (no custom headers) to avoid CORS preflight.
+  // The unique query param is what forces the updated JSON.
+  const res = await fetch(url, { cache: 'no-store' });
   if (!res.ok) throw new Error(`Feed fetch failed: ${res.status}`);
   return await res.json();
 }

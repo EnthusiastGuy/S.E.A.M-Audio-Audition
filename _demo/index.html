@@ -54,7 +54,7 @@
   <div class="setup-card">
     <div class="setup-icon">&#127925;</div>
     <h2>Select Sample Pack</h2>
-    <p>Click the button below and browse to the <strong>root directory</strong> of your sample pack - the folder that contains the <code>wav</code> subdirectory.<br><br>No files leave your device; all processing happens in-browser.</p>
+    <p>Click the button below and browse to the <strong>root directory</strong> of your sample pack - the folder that contains your <strong>song subfolders</strong> (either directly, or via a <code>wav</code> subdirectory).<br><br>No files leave your device; all processing happens in-browser.</p>
     <button class="btn btn-accent" id="btn-select">&#128193; &nbsp;Select Folder</button>
     <div class="recent-projects" id="recent-projects-wrap" style="display:none;">
       <p class="recent-projects-title">or reopen one of your recent projects</p>
@@ -236,13 +236,13 @@
 
     <h3>Opening a project</h3>
     <ul>
-      <li><strong>Select Folder</strong> — choose the <em>root</em> of your sample pack: the folder that directly contains a <code>wav</code> directory. If <code>wav/</code> is missing, the app reports an error.</li>
+      <li><strong>Select Folder</strong> — choose the <em>root</em> of your sample pack: the folder that contains your song subfolders with <code>.wav</code> files. Songs can be either directly inside the selected root, or nested under an optional <code>wav</code> subdirectory.</li>
       <li><strong>Recent projects</strong> — up to ten previously opened folders appear on the welcome screen. Pick one to restore permission and reload (handles are stored in <strong>IndexedDB</strong>).</li>
       <li><strong>Change Folder</strong> — after loading, use the header dropdown to switch to another recent project, <strong>Browse…</strong> for a new folder, or stay on the current one.</li>
     </ul>
 
     <h3>Folder layout &amp; discovery</h3>
-    <p>Under <code>wav/</code>, each <strong>subfolder name</strong> is a song title. Inside each song folder, only <code>.wav</code> files are used. The app scans those files and groups them by the naming rules below.</p>
+    <p>Inside the selected root (or inside its optional <code>wav/</code> subdirectory), each <strong>subfolder name</strong> is a song title. Inside each song folder, only <code>.wav</code> files are used. The app scans those files and groups them by the naming rules below.</p>
 
     <h3>Song list</h3>
     <p>Each row shows <strong>number</strong>, <strong>name</strong>, <strong>duration</strong>, <strong>part count</strong>, and <strong>actions</strong> (play / export when available).</p>

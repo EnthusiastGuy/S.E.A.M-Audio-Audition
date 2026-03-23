@@ -553,6 +553,38 @@ function resolveVirtualPackRoot(rawRoot) {
   return rawRoot;
 }
 
+/**
+ * Heuristic for when the user selects the pack root directly:
+ * we accept it as a "WAV format root" if at least one immediate subdirectory
+ * contains at least one `.wav` file directly inside it.
+ */
+async function handleLooksLikeWavSongsRoot(rootHandle) {
+  try {
+    let checkedDirs = 0;
+    for await (const [, dirHandle] of rootHandle.entries()) {
+      if (!dirHandle || dirHandle.kind !== 'directory') continue;
+      checkedDirs++;
+
+      let foundWav = false;
+      for await (const [fname, childHandle] of dirHandle.entries()) {
+        if (!childHandle || childHandle.kind !== 'file') continue;
+        const dot = fname.lastIndexOf('.');
+        const ext = dot >= 0 ? fname.slice(dot + 1).toLowerCase() : '';
+        if (ext === 'wav') {
+          foundWav = true;
+          break;
+        }
+      }
+
+      if (foundWav) return true;
+      if (checkedDirs >= 12) return false; // Cap work for big trees.
+    }
+  } catch (_) {
+    // If the browser rejects some entries, just fall back to "not a songs root".
+  }
+  return false;
+}
+
 function createVirtualFileHandle(name, file) {
   return {
     kind: 'file',
@@ -677,19 +709,27 @@ async function discoverSongs(rootHandle) {
   try {
     fmtHandle = await rootHandle.getDirectoryHandle(fmt, { create: false });
   } catch (e) {
-    if (rootHandle.__seamVirtualRootIsWav) {
+    // ignore; we'll fall back below
+  }
+
+  if (!fmtHandle) {
+    const looksLikeSongsRoot = rootHandle.__seamVirtualRootIsWav || (await handleLooksLikeWavSongsRoot(rootHandle));
+    if (looksLikeSongsRoot) {
+      // Either the browser didn't expose a `wav/` folder or the user selected the pack root.
       fmtHandle = rootHandle;
     }
   }
+
   if (!fmtHandle) {
     STATE.songs[fmt] = [];
     STATE.order[fmt] = [];
     statusEl.textContent = rootHandle.__seamWebkitFallback
-      ? 'Missing required wav/ directory. Select the folder that contains wav (or select the wav folder if songs are directly inside it).'
-      : 'Missing required wav/ directory.';
+      ? 'Could not find song folders. Expected a `wav/` directory, or song subfolders with `.wav` files inside the selected folder.'
+      : 'Could not find song folders. Expected a `wav/` directory, or song subfolders with `.wav` files inside the selected folder.';
     return;
   }
-  statusEl.textContent = `Scanning ${fmt}/ …`;
+
+  statusEl.textContent = fmtHandle === rootHandle ? 'Scanning WAV song folders …' : `Scanning ${fmt}/ …`;
   const songs = await scanFormat(fmtHandle);
   STATE.songs[fmt] = songs;
   STATE.order[fmt] = songs.map((_,i) => i);

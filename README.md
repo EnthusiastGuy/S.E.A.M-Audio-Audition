@@ -4,7 +4,7 @@
 
 ## What it does
 
-- **Loads structured sample packs** — Expect a root folder that contains a `wav/` directory. Under `wav/`, each subfolder is a **song**. Inside each song folder, WAV files follow a simple naming scheme so the app can infer **parts**, **branch targets**, and optional **full-mix** files.
+- **Loads structured sample packs** — Expect a root folder that contains song subfolders with `.wav` files. Songs can be either directly inside the selected root, or nested under an optional `wav/` directory. Inside each song folder, WAV files follow a simple naming scheme so the app can infer **parts**, **branch targets**, and optional **full-mix** files.
 - **Builds a playable timeline** — Segments are arranged into an ordered sequence (with sensible defaults from your filenames). You can **reorder bricks**, **insert** segments from a file list, and audition the result with a full **seek bar**, **per-part loop** options where the data allows, and **playlist auto-advance** with optional **crossfades** between songs.
 - **Plays multiple tracks at once** — Useful for comparing or layering cues.
 - **Exports audio** — Stitch the current timeline to **WAV**, **MP3**, or **OGG**, or download individual files. MP3 uses **lamejs**; OGG uses **Vorbis** (encoder scripts may load from a CDN on first use). Very long stitched previews are capped at **60 minutes**.

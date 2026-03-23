@@ -311,8 +311,8 @@
 }
 
 .more-list {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
 }
 
@@ -343,7 +343,9 @@
   display: block;
   width: 100%;
   max-width: 100%;
-  height: auto;
+  /* Feed "wide" banners are 400x100; enforce the same vertical rhythm in a 2-col grid. */
+  height: 100px;
+  object-fit: cover;
   border-radius: 10px;
   border: 1px solid var(--border);
   margin: 8px 0 12px;
@@ -358,4 +360,10 @@
 .more-article-body a {
   color: var(--accent4);
   text-decoration: underline;
+}
+
+@media (max-width: 860px) {
+  .more-list {
+    grid-template-columns: 1fr;
+  }
 }

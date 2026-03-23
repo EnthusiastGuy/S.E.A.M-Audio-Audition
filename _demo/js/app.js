@@ -808,10 +808,82 @@ function stopAppLoadingQuips() {
   }
 }
 
+let headerQuipDismissTimer = null;
+let headerQuipFadeTimer = null;
+
+function dismissHeaderQuip() {
+  if (headerQuipDismissTimer != null) {
+    clearTimeout(headerQuipDismissTimer);
+    headerQuipDismissTimer = null;
+  }
+  if (headerQuipFadeTimer != null) {
+    clearTimeout(headerQuipFadeTimer);
+    headerQuipFadeTimer = null;
+  }
+  const el = document.getElementById('header-quip-banner');
+  const txt = document.getElementById('header-quip-text');
+  if (el) {
+    el.classList.remove('header-quip-banner--visible');
+    el.classList.add('hidden');
+    el.setAttribute('aria-hidden', 'true');
+  }
+  if (txt) txt.textContent = '';
+}
+
+function showHeaderQuip(text) {
+  const el = document.getElementById('header-quip-banner');
+  const txt = document.getElementById('header-quip-text');
+  if (!el || !txt || !text) return;
+  dismissHeaderQuip();
+  txt.textContent = text;
+  el.classList.remove('hidden');
+  el.setAttribute('aria-hidden', 'false');
+  void el.offsetWidth;
+  el.classList.add('header-quip-banner--visible');
+  const holdMs =
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      ? 4500
+      : 8200;
+  headerQuipDismissTimer = window.setTimeout(() => {
+    headerQuipDismissTimer = null;
+    el.classList.remove('header-quip-banner--visible');
+    headerQuipFadeTimer = window.setTimeout(() => {
+      headerQuipFadeTimer = null;
+      el.classList.add('hidden');
+      el.setAttribute('aria-hidden', 'true');
+      txt.textContent = '';
+    }, 420);
+  }, holdMs);
+}
+
+function resetAppLoadingOverlayDom() {
+  const overlay = document.getElementById('app-loading-overlay');
+  const label = document.getElementById('app-loading-label');
+  const sub = document.getElementById('app-loading-subtitle');
+  if (overlay) {
+    overlay.style.removeProperty('opacity');
+  }
+  if (label) label.textContent = 'Loading…';
+  if (sub) sub.textContent = 'Warming up the audio goblins...';
+}
+
+function finishAppLoadingHide() {
+  const overlay = document.getElementById('app-loading-overlay');
+  if (overlay) {
+    overlay.classList.add('hidden');
+    overlay.setAttribute('aria-hidden', 'true');
+  }
+  document.body.classList.remove('app-loading-active');
+  resetAppLoadingOverlayDom();
+}
+
 function showAppLoading(message) {
   const overlay = document.getElementById('app-loading-overlay');
   const label = document.getElementById('app-loading-label');
   if (!overlay) return;
+  dismissHeaderQuip();
+  resetAppLoadingOverlayDom();
   if (label) label.textContent = message || 'Loading…';
   overlay.classList.remove('hidden');
   overlay.setAttribute('aria-hidden', 'false');
@@ -828,9 +900,16 @@ function hideAppLoading() {
   const overlay = document.getElementById('app-loading-overlay');
   if (!overlay) return;
   stopAppLoadingQuips();
-  overlay.classList.add('hidden');
-  overlay.setAttribute('aria-hidden', 'true');
-  document.body.classList.remove('app-loading-active');
+  const sub = document.getElementById('app-loading-subtitle');
+  const quipText = sub && sub.textContent ? sub.textContent.trim() : '';
+  if (overlay.classList.contains('hidden')) {
+    document.body.classList.remove('app-loading-active');
+    return;
+  }
+  finishAppLoadingHide();
+  if (quipText) {
+    showHeaderQuip(quipText);
+  }
 }
 
 async function discoverSongs(rootHandle) {

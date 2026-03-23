@@ -850,10 +850,77 @@ function renderMoreArticle(article) {
 
   const bodyEl = document.createElement('div');
   bodyEl.className = 'more-article-body';
-  bodyEl.innerHTML = typeof article?.body === 'string' ? article.body : '';
+  const bodyHtml = typeof article?.body === 'string' ? article.body : '';
+  bodyEl.appendChild(renderExpandableBody(bodyHtml));
   el.appendChild(bodyEl);
 
   return el;
+}
+
+function renderExpandableBody(bodyHtml) {
+  const container = document.createElement('div');
+
+  if (!bodyHtml || typeof bodyHtml !== 'string') {
+    container.innerHTML = '';
+    return container;
+  }
+
+  const wrapper = document.createElement('div');
+  wrapper.innerHTML = bodyHtml;
+  const paragraphs = wrapper.querySelectorAll('p');
+
+  // "Long" = more than one paragraph. Show first paragraph only, with ...more / ...less toggle.
+  if (!paragraphs || paragraphs.length <= 1) {
+    container.innerHTML = bodyHtml;
+    return container;
+  }
+
+  const previewHtml = paragraphs[0].outerHTML;
+  let expanded = false;
+
+  function makeToggleLink(text) {
+    const a = document.createElement('a');
+    a.href = '#';
+    a.textContent = text;
+    a.className = 'more-body-toggle';
+    return a;
+  }
+
+  function renderCollapsed() {
+    expanded = false;
+    container.innerHTML = previewHtml;
+
+    const spacer = document.createElement('div');
+    spacer.style.height = '8px';
+    container.appendChild(spacer);
+
+    const more = makeToggleLink('...more');
+    more.addEventListener('click', (e) => {
+      e.preventDefault();
+      renderExpanded();
+    });
+    container.appendChild(more);
+  }
+
+  function renderExpanded() {
+    expanded = true;
+    container.innerHTML = bodyHtml;
+
+    const lessWrap = document.createElement('div');
+    lessWrap.style.marginTop = '10px';
+
+    const less = makeToggleLink('...less');
+    less.addEventListener('click', (e) => {
+      e.preventDefault();
+      renderCollapsed();
+    });
+    lessWrap.appendChild(less);
+    container.appendChild(lessWrap);
+  }
+
+  // Start collapsed.
+  renderCollapsed();
+  return container;
 }
 
 function appendUrlParam(url, key, value) {

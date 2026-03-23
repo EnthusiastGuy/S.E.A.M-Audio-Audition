@@ -362,6 +362,12 @@
   text-decoration: underline;
 }
 
+.more-article-body a.more-body-toggle {
+  font-family: 'Space Mono', monospace;
+  font-weight: 700;
+  cursor: pointer;
+}
+
 @media (max-width: 860px) {
   .more-list {
     grid-template-columns: 1fr;

@@ -316,6 +316,27 @@
   flex-wrap: wrap;
 }
 
+.bp-cluster-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.bp-dup-x {
+  color: #e94560 !important;
+  border-color: rgba(233, 69, 96, 0.45) !important;
+  font-size: 14px !important;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.bp-dup-x:hover:not(:disabled) {
+  color: #ff6b8a !important;
+  border-color: rgba(233, 69, 96, 0.65) !important;
+  background: rgba(233, 69, 96, 0.12) !important;
+}
+
 .bp-mini-btn {
   padding: 4px 10px;
   border-radius: 5px;
@@ -419,7 +440,82 @@
   pointer-events: auto;
 }
 
-.bp-btn-dl,
+.bp-cluster-footer-inner {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.bp-mini-btn--icon {
+  min-width: 32px;
+  height: 30px;
+  padding: 0 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.bp-mini-btn--icon .part-loop-glyph {
+  font-size: 0.72em;
+  margin-left: 1px;
+  vertical-align: 0.08em;
+}
+
+.bp-cluster-seam-btn {
+  color: #e8943a;
+  border-color: rgba(232, 148, 58, 0.45);
+}
+
+.bp-cluster-seam-btn:hover {
+  color: #ffb04a;
+  border-color: rgba(232, 148, 58, 0.65);
+  background: rgba(232, 148, 58, 0.1);
+}
+
+.bp-icon-svg {
+  display: block;
+  width: 17px;
+  height: 17px;
+}
+
+.bp-break-icon {
+  opacity: 0.95;
+}
+
+.bp-mini-btn--disabled,
+.bp-mini-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.bp-seek-track--disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.bp-seek-track.bp-seek-seam-ff .bp-seek-fill {
+  background: linear-gradient(90deg, rgba(232, 148, 58, 0.65), rgba(255, 176, 80, 0.75));
+}
+
+.bp-seek-track.bp-seek-seam-ff .bp-seek-handle {
+  background: linear-gradient(180deg, #ffd4a0, #e8943a);
+  border-color: rgba(255, 255, 255, 0.35);
+}
+
+.bp-dl-fmt {
+  min-width: 28px;
+  padding: 4px 8px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  font-size: 9px;
+}
+
 .bp-dl {
-  font-size: 10px !important;
+  font-size: 14px !important;
+  line-height: 1;
 }

@@ -46,6 +46,8 @@ const STATE = {
     panX: 0,
     panY: 0,
     bricks: [],
+    /** @type {'wav'|'mp3'|'ogg'} */
+    downloadFormat: 'wav',
   },
 };
 
@@ -175,12 +177,14 @@ function loadSession() {
     }
     const pg = parsed.playground;
     if (pg && typeof pg === 'object') {
+      const df = (pg.downloadFormat || 'wav').toLowerCase();
       parsed.playground = {
         mode: !!pg.mode,
         zoom: Number.isFinite(Number(pg.zoom)) ? Math.min(4, Math.max(0.12, Number(pg.zoom))) : 1,
         panX: Number.isFinite(Number(pg.panX)) ? Number(pg.panX) : 0,
         panY: Number.isFinite(Number(pg.panY)) ? Number(pg.panY) : 0,
         bricks: Array.isArray(pg.bricks) ? pg.bricks : [],
+        downloadFormat: df === 'mp3' || df === 'ogg' ? df : 'wav',
       };
     }
     return parsed;

@@ -17,6 +17,17 @@ const BP_ORIGIN_Y = 40;
 const BP_SCATTER = 420;
 const BP_UNDO_MAX = 50;
 
+const PG_SEAM_SCHEDULE_AHEAD = 0.005;
+const PG_SEAM_FF_TARGET_WALL_SEC = 0.85;
+const PG_SEAM_FF_GAIN = 0.2;
+
+const BP_PLAY_ICON = '&#9654;';
+const BP_PAUSE_ICON = '&#9646;&#9646;';
+const BP_LOOP_ICON = `${BP_PLAY_ICON}<span class="part-loop-glyph" aria-hidden="true">&#8635;</span>`;
+const BP_SEAM_ICON = `${BP_PLAY_ICON}<span class="part-loop-glyph part-seam-glyph" aria-hidden="true">&#8635;</span>`;
+const BP_DL_ICON = '&#128229;';
+const BP_BREAK_MAGNET_SVG = `<svg class="bp-icon-svg bp-break-icon" viewBox="0 0 20 20" aria-hidden="true"><path fill="currentColor" d="M5.5 3C4 3 3 4.2 3 5.8V11c0 3.2 2.4 5.8 5.5 5.8.6 0 1.1-.1 1.6-.3l-.9-1.4c-.2 0-.4.1-.7.1-2 0-3.5-1.6-3.5-3.8V5.8c0-.7.5-1.2 1.2-1.2.4 0 .7.2.9.5l1-.9C7.4 3.4 6.5 3 5.5 3z"/><path fill="currentColor" d="M14.5 3C16 3 17 4.2 17 5.8V11c0 3.2-2.4 5.8-5.5 5.8-.6 0-1.1-.1-1.6-.3l.9-1.4c.2 0 .4.1.7.1 2 0 3.5-1.6 3.5-3.8V5.8c0-.7-.5-1.2-1.2-1.2-.4 0-.7.2-.9.5l-1-.9c.7-.6 1.6-1 2.6-1z"/><path fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" d="M8.2 8.5l3.6 3m0-3l-3.6 3"/></svg>`;
+
 let bpViewport = null;
 let bpWorld = null;
 let bpHudRoot = null;
@@ -47,6 +58,19 @@ let saveTimer = null;
 let clusterUiEl = null;
 let playingRoot = null;
 let playLoop = false;
+let pgSeamMode = false;
+/** @type {Array<{ b: object, buf: AudioBuffer }>|null} */
+let pgSeamSegments = null;
+/** @type {number[]|null} */
+let pgSeamCumDurations = null;
+let pgSeamTick = {
+  phase: 'head',
+  phaseStartAC: 0,
+  phaseStartLogical: 0,
+  edge: 0,
+  ffWallDur: 0,
+  ffLogicalSpan: 0,
+};
 
 /** @type {Array<Array<{ id: string, fmt: string, songIdx: number, partIndex: number, x: number, y: number }>>} */
 let bpUndoStack = [];
@@ -54,6 +78,12 @@ let bpUndoStack = [];
 let bpRedoStack = [];
 
 let pgGain = null;
+/** @type {GainNode|null} Per-chain bus so loop iterations do not stack connections on pgGain. */
+let pgPlayBus = null;
+/** @type {GainNode|null} Seam preview: one bus per session; FF gain rides here so we do not stack automation on pgGain. */
+let pgSeamBus = null;
+/** Monotonic token: incremented on new transport or full stop; invalidates stale BufferSource onended. */
+let pgTransportToken = 0;
 /** @type {AudioBufferSourceNode[]} */
 let pgSources = [];
 let pgRaf = 0;
@@ -92,6 +122,83 @@ function bpPartLabel(fmt, songIdx, partIndex) {
   if (partIndex === -1) return 'Full';
   const p = song.parts[partIndex];
   return p ? String(p.num) : String(partIndex);
+}
+
+function bpPartKey(fmt, songIdx, partIndex) {
+  return `${fmt}_${songIdx}_${partIndex}`;
+}
+
+function bpCanonicalBrickId(fmt, songIdx, partIndex) {
+  return `bp_${fmt}_${songIdx}_${partIndex}`;
+}
+
+function bpCountPartKey(key) {
+  let n = 0;
+  for (const b of brickMap.values()) {
+    if (bpPartKey(b.fmt, b.songIdx, b.partIndex) === key) n++;
+  }
+  return n;
+}
+
+function bpClusterHasRemovableDuplicates(root) {
+  const seen = new Set();
+  for (const id of clusterMembers(root)) {
+    const b = brickMap.get(id);
+    if (!b) continue;
+    const key = bpPartKey(b.fmt, b.songIdx, b.partIndex);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    if (bpCountPartKey(key) > 1) return true;
+  }
+  return false;
+}
+
+function bpTryDeleteActiveBrick() {
+  if (!activeBrickId) return;
+  const b = brickMap.get(activeBrickId);
+  if (!b) return;
+  const key = bpPartKey(b.fmt, b.songIdx, b.partIndex);
+  if (bpCountPartKey(key) <= 1) return;
+  const snap = capturePlaygroundBrickSnapshot();
+  brickMap.delete(b.id);
+  b.el.remove();
+  bpPushUndo(snap);
+  ufRebuild();
+  stopPlaygroundPlayback();
+  activeBrickId = brickMap.size ? brickMap.keys().next().value : null;
+  scheduleSave();
+  updateClusterUi();
+}
+
+function bpDeleteDuplicatesInCluster(root) {
+  const snap = capturePlaygroundBrickSnapshot();
+  const ids = clusterMembers(root);
+  const items = ids
+    .map(id => brickMap.get(id))
+    .filter(Boolean)
+    .map(b => ({
+      b,
+      key: bpPartKey(b.fmt, b.songIdx, b.partIndex),
+      extra: b.id !== bpCanonicalBrickId(b.fmt, b.songIdx, b.partIndex),
+    }))
+    .sort((a, b) => Number(b.extra) - Number(a.extra) || a.b.id.localeCompare(b.b.id));
+
+  let removed = false;
+  for (const { b, key } of items) {
+    if (bpCountPartKey(key) <= 1) continue;
+    brickMap.delete(b.id);
+    b.el.remove();
+    removed = true;
+  }
+  if (!removed) return;
+  bpPushUndo(snap);
+  ufRebuild();
+  stopPlaygroundPlayback();
+  if (activeBrickId && !brickMap.has(activeBrickId)) {
+    activeBrickId = brickMap.size ? brickMap.keys().next().value : null;
+  }
+  scheduleSave();
+  updateClusterUi();
 }
 
 function ufFind(a) {
@@ -268,20 +375,259 @@ function stopPlaygroundSourcesOnly() {
     } catch (e) {}
   }
   pgSources = [];
+  if (pgPlayBus) {
+    try {
+      pgPlayBus.disconnect();
+    } catch (e) {}
+    pgPlayBus = null;
+  }
+  if (pgSeamBus) {
+    try {
+      pgSeamBus.disconnect();
+    } catch (e) {}
+    pgSeamBus = null;
+  }
   if (pgRaf) cancelAnimationFrame(pgRaf);
   pgRaf = 0;
+  pgSeamMode = false;
+  pgSeamSegments = null;
+  pgSeamCumDurations = null;
+  if (clusterUiEl) {
+    clusterUiEl.querySelector('.bp-seek-track')?.classList.remove('bp-seek-seam-ff');
+  }
+  if (pgGain) {
+    try {
+      const t = AC.currentTime;
+      pgGain.gain.cancelScheduledValues(t);
+      pgGain.gain.setValueAtTime(1, t);
+    } catch (e) {}
+  }
 }
 
 function stopPlaygroundPlayback() {
   stopPlaygroundSourcesOnly();
+  pgTransportToken++;
   playingRoot = null;
   updateClusterUi();
+}
+
+function computePgSeamEdgeSec(dur) {
+  const raw = (STATE.seamPreviewMs ?? 2000) / 1000;
+  if (!dur || dur <= 0 || !Number.isFinite(dur)) return 0;
+  return Math.min(raw, dur / 2);
+}
+
+function schedulePgSeamGain(linearGain, atAC) {
+  const node = pgSeamBus || pgGain;
+  if (!node) return;
+  const t = AC.currentTime;
+  node.gain.cancelScheduledValues(t);
+  node.gain.setValueAtTime(linearGain, Math.max(atAC, t));
+}
+
+/** Seam mode uses one active BufferSource at a time; disconnect ended nodes so they do not stack on the bus. */
+function clearPgSeamPhaseSources() {
+  if (!pgSeamMode) return;
+  for (const s of pgSources) {
+    try {
+      s.stop();
+    } catch (e) {}
+    try {
+      s.disconnect();
+    } catch (e) {}
+  }
+  pgSources = [];
+}
+
+function setBpSeamSeekFfClass(on) {
+  if (!clusterUiEl) return;
+  const tr = clusterUiEl.querySelector('.bp-seek-track');
+  if (tr) tr.classList.toggle('bp-seek-seam-ff', !!on);
+}
+
+function schedulePgSeamHead(segments, segIdx, clusterRoot) {
+  clearPgSeamPhaseSources();
+  const buf = segments[segIdx].buf;
+  const dur = buf.duration;
+  const edgeSec = computePgSeamEdgeSec(dur);
+  const audRate = Math.max(1e-6, Math.abs(playbackRateFromKnob()));
+  const cum = pgSeamCumDurations[segIdx];
+  const startAt = AC.currentTime + PG_SEAM_SCHEDULE_AHEAD;
+  const g = pgSeamBus;
+  if (!g) return;
+
+  setBpSeamSeekFfClass(false);
+
+  if (!buf.duration || buf.duration < 1e-4) {
+    const next = (segIdx + 1) % segments.length;
+    schedulePgSeamHead(segments, next, clusterRoot);
+    return;
+  }
+
+  const rem = dur - 2 * edgeSec;
+  if (rem <= 1e-6) {
+    schedulePgSeamTail(segments, segIdx, clusterRoot);
+    return;
+  }
+
+  const src = AC.createBufferSource();
+  src.buffer = buf;
+  src.playbackRate.value = audRate;
+  src.connect(g);
+  pgSources.push(src);
+  schedulePgSeamGain(1, startAt);
+  pgSeamTick = {
+    phase: 'head',
+    phaseStartAC: startAt,
+    phaseStartLogical: cum,
+    edge: edgeSec,
+    ffWallDur: 0,
+    ffLogicalSpan: 0,
+  };
+  pgTimelineStartAC = startAt;
+  pgTimelineOffset = cum;
+
+  const headWall = edgeSec / audRate;
+  src.start(startAt, 0);
+  try {
+    src.stop(startAt + headWall);
+  } catch (e) {}
+
+  src.onended = () => {
+    if (!pgSources.includes(src) || !pgSeamMode) return;
+    schedulePgSeamFF(segments, segIdx, clusterRoot);
+  };
+}
+
+function schedulePgSeamFF(segments, segIdx, clusterRoot) {
+  clearPgSeamPhaseSources();
+  const buf = segments[segIdx].buf;
+  const dur = buf.duration;
+  const edgeSec = computePgSeamEdgeSec(dur);
+  const rem = dur - 2 * edgeSec;
+  const cum = pgSeamCumDurations[segIdx];
+  const ffRate = Math.min(64, Math.max(8, rem / PG_SEAM_FF_TARGET_WALL_SEC));
+  const startAt = AC.currentTime + PG_SEAM_SCHEDULE_AHEAD;
+  const g = pgSeamBus;
+  if (!g) return;
+
+  setBpSeamSeekFfClass(true);
+
+  const src = AC.createBufferSource();
+  src.buffer = buf;
+  src.playbackRate.value = ffRate;
+  src.connect(g);
+  pgSources.push(src);
+  schedulePgSeamGain(PG_SEAM_FF_GAIN, startAt);
+
+  const wallFF = rem / ffRate;
+  pgSeamTick = {
+    phase: 'ff',
+    phaseStartAC: startAt,
+    phaseStartLogical: cum + edgeSec,
+    edge: edgeSec,
+    ffWallDur: wallFF,
+    ffLogicalSpan: rem,
+  };
+  pgTimelineStartAC = startAt;
+  pgTimelineOffset = cum + edgeSec;
+
+  src.start(startAt, edgeSec);
+  try {
+    src.stop(startAt + wallFF);
+  } catch (e) {}
+
+  src.onended = () => {
+    if (!pgSources.includes(src) || !pgSeamMode) return;
+    schedulePgSeamTail(segments, segIdx, clusterRoot);
+  };
+}
+
+function schedulePgSeamTail(segments, segIdx, clusterRoot) {
+  clearPgSeamPhaseSources();
+  const buf = segments[segIdx].buf;
+  const dur = buf.duration;
+  const edgeSec = computePgSeamEdgeSec(dur);
+  const audRate = Math.max(1e-6, Math.abs(playbackRateFromKnob()));
+  const cum = pgSeamCumDurations[segIdx];
+  const tailOffset = Math.max(0, dur - edgeSec);
+  const startAt = AC.currentTime + PG_SEAM_SCHEDULE_AHEAD;
+  const g = pgSeamBus;
+  if (!g) return;
+
+  setBpSeamSeekFfClass(false);
+
+  const src = AC.createBufferSource();
+  src.buffer = buf;
+  src.playbackRate.value = audRate;
+  src.connect(g);
+  pgSources.push(src);
+  schedulePgSeamGain(1, startAt);
+
+  const tailWall = edgeSec / audRate;
+  pgSeamTick = {
+    phase: 'tail',
+    phaseStartAC: startAt,
+    phaseStartLogical: cum + dur - edgeSec,
+    edge: edgeSec,
+    ffWallDur: 0,
+    ffLogicalSpan: 0,
+  };
+  pgTimelineStartAC = startAt;
+  pgTimelineOffset = cum + dur - edgeSec;
+
+  src.start(startAt, tailOffset);
+  try {
+    src.stop(startAt + tailWall);
+  } catch (e) {}
+
+  src.onended = () => {
+    if (!pgSources.includes(src) || !pgSeamMode) return;
+    const next = (segIdx + 1) % segments.length;
+    schedulePgSeamHead(segments, next, clusterRoot);
+  };
+}
+
+function scheduleClusterSeamPlay(sorted, clusterRoot) {
+  stopPlaygroundSourcesOnly();
+  playingRoot = clusterRoot;
+  playLoop = false;
+
+  const segments = [];
+  for (const b of sorted) {
+    const buf = STATE.players[`${b.fmt}_${b.songIdx}`]?.buffers[b.partIndex];
+    if (buf) segments.push({ b, buf });
+  }
+  if (segments.length === 0) {
+    playingRoot = null;
+    updateClusterUi();
+    return;
+  }
+
+  pgSortedBricks = sorted;
+  pgTotalDur = segments.reduce((s, x) => s + x.buf.duration, 0);
+  const cumDurations = [];
+  let acc = 0;
+  for (let i = 0; i < segments.length; i++) {
+    cumDurations.push(acc);
+    acc += segments[i].buf.duration;
+  }
+  pgSeamSegments = segments;
+  pgSeamCumDurations = cumDurations;
+  pgSeamMode = true;
+
+  pgSeamBus = AC.createGain();
+  pgSeamBus.gain.value = 1;
+  pgSeamBus.connect(ensurePlaygroundGain());
+
+  schedulePgSeamHead(segments, 0, clusterRoot);
 }
 
 function scheduleClusterPlayFromOffset(sorted, offsetSec, loop, clusterRoot) {
   stopPlaygroundSourcesOnly();
   playingRoot = clusterRoot;
   playLoop = loop;
+  const transportToken = ++pgTransportToken;
 
   const segments = [];
   for (const b of sorted) {
@@ -300,7 +646,7 @@ function scheduleClusterPlayFromOffset(sorted, offsetSec, loop, clusterRoot) {
 
   const rate = playbackRateFromKnob();
   const absR = Math.max(1e-6, Math.abs(rate));
-  const g = ensurePlaygroundGain();
+  const outGain = ensurePlaygroundGain();
 
   function findStart(totalOff) {
     let w = 0;
@@ -317,6 +663,13 @@ function scheduleClusterPlayFromOffset(sorted, offsetSec, loop, clusterRoot) {
 
   function playFrom(totalOff) {
     stopPlaygroundSourcesOnly();
+    if (transportToken !== pgTransportToken) return;
+
+    const bus = AC.createGain();
+    bus.gain.value = 1;
+    bus.connect(outGain);
+    pgPlayBus = bus;
+
     const { startIdx, innerOff } = findStart(totalOff);
     pgTimelineOffset = totalOff;
     pgTimelineStartAC = AC.currentTime;
@@ -327,7 +680,7 @@ function scheduleClusterPlayFromOffset(sorted, offsetSec, loop, clusterRoot) {
       const src = AC.createBufferSource();
       src.buffer = buf;
       src.playbackRate.value = rate;
-      src.connect(g);
+      src.connect(bus);
       const off = i === startIdx ? Math.max(0, innerOff) : 0;
       const wall = (buf.duration - off) / absR;
       src.start(sched, off);
@@ -337,6 +690,7 @@ function scheduleClusterPlayFromOffset(sorted, offsetSec, loop, clusterRoot) {
     }
     if (lastSrc) {
       lastSrc.onended = () => {
+        if (transportToken !== pgTransportToken) return;
         if (!pgSources.length || pgSources[pgSources.length - 1] !== lastSrc) return;
         if (loop) {
           playFrom(0);
@@ -357,13 +711,32 @@ function tickPlaygroundSeek() {
   const seekHandle = clusterUiEl.querySelector('.bp-seek-handle');
   if (!seekFill || !seekHandle) return;
   const rate = Math.max(1e-6, Math.abs(playbackRateFromKnob()));
-  const elapsed = (AC.currentTime - pgTimelineStartAC) * rate;
-  const pos = Math.min(pgTimelineOffset + elapsed, pgTotalDur);
+  let pos;
+  if (pgSeamMode) {
+    const t = (AC.currentTime - pgSeamTick.phaseStartAC) * rate;
+    if (pgSeamTick.phase === 'head' || pgSeamTick.phase === 'tail') {
+      pos = pgSeamTick.phaseStartLogical + Math.min(t, pgSeamTick.edge);
+    } else if (pgSeamTick.phase === 'ff') {
+      const frac = pgSeamTick.ffWallDur > 1e-9 ? Math.min(1, t / pgSeamTick.ffWallDur) : 1;
+      pos = pgSeamTick.phaseStartLogical + frac * pgSeamTick.ffLogicalSpan;
+    } else {
+      pos = 0;
+    }
+    pos = Math.min(pos, pgTotalDur);
+  } else {
+    const elapsed = (AC.currentTime - pgTimelineStartAC) * rate;
+    pos = Math.min(pgTimelineOffset + elapsed, pgTotalDur);
+  }
   const pct = pgTotalDur > 0 ? (pos / pgTotalDur) * 100 : 0;
   seekFill.style.width = `${pct}%`;
   seekHandle.style.left = `${pct}%`;
-  if (pos < pgTotalDur - 0.03 || playLoop) pgRaf = requestAnimationFrame(tickPlaygroundSeek);
-  else if (!playLoop) stopPlaygroundPlayback();
+  if (pgSeamMode) {
+    pgRaf = requestAnimationFrame(tickPlaygroundSeek);
+  } else if (pos < pgTotalDur - 0.03 || playLoop) {
+    pgRaf = requestAnimationFrame(tickPlaygroundSeek);
+  } else if (!playLoop) {
+    stopPlaygroundPlayback();
+  }
 }
 
 async function bpPlayCluster(root, loop) {
@@ -381,6 +754,29 @@ async function bpPlayCluster(root, loop) {
     .sort((a, b) => a.x + a.width / 2 - (b.x + b.width / 2));
   activeBrickId = sorted[0]?.id || null;
   scheduleClusterPlayFromOffset(sorted, 0, loop, root);
+  updateClusterUi();
+  playClickUiSound();
+}
+
+async function bpPlayClusterSeam(root) {
+  const ids = clusterMembers(root);
+  if (ids.length === 0) return;
+  await Promise.all(
+    ids.map(id => {
+      const b = brickMap.get(id);
+      return loadPartBuffer(b.fmt, b.songIdx, b.partIndex);
+    })
+  );
+  const sorted = [...ids]
+    .map(id => brickMap.get(id))
+    .filter(Boolean)
+    .sort((a, b) => a.x + a.width / 2 - (b.x + b.width / 2));
+  if (playingRoot === root && pgSeamMode && pgSources.length > 0) {
+    stopPlaygroundPlayback();
+    return;
+  }
+  activeBrickId = sorted[0]?.id || null;
+  scheduleClusterSeamPlay(sorted, root);
   updateClusterUi();
   playClickUiSound();
 }
@@ -468,13 +864,36 @@ async function bpDownloadCluster(root) {
     off += buf.duration;
   }
   const rendered = await offline.startRendering();
-  const blob = audioBufferToWavBlob(rendered);
+  const fmt = (STATE.playground.downloadFormat || 'wav').toLowerCase();
+  let blob = null;
+  let ext = 'wav';
+  if (fmt === 'mp3') {
+    blob = await audioBufferToMp3Blob(rendered);
+    ext = 'mp3';
+  } else if (fmt === 'ogg') {
+    blob = await audioBufferToOggBlob(rendered);
+    ext = 'ogg';
+  } else {
+    blob = audioBufferToWavBlob(rendered);
+    ext = 'wav';
+  }
+  if (!blob) return;
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = sanitizeFileName(`playground-mix-${Date.now()}.wav`) || 'playground-mix.wav';
+  a.download = sanitizeFileName(`playground-mix-${Date.now()}.${ext}`) || `playground-mix.${ext}`;
   a.click();
   URL.revokeObjectURL(a.href);
   playClickUiSound();
+}
+
+function cyclePlaygroundDownloadFormat() {
+  const order = ['wav', 'mp3', 'ogg'];
+  const cur = (STATE.playground.downloadFormat || 'wav').toLowerCase();
+  const i = order.indexOf(cur);
+  const next = order[(i + 1) % order.length];
+  STATE.playground.downloadFormat = next;
+  saveSession();
+  return next;
 }
 
 function updateWorldTransform() {
@@ -496,6 +915,7 @@ function persistPlaygroundBricks() {
   STATE.playground.zoom = bpZoom;
   STATE.playground.panX = bpPanX;
   STATE.playground.panY = bpPanY;
+  if (!STATE.playground.downloadFormat) STATE.playground.downloadFormat = 'wav';
   STATE.playground.bricks = [...brickMap.values()].map(b => ({
     id: b.id,
     fmt: b.fmt,
@@ -772,6 +1192,56 @@ function repositionClusterUi() {
   clusterUiEl.style.top = `${box.minY - pad - toolbarH}px`;
 }
 
+function syncBpClusterTransportButtons(ui, root) {
+  const playBtn = ui.querySelector('.bp-play');
+  const loopBtn = ui.querySelector('.bp-loop');
+  const seamBtn = ui.querySelector('.bp-seam');
+  if (!playBtn || !loopBtn || !seamBtn) return;
+  const isThis =
+    playingRoot === root && (pgSeamMode || pgSources.length > 0);
+  if (!isThis) {
+    playBtn.innerHTML = BP_PLAY_ICON;
+    playBtn.title = 'Play once';
+    playBtn.setAttribute('aria-label', 'Play once');
+    loopBtn.innerHTML = BP_LOOP_ICON;
+    loopBtn.title = 'Play looped';
+    loopBtn.setAttribute('aria-label', 'Play looped');
+    seamBtn.innerHTML = BP_SEAM_ICON;
+    seamBtn.title = 'Seam preview';
+    seamBtn.setAttribute('aria-label', 'Seam preview — loop head and tail with a fast skip');
+    return;
+  }
+  if (pgSeamMode) {
+    playBtn.innerHTML = BP_PLAY_ICON;
+    playBtn.title = 'Play once';
+    loopBtn.innerHTML = BP_LOOP_ICON;
+    loopBtn.title = 'Play looped';
+    seamBtn.innerHTML = BP_PAUSE_ICON;
+    seamBtn.title = 'Stop seam preview';
+    seamBtn.setAttribute('aria-label', 'Stop seam preview');
+    return;
+  }
+  if (playLoop) {
+    playBtn.innerHTML = BP_PLAY_ICON;
+    playBtn.title = 'Play once';
+    loopBtn.innerHTML = BP_PAUSE_ICON;
+    loopBtn.title = 'Pause';
+    loopBtn.setAttribute('aria-label', 'Pause loop');
+    seamBtn.innerHTML = BP_SEAM_ICON;
+    seamBtn.title = 'Seam preview';
+    seamBtn.setAttribute('aria-label', 'Seam preview');
+  } else {
+    playBtn.innerHTML = BP_PAUSE_ICON;
+    playBtn.title = 'Pause';
+    playBtn.setAttribute('aria-label', 'Pause');
+    loopBtn.innerHTML = BP_LOOP_ICON;
+    loopBtn.title = 'Play looped';
+    seamBtn.innerHTML = BP_SEAM_ICON;
+    seamBtn.title = 'Seam preview';
+    seamBtn.setAttribute('aria-label', 'Seam preview');
+  }
+}
+
 function updateClusterUi() {
   removeClusterUi();
   if (!bpHudRoot || !activeBrickId) return;
@@ -790,7 +1260,6 @@ function updateClusterUi() {
   const left = box.minX - pad;
   const top = box.minY - pad - toolbarH;
   const w = box.maxX - box.minX + pad * 2;
-  const borderTop = box.minY - pad;
   const borderH = box.maxY - box.minY + pad * 2;
 
   ui.style.left = `${left}px`;
@@ -798,13 +1267,20 @@ function updateClusterUi() {
   ui.style.width = `${w}px`;
 
   const isPlaying = playingRoot === root;
+  const dlFmt = (STATE.playground.downloadFormat || 'wav').toLowerCase();
+  const dlFmtLabel = dlFmt === 'mp3' || dlFmt === 'ogg' ? dlFmt.toUpperCase() : 'WAV';
+
   ui.innerHTML = `
     <div class="bp-cluster-toolbar">
       <div class="bp-cluster-toolbar-left">
-        <button type="button" class="bp-mini-btn bp-play" title="Play once">Play</button>
-        <button type="button" class="bp-mini-btn bp-loop" title="Play looped">Play loop</button>
+        <button type="button" class="bp-mini-btn bp-mini-btn--icon bp-play" title="Play once" aria-label="Play once">${BP_PLAY_ICON}</button>
+        <button type="button" class="bp-mini-btn bp-mini-btn--icon bp-loop" title="Play looped" aria-label="Play looped">${BP_LOOP_ICON}</button>
+        <button type="button" class="bp-mini-btn bp-mini-btn--icon bp-seam bp-cluster-seam-btn" title="Seam preview" aria-label="Seam preview">${BP_SEAM_ICON}</button>
       </div>
-      <button type="button" class="bp-mini-btn bp-break" title="Break apart">Break</button>
+      <div class="bp-cluster-toolbar-right">
+        <button type="button" class="bp-mini-btn bp-mini-btn--icon bp-dup-x" title="Remove duplicate bricks (keep one of each sound)" aria-label="Remove duplicate bricks">&#10005;</button>
+        <button type="button" class="bp-mini-btn bp-mini-btn--icon bp-break" title="Break apart" aria-label="Break apart">${BP_BREAK_MAGNET_SVG}</button>
+      </div>
     </div>
     <div class="bp-cluster-outline" style="top:${toolbarH}px;height:${borderH}px"></div>
     <div class="bp-cluster-seek" style="top:${toolbarH + borderH + 6}px;">
@@ -814,12 +1290,29 @@ function updateClusterUi() {
       </div>
     </div>
     <div class="bp-cluster-footer" style="top:${toolbarH + borderH + seekH + 10}px;">
-      <button type="button" class="bp-mini-btn bp-dl" title="Download WAV">Download WAV</button>
+      <div class="bp-cluster-footer-inner">
+        <button type="button" class="bp-mini-btn bp-mini-btn--icon bp-dl" title="Download" aria-label="Download">${BP_DL_ICON}</button>
+        <button type="button" class="bp-mini-btn bp-dl-fmt" title="Cycle format: WAV → MP3 → OGG">${dlFmtLabel}</button>
+      </div>
     </div>
   `;
 
   const outline = ui.querySelector('.bp-cluster-outline');
   outline.style.width = `${w}px`;
+
+  const breakBtn = ui.querySelector('.bp-break');
+  if (breakBtn) {
+    breakBtn.disabled = ids.length <= 1;
+    breakBtn.classList.toggle('bp-mini-btn--disabled', ids.length <= 1);
+  }
+  const dupXBtn = ui.querySelector('.bp-dup-x');
+  if (dupXBtn) {
+    const canDup = bpClusterHasRemovableDuplicates(root);
+    dupXBtn.disabled = !canDup;
+    dupXBtn.classList.toggle('bp-mini-btn--disabled', !canDup);
+  }
+
+  syncBpClusterTransportButtons(ui, root);
 
   ui.querySelector('.bp-play').addEventListener('click', ev => {
     ev.stopPropagation();
@@ -829,17 +1322,40 @@ function updateClusterUi() {
     ev.stopPropagation();
     void bpPlayCluster(root, true);
   });
+  ui.querySelector('.bp-seam').addEventListener('click', ev => {
+    ev.stopPropagation();
+    void bpPlayClusterSeam(root);
+  });
   ui.querySelector('.bp-break').addEventListener('click', ev => {
     ev.stopPropagation();
     if (ids.length > 1) bpBreakCluster(root);
   });
+  if (dupXBtn) {
+    dupXBtn.addEventListener('click', ev => {
+      ev.stopPropagation();
+      if (bpClusterHasRemovableDuplicates(root)) bpDeleteDuplicatesInCluster(root);
+    });
+  }
   ui.querySelector('.bp-dl').addEventListener('click', ev => {
     ev.stopPropagation();
     void bpDownloadCluster(root);
   });
+  const fmtBtn = ui.querySelector('.bp-dl-fmt');
+  if (fmtBtn) {
+    fmtBtn.addEventListener('click', ev => {
+      ev.stopPropagation();
+      const next = cyclePlaygroundDownloadFormat();
+      fmtBtn.textContent = next === 'mp3' || next === 'ogg' ? next.toUpperCase() : 'WAV';
+      fmtBtn.title = `Next format: ${next.toUpperCase()} (click to cycle)`;
+    });
+  }
 
   const seekTrack = ui.querySelector('.bp-seek-track');
-  if (seekTrack && isPlaying) {
+  if (seekTrack) {
+    seekTrack.classList.toggle('bp-seek-track--disabled', !!pgSeamMode);
+    seekTrack.title = pgSeamMode ? 'Seam preview — seek disabled' : '';
+  }
+  if (seekTrack && isPlaying && !pgSeamMode) {
     const onSeek = clientX => {
       const rect = seekTrack.getBoundingClientRect();
       const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
@@ -874,6 +1390,8 @@ function updateClusterUi() {
     if (seekFill) seekFill.style.width = '0%';
     if (seekHandle) seekHandle.style.left = '0%';
   } else {
+    if (pgRaf) cancelAnimationFrame(pgRaf);
+    pgRaf = 0;
     tickPlaygroundSeek();
   }
 }
@@ -1047,6 +1565,16 @@ function initBrickPlayground(mainContainer) {
 
   bpViewport.addEventListener('keydown', e => {
     if (!wrap.classList.contains('active')) return;
+    const t = e.target;
+    const tag = t && t.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || (t && t.isContentEditable)) return;
+
+    if (e.key === 'Delete' || e.key === 'Backspace') {
+      e.preventDefault();
+      bpTryDeleteActiveBrick();
+      return;
+    }
+
     const mod = e.ctrlKey || e.metaKey;
     if (!mod) return;
     const k = e.key.toLowerCase();

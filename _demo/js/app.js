@@ -1024,12 +1024,14 @@ async function discoverSongs(rootHandle) {
 
       if (saved.playground && typeof saved.playground === 'object') {
         const pg = saved.playground;
+        const df = (pg.downloadFormat || 'wav').toLowerCase();
         STATE.playground = {
           mode: !!pg.mode,
           zoom: Number.isFinite(Number(pg.zoom)) ? Math.min(4, Math.max(0.12, Number(pg.zoom))) : 1,
           panX: Number.isFinite(Number(pg.panX)) ? Number(pg.panX) : 0,
           panY: Number.isFinite(Number(pg.panY)) ? Number(pg.panY) : 0,
           bricks: Array.isArray(pg.bricks) ? pg.bricks : [],
+          downloadFormat: df === 'mp3' || df === 'ogg' ? df : 'wav',
         };
       }
     }

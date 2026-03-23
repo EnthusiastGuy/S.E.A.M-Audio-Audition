@@ -142,6 +142,17 @@
   </a>
 </footer>
 
+<!-- Full-screen loading (folder scan / duration decode) -->
+<div id="app-loading-overlay" class="app-loading-overlay hidden" aria-hidden="true" role="status">
+  <div class="app-loading-card">
+    <div class="app-loading-spinner" aria-hidden="true">
+      <div class="app-loading-ring"></div>
+    </div>
+    <p class="app-loading-label" id="app-loading-label">Loading…</p>
+    <p class="app-loading-subtitle" id="app-loading-subtitle">Warming up the audio goblins...</p>
+  </div>
+</div>
+
 <!-- LOOP DROPDOWN -->
 <div class="loop-dropdown hidden" id="loop-dropdown">
   <div class="loop-option" data-val="1">Continue (once)</div>

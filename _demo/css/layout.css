@@ -109,3 +109,95 @@
 .tab-btn:hover:not(.active) { background: var(--card2); color: var(--text); }
 .tab-content { display: none; }
 .tab-content.active { display: block; }
+
+/* ---- APP LOADING (indeterminate) ---- */
+.app-loading-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 30000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(12, 16, 28, 0.78);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  transition: opacity 0.28s ease;
+}
+.app-loading-overlay.hidden {
+  display: none;
+}
+body.app-loading-active {
+  overflow: hidden;
+}
+.app-loading-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  padding: 28px 32px 26px;
+  max-width: min(420px, 100%);
+  background: linear-gradient(155deg, rgba(30, 42, 69, 0.96), rgba(22, 33, 62, 0.92));
+  border: 1px solid rgba(77, 150, 255, 0.22);
+  border-radius: 16px;
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.04) inset,
+    0 18px 48px rgba(0, 0, 0, 0.55);
+}
+.app-loading-spinner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 72px;
+}
+.app-loading-ring {
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+  background: conic-gradient(
+    from 220deg,
+    var(--accent3) 0deg,
+    var(--accent) 110deg,
+    var(--accent4) 210deg,
+    transparent 210deg,
+    transparent 360deg
+  );
+  animation: app-loading-spin 1.05s cubic-bezier(0.48, 0.14, 0.52, 0.86) infinite;
+  mask: radial-gradient(farthest-side, transparent calc(100% - 6px), #000 calc(100% - 5px));
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 6px), #000 calc(100% - 5px));
+  filter: drop-shadow(0 0 14px rgba(78, 205, 196, 0.35));
+}
+@keyframes app-loading-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .app-loading-ring {
+    animation-duration: 1.75s;
+    animation-timing-function: linear;
+  }
+}
+.app-loading-label {
+  margin: 0;
+  text-align: center;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--text2);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.app-loading-subtitle {
+  margin: -6px 0 0;
+  text-align: center;
+  max-width: 360px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text3);
+  opacity: 0.95;
+  animation: app-loading-subtitle-fade 2.8s ease-in-out infinite;
+}
+@keyframes app-loading-subtitle-fade {
+  0%, 100% { opacity: 0.65; }
+  50% { opacity: 1; }
+}

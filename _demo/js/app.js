@@ -702,6 +702,137 @@ async function selectFolder() {
   }
 }
 
+const APP_LOADING_QUIPS = [
+  'Counting waveforms like sheep. They keep beat.',
+  'Teaching the browser to tap in 4/4.',
+  'Inspecting every clip for groove violations.',
+  'Audio elves are currently labeling transients.',
+  'Calibrating dramatic pauses...',
+  'Untangling cables that only exist in software.',
+  'Checking if silence is truly intentional.',
+  'Convincing MP3 bits to cooperate.',
+  'Stretching before lifting heavy WAVs.',
+  'Polishing kick drums to a mirror finish.',
+  'Negotiating peace between CPU and fan.',
+  'Measuring reverb tails with tiny rulers.',
+  'Finding the loud part and making it louder in spirit.',
+  'Compressing expectations, not your creativity.',
+  'Loading audio. Please do not feed the DAW.',
+  'Checking browser patience levels.',
+  'Rendering vibes at maximum fidelity.',
+  'Rehearsing the loading screen solo.',
+  'Reticulating splines... but for audio.',
+  'Turning coffee into progress updates.',
+  'Synchronizing imaginary metronomes.',
+  'Verifying that bass still causes face stank.',
+  'Unwrapping fresh buffers.',
+  'Listening for hidden kazoo tracks.',
+  'Counting cuts so you do not have to.',
+  'Aligning waveforms with moon phases.',
+  'Defragmenting funk.',
+  'Giving each sample a tiny pep talk.',
+  'Making sure every snare arrives on time.',
+  'Reducing awkward silence since 2026.',
+  'Sending browser a motivational speech.',
+  'Applying anti-chaos coating to timelines.',
+  'Testing if this loading message is funny enough.',
+  'Pretending this is instant while working hard.',
+  'Hydrating the waveform hamsters.',
+  'Decoding audio and life choices.',
+  'Requesting one more millisecond from reality.',
+  'Summoning progress from the event loop.',
+  'Making waiting look intentional.',
+  'Assembling your clips with dramatic flair.',
+  'Avoiding eye contact with unoptimized code paths.',
+  'Making sure your cuts stay sharp.',
+  'Sanding rough edges off large folders.',
+  'Converting impatience into throughput.',
+  'Mildly judging corrupted filenames.',
+  'Swapping panic for progress.',
+  'Whispering sweet nothings to Web Audio.',
+  'Running a background montage sequence.',
+  'Speedrunning the boring part.',
+  'Keeping it smooth while files act huge.',
+  'Double-checking that wait means wait.',
+  'Loading complete soon-ish. Probably. Maybe.',
+  'No bytes were harmed during this loading.',
+  'Bargaining with entropy.',
+  'Trying not to wake the crash dialog.',
+  'Good things come to those who buffer.',
+];
+
+let appLoadingQuipTimer = null;
+let appLoadingQuipIndex = 0;
+let appLoadingQuipOrder = [];
+
+function shuffleArray(list) {
+  const a = list.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const t = a[i];
+    a[i] = a[j];
+    a[j] = t;
+  }
+  return a;
+}
+
+function setAppLoadingSubtitle(message) {
+  const sub = document.getElementById('app-loading-subtitle');
+  if (sub) sub.textContent = message || '';
+}
+
+function rotateAppLoadingSubtitle() {
+  if (!appLoadingQuipOrder.length) return;
+  if (appLoadingQuipIndex >= appLoadingQuipOrder.length) {
+    appLoadingQuipOrder = shuffleArray(APP_LOADING_QUIPS);
+    appLoadingQuipIndex = 0;
+  }
+  setAppLoadingSubtitle(appLoadingQuipOrder[appLoadingQuipIndex]);
+  appLoadingQuipIndex += 1;
+}
+
+function startAppLoadingQuips() {
+  if (appLoadingQuipTimer != null) return;
+  if (!appLoadingQuipOrder.length) {
+    appLoadingQuipOrder = shuffleArray(APP_LOADING_QUIPS);
+    appLoadingQuipIndex = 0;
+  }
+  rotateAppLoadingSubtitle();
+  appLoadingQuipTimer = window.setInterval(rotateAppLoadingSubtitle, 2600);
+}
+
+function stopAppLoadingQuips() {
+  if (appLoadingQuipTimer != null) {
+    clearInterval(appLoadingQuipTimer);
+    appLoadingQuipTimer = null;
+  }
+}
+
+function showAppLoading(message) {
+  const overlay = document.getElementById('app-loading-overlay');
+  const label = document.getElementById('app-loading-label');
+  if (!overlay) return;
+  if (label) label.textContent = message || 'Loading…';
+  overlay.classList.remove('hidden');
+  overlay.setAttribute('aria-hidden', 'false');
+  document.body.classList.add('app-loading-active');
+  startAppLoadingQuips();
+}
+
+function setAppLoadingLabel(message) {
+  const label = document.getElementById('app-loading-label');
+  if (label) label.textContent = message || 'Loading…';
+}
+
+function hideAppLoading() {
+  const overlay = document.getElementById('app-loading-overlay');
+  if (!overlay) return;
+  stopAppLoadingQuips();
+  overlay.classList.add('hidden');
+  overlay.setAttribute('aria-hidden', 'true');
+  document.body.classList.remove('app-loading-active');
+}
+
 async function discoverSongs(rootHandle) {
   const statusEl = document.getElementById('select-status');
   const fmt = 'wav';
@@ -729,80 +860,113 @@ async function discoverSongs(rootHandle) {
     return;
   }
 
-  statusEl.textContent = fmtHandle === rootHandle ? 'Scanning WAV song folders …' : `Scanning ${fmt}/ …`;
-  const songs = await scanFormat(fmtHandle);
-  STATE.songs[fmt] = songs;
-  STATE.order[fmt] = songs.map((_,i) => i);
+  const packLabel = rootHandle.name || 'library';
+  const scanningMsg = fmtHandle === rootHandle ? 'Scanning WAV song folders …' : `Scanning ${fmt}/ …`;
+  showAppLoading(`${scanningMsg} (${packLabel})`);
+  statusEl.textContent = scanningMsg;
+  await new Promise(r => requestAnimationFrame(r));
 
-  // Load durations
-  statusEl.textContent = 'Loading durations …';
-  const allLoaders = [];
-  for (const song of STATE.songs.wav) {
-    if (song.mainHandle) {
-      allLoaders.push(
-        getFileDuration(song.mainHandle).then(d => {
-          song.duration = d;
-          song._mainFileDur = d;
-        })
-      );
-    } else if (song.parts.length > 0) {
-      const pLoaders = song.parts.map(p =>
-        getFileDuration(p.handle).then(d => { p._dur = d; return d; })
-      );
-      allLoaders.push(
-        Promise.all(pLoaders).then(durs => {
-          song.duration = durs.reduce((a,b) => a+b, 0);
-        })
-      );
-    }
-  }
-  await Promise.all(allLoaders);
+  try {
+    const songs = await scanFormat(fmtHandle);
+    STATE.songs[fmt] = songs;
+    STATE.order[fmt] = songs.map((_,i) => i);
 
-  // Restore session
-  const saved = loadSession();
-  STATE._savedSession = saved;
-  if (saved) {
-    STATE.crossfade    = saved.crossfade    ?? 0;
-    STATE.speedPercent = saved.speedPercent ?? 100;
-    STATE.currentFormat = 'wav';
-    if (saved.encoding) {
-      STATE.encoding = saved.encoding;
-    }
-    STATE.waveformMaxPartDurationSec = saved.waveformMaxPartDurationSec ?? 20;
-
-    if (saved.order && saved.order.wav) {
-      const validOrder = saved.order.wav.filter(i => STATE.songs.wav[i] !== undefined);
-      STATE.songs.wav.forEach((_,i) => { if (!validOrder.includes(i)) validOrder.push(i); });
-      STATE.order.wav = validOrder;
-    }
-  }
-
-  // Switch to main app
-  document.getElementById('setup-panel').style.display = 'none';
-  document.getElementById('main-app').style.display    = 'flex';
-  document.getElementById('folder-switcher').style.display = '';
-
-  buildUI(saved);
-  initKnob();
-  initCrossfade();
-
-  STATE.order[fmt].forEach(songIdx => {
-    ensurePlayerState(fmt, songIdx);
-    syncSongCompositeDuration(fmt, songIdx);
-  });
-
-  // Restore open part sheets
-  if (saved && saved.openSheets) {
-    for (const sheetKey of saved.openSheets) {
-      const [fmt, idxStr] = sheetKey.split('_');
-      const songIdx = parseInt(idxStr, 10);
-      if (STATE.songs[fmt] && STATE.songs[fmt][songIdx]) {
-        togglePartSheet(fmt, songIdx);
+    const jobs = [];
+    for (const song of STATE.songs.wav) {
+      if (song.mainHandle) {
+        jobs.push(() =>
+          getFileDuration(song.mainHandle).then(d => {
+            song.duration = d;
+            song._mainFileDur = d;
+          })
+        );
+      } else if (song.parts.length > 0) {
+        for (const p of song.parts) {
+          jobs.push(() =>
+            getFileDuration(p.handle).then(d => {
+              p._dur = d;
+            })
+          );
+        }
       }
     }
-  }
+    const totalJobs = jobs.length;
+    let doneJobs = 0;
+    const setDurationProgress = () => {
+      if (totalJobs <= 0) {
+        statusEl.textContent = 'No audio files found to measure.';
+        setAppLoadingLabel('No audio files found to measure.');
+        return;
+      }
+      const msg = `Loading durations... ${doneJobs}/${totalJobs}`;
+      statusEl.textContent = msg;
+      setAppLoadingLabel(msg);
+    };
+    setDurationProgress();
 
-  statusEl.textContent = '';
+    await Promise.all(
+      jobs.map(runJob =>
+        runJob().finally(() => {
+          doneJobs += 1;
+          setDurationProgress();
+        })
+      )
+    );
+
+    for (const song of STATE.songs.wav) {
+      if (!song.mainHandle && song.parts.length > 0) {
+        song.duration = song.parts.reduce((acc, p) => acc + (p._dur || 0), 0);
+      }
+    }
+
+    // Restore session
+    const saved = loadSession();
+    STATE._savedSession = saved;
+    if (saved) {
+      STATE.crossfade    = saved.crossfade    ?? 0;
+      STATE.speedPercent = saved.speedPercent ?? 100;
+      STATE.currentFormat = 'wav';
+      if (saved.encoding) {
+        STATE.encoding = saved.encoding;
+      }
+      STATE.waveformMaxPartDurationSec = saved.waveformMaxPartDurationSec ?? 20;
+
+      if (saved.order && saved.order.wav) {
+        const validOrder = saved.order.wav.filter(i => STATE.songs.wav[i] !== undefined);
+        STATE.songs.wav.forEach((_,i) => { if (!validOrder.includes(i)) validOrder.push(i); });
+        STATE.order.wav = validOrder;
+      }
+    }
+
+    // Switch to main app
+    document.getElementById('setup-panel').style.display = 'none';
+    document.getElementById('main-app').style.display    = 'flex';
+    document.getElementById('folder-switcher').style.display = '';
+
+    buildUI(saved);
+    initKnob();
+    initCrossfade();
+
+    STATE.order[fmt].forEach(songIdx => {
+      ensurePlayerState(fmt, songIdx);
+      syncSongCompositeDuration(fmt, songIdx);
+    });
+
+    // Restore open part sheets
+    if (saved && saved.openSheets) {
+      for (const sheetKey of saved.openSheets) {
+        const [fmtKey, idxStr] = sheetKey.split('_');
+        const songIdx = parseInt(idxStr, 10);
+        if (STATE.songs[fmtKey] && STATE.songs[fmtKey][songIdx]) {
+          togglePartSheet(fmtKey, songIdx);
+        }
+      }
+    }
+
+    statusEl.textContent = '';
+  } finally {
+    hideAppLoading();
+  }
 }
 
 // ─── REMOTE NEWS / PROMOS ───────────────────────────────────

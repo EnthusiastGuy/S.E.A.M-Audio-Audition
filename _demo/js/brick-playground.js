@@ -167,11 +167,9 @@ function shiftCluster(ids, dx, dy) {
 
 function snapClusterToNeighbors(movedIds) {
   const cluster = new Set(movedIds);
-  let changed = true;
   let guard = 0;
-  while (changed && guard++ < 24) {
-    changed = false;
-    let bestMag = Infinity;
+  while (guard++ < 8) {
+    let bestScore = Infinity;
     let bestDx = 0;
     let bestDy = 0;
     for (const mid of movedIds) {
@@ -179,56 +177,32 @@ function snapClusterToNeighbors(movedIds) {
       if (!b) continue;
       for (const ob of brickMap.values()) {
         if (cluster.has(ob.id)) continue;
-        const vOverlap = Math.min(b.y + b.height, ob.y + ob.height) - Math.max(b.y, ob.y);
-        if (vOverlap < 10) continue;
+        const yDist = Math.abs(b.y - ob.y);
+        if (yDist > BP_BRICK_H + BP_SNAP) continue;
         const gapR = ob.x - (b.x + b.width);
         if (gapR >= -3 && gapR < BP_SNAP) {
-          const m = Math.abs(gapR);
-          if (m < bestMag) {
-            bestMag = m;
+          const score = Math.abs(gapR) + yDist * 0.3;
+          if (score < bestScore) {
+            bestScore = score;
             bestDx = gapR;
-            bestDy = 0;
+            bestDy = ob.y - b.y;
           }
         }
         const gapL = b.x - (ob.x + ob.width);
         if (gapL >= -3 && gapL < BP_SNAP) {
-          const m = Math.abs(gapL);
-          if (m < bestMag) {
-            bestMag = m;
+          const score = Math.abs(gapL) + yDist * 0.3;
+          if (score < bestScore) {
+            bestScore = score;
             bestDx = -gapL;
-            bestDy = 0;
+            bestDy = ob.y - b.y;
           }
         }
       }
     }
-    if (bestMag < Infinity && bestMag > 0.05) {
-      shiftCluster(movedIds, bestDx, bestDy);
-      changed = true;
-      playSnapSound();
-    }
-  }
-  const b0 = brickMap.get(movedIds[0]);
-  if (b0) {
-    let dySum = 0;
-    let n = 0;
-    for (const mid of movedIds) {
-      const b = brickMap.get(mid);
-      if (!b) continue;
-      for (const ob of brickMap.values()) {
-        if (cluster.has(ob.id)) continue;
-        const hGap = Math.min(
-          Math.abs(ob.x - (b.x + b.width)),
-          Math.abs(b.x - (ob.x + ob.width))
-        );
-        if (hGap < BP_SNAP) {
-          const midY = b.y + b.height / 2;
-          const obMid = ob.y + ob.height / 2;
-          dySum += obMid - midY;
-          n++;
-        }
-      }
-    }
-    if (n > 0) shiftCluster(movedIds, 0, (dySum / n) * 0.35);
+    if (bestScore >= BP_SNAP * 2) break;
+    if (Math.abs(bestDx) < 0.05 && Math.abs(bestDy) < 0.05) break;
+    shiftCluster(movedIds, bestDx, bestDy);
+    playSnapSound();
   }
 }
 
@@ -633,6 +607,7 @@ function createBrickElement(rec) {
         b.y = orig.y + dy;
         b.el.style.transform = `translate(${b.x}px,${b.y}px)`;
       }
+      repositionClusterUi();
     };
 
     const onUp = ev => {
@@ -669,6 +644,18 @@ function escapeHtml(s) {
 function removeClusterUi() {
   if (clusterUiEl && clusterUiEl.parentNode) clusterUiEl.parentNode.removeChild(clusterUiEl);
   clusterUiEl = null;
+}
+
+function repositionClusterUi() {
+  if (!clusterUiEl || !activeBrickId) return;
+  const root = ufFind(activeBrickId);
+  const ids = clusterMembers(root);
+  const box = clusterBBox(ids);
+  if (!box) return;
+  const pad = BP_PAD;
+  const toolbarH = 36;
+  clusterUiEl.style.left = `${box.minX - pad}px`;
+  clusterUiEl.style.top = `${box.minY - pad - toolbarH}px`;
 }
 
 function updateClusterUi() {
@@ -731,7 +718,6 @@ function updateClusterUi() {
   ui.querySelector('.bp-break').addEventListener('click', ev => {
     ev.stopPropagation();
     if (ids.length > 1) bpBreakCluster(root);
-    else bpBreakAll();
   });
   ui.querySelector('.bp-dl').addEventListener('click', ev => {
     ev.stopPropagation();

@@ -55,6 +55,18 @@
     <div class="setup-icon">&#127925;</div>
     <h2>Select Sample Pack</h2>
     <p>Click the button below and browse to the <strong>root directory</strong> of your sample pack - the folder that contains your <strong>song subfolders</strong> (either directly, or via a <code>wav</code> subdirectory).<br><br>No files leave your device; all processing happens in-browser.</p>
+    <div class="setup-performance-note" tabindex="0" role="note" aria-label="Performance guidance. Hover or focus for details.">
+      <div class="setup-performance-note-head">
+        <span class="setup-performance-note-icon" aria-hidden="true">&#9888;</span>
+        <span class="setup-performance-note-text">Performance tips - hover for quick guidance</span>
+      </div>
+      <div class="setup-performance-note-details">
+        <p><strong>Folder load time:</strong> Scanning and reading durations can take time with large libraries. Bigger folders and more files mean longer startup.</p>
+        <p><strong>Waveform rendering:</strong> Long clips are expensive to draw. You can tune the waveform limit in <strong>Settings</strong> with <em>Max clip length for waveforms (seconds)</em> to match your hardware.</p>
+        <p><strong>Large exports:</strong> MP3, OGG, and WAV exports of long timelines can pause the tab while encoding. If your browser asks to wait, choose <strong>Wait</strong> so export can finish.</p>
+        <p><strong>Extra advice:</strong> Close unused tabs/apps, reduce waveform limit for smoother playback, and export in shorter chunks when working with very long sessions.</p>
+      </div>
+    </div>
     <button class="btn btn-accent" id="btn-select">&#128193; &nbsp;Select Folder</button>
     <div class="recent-projects" id="recent-projects-wrap" style="display:none;">
       <p class="recent-projects-title">or reopen one of your recent projects</p>

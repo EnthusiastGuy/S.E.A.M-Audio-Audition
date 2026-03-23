@@ -31,6 +31,73 @@ body.welcome-idle-cinema #setup-panel {
 .setup-card p { color: var(--text2); font-size: 14px; line-height: 1.7; margin-bottom: 28px; }
 .setup-card .btn-accent { font-size: 15px; padding: 12px 32px; width: 100%; justify-content: center; }
 
+.setup-performance-note {
+  margin: -10px 0 18px;
+  border: 1px solid rgba(255, 193, 7, 0.35);
+  border-radius: 10px;
+  background: rgba(255, 193, 7, 0.08);
+  text-align: left;
+  overflow: hidden;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+.setup-performance-note-head {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 9px 12px;
+}
+.setup-performance-note-icon {
+  color: #f8d269;
+  font-size: 14px;
+  line-height: 1;
+}
+.setup-performance-note-text {
+  color: #f8d269;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+.setup-performance-note-details {
+  max-height: 0;
+  opacity: 0;
+  padding: 0 12px;
+  transition: max-height 0.25s ease, opacity 0.2s ease, padding 0.2s ease;
+}
+.setup-performance-note-details p {
+  margin: 0 0 10px;
+  color: var(--text2);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.setup-performance-note-details p:last-child {
+  margin-bottom: 12px;
+}
+.setup-performance-note:hover,
+.setup-performance-note:focus-within {
+  border-color: rgba(255, 193, 7, 0.65);
+  background: rgba(255, 193, 7, 0.12);
+}
+.setup-performance-note:hover .setup-performance-note-details,
+.setup-performance-note:focus-within .setup-performance-note-details {
+  max-height: 300px;
+  opacity: 1;
+  padding: 0 12px 2px;
+}
+
+body.welcome-idle-dim .setup-performance-note:hover,
+body.welcome-idle-dim .setup-performance-note:focus-within,
+body.welcome-idle-cinema .setup-performance-note:hover,
+body.welcome-idle-cinema .setup-performance-note:focus-within {
+  border-color: rgba(255, 214, 102, 0.9);
+  background: rgba(255, 193, 7, 0.22);
+}
+.setup-performance-note:focus-visible {
+  outline: 2px solid rgba(255, 193, 7, 0.9);
+  outline-offset: 2px;
+}
+
 .recent-projects {
   margin-top: 16px;
   text-align: left;

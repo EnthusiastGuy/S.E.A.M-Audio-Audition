@@ -764,6 +764,254 @@ async function discoverSongs(rootHandle) {
   statusEl.textContent = '';
 }
 
+// ─── REMOTE NEWS / PROMOS ───────────────────────────────────
+const SEAM_NEWS_FEED_URL =
+  'https://raw.githubusercontent.com/EnthusiastGuy/S.E.A.M-News-Feed/main/feed.json';
+const SEAM_LAST_READ_VERSION_KEY = 'seam_last_read_version';
+
+let seamNewsFeed = null;
+let seamNewsLatestVersion = null;
+let seamNewsFetchPromise = null;
+let seamNewsRenderedOnce = false;
+
+function safeLocalStorageGet(key) {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function safeLocalStorageSet(key, value) {
+  try {
+    localStorage.setItem(key, String(value));
+  } catch {
+    // Silent: localStorage may be blocked (private mode, etc.)
+  }
+}
+
+function coerceVersion(v) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+function isLatestVersionNewer(latestVersion, storedVersion) {
+  const ln = coerceVersion(latestVersion);
+  const sn = coerceVersion(storedVersion);
+  if (ln != null && sn != null) return ln > sn;
+  if (latestVersion == null) return false;
+  if (storedVersion == null) return true;
+  return String(latestVersion) > String(storedVersion);
+}
+
+function truncateText(str, maxLen) {
+  const s = typeof str === 'string' ? str : '';
+  if (s.length <= maxLen) return s;
+  const cut = Math.max(0, maxLen - 3);
+  return s.slice(0, cut) + '...';
+}
+
+function formatTimestamp(ts) {
+  if (ts == null) return '';
+  const num = Number(ts);
+  if (Number.isFinite(num)) {
+    // Heuristic: if the value looks like seconds, convert to ms.
+    const ms = num > 0 && num < 1e12 ? num * 1000 : num;
+    const d = new Date(ms);
+    if (!Number.isNaN(d.getTime())) return d.toLocaleString();
+  }
+  const d = new Date(ts);
+  if (!Number.isNaN(d.getTime())) return d.toLocaleString();
+  return String(ts);
+}
+
+function renderMoreArticle(article) {
+  const el = document.createElement('article');
+  el.className = 'more-article';
+
+  const title = truncateText(article?.title || '', 256);
+  const titleEl = document.createElement('div');
+  titleEl.className = 'more-article-title';
+  titleEl.textContent = title || '(Untitled)';
+  el.appendChild(titleEl);
+
+  const dateEl = document.createElement('div');
+  dateEl.className = 'more-article-date';
+  dateEl.textContent = formatTimestamp(article?.timestamp);
+  if (dateEl.textContent) el.appendChild(dateEl);
+
+  if (typeof article?.image_url === 'string' && article.image_url.trim().length) {
+    const img = document.createElement('img');
+    img.src = article.image_url;
+    img.alt = title || 'Promo image';
+    el.appendChild(img);
+  }
+
+  const bodyEl = document.createElement('div');
+  bodyEl.className = 'more-article-body';
+  bodyEl.innerHTML = typeof article?.body === 'string' ? article.body : '';
+  el.appendChild(bodyEl);
+
+  return el;
+}
+
+function renderMoreFeed(feed) {
+  const articles = Array.isArray(feed?.articles) ? feed.articles : [];
+  const news = articles.filter(a => a && a.type === 'news');
+  const others = articles.filter(a => a && a.type !== 'news');
+
+  const newsListEl = document.getElementById('more-news-list');
+  const othersListEl = document.getElementById('more-others-list');
+  if (!newsListEl || !othersListEl) return;
+
+  newsListEl.replaceChildren();
+  if (news.length === 0) {
+    const p = document.createElement('p');
+    p.textContent = 'No news right now.';
+    newsListEl.appendChild(p);
+  } else {
+    for (const a of news) newsListEl.appendChild(renderMoreArticle(a));
+  }
+
+  othersListEl.replaceChildren();
+  if (others.length === 0) {
+    const p = document.createElement('p');
+    p.textContent = 'No other updates at the moment.';
+    othersListEl.appendChild(p);
+  } else {
+    for (const a of others) othersListEl.appendChild(renderMoreArticle(a));
+  }
+}
+
+function updateMoreBadge(unreadNewsCount) {
+  const badgeEl = document.getElementById('more-badge');
+  if (!badgeEl) return;
+  if (unreadNewsCount > 0) {
+    badgeEl.textContent = String(unreadNewsCount);
+    badgeEl.classList.remove('hidden');
+  } else {
+    badgeEl.textContent = '0';
+    badgeEl.classList.add('hidden');
+  }
+}
+
+function hideMoreBadge() {
+  updateMoreBadge(0);
+}
+
+function showMoreLoading() {
+  const loadingEl = document.getElementById('more-loading');
+  const contentEl = document.getElementById('more-content');
+  if (!loadingEl || !contentEl) return;
+  loadingEl.classList.remove('hidden');
+  contentEl.classList.add('hidden');
+}
+
+function showMoreContent() {
+  const loadingEl = document.getElementById('more-loading');
+  const contentEl = document.getElementById('more-content');
+  if (!loadingEl || !contentEl) return;
+  loadingEl.classList.add('hidden');
+  contentEl.classList.remove('hidden');
+}
+
+function hideMoreButton() {
+  const btnMore = document.getElementById('btn-more');
+  const badgeEl = document.getElementById('more-badge');
+  const modal = document.getElementById('more-modal');
+  if (btnMore) btnMore.style.display = 'none';
+  if (badgeEl) badgeEl.classList.add('hidden');
+  if (modal) modal.classList.add('hidden');
+}
+
+async function fetchSeamNewsFeed() {
+  const res = await fetch(SEAM_NEWS_FEED_URL, { cache: 'no-store' });
+  if (!res.ok) throw new Error(`Feed fetch failed: ${res.status}`);
+  return await res.json();
+}
+
+function initMoreRemoteNewsPromo() {
+  const btnMore = document.getElementById('btn-more');
+  const moreModal = document.getElementById('more-modal');
+  const moreClose = document.getElementById('more-close');
+  if (!btnMore || !moreModal || !moreClose) return;
+
+  // Ensure hidden by default; we toggle classes in JS.
+  moreModal.classList.add('hidden');
+  showMoreLoading();
+  hideMoreBadge();
+
+  btnMore.addEventListener('click', async () => {
+    // If fetch is still in-flight, show the loading state inside the modal.
+    moreModal.classList.remove('hidden');
+    showMoreLoading();
+    hideMoreBadge();
+
+    try {
+      const feed = seamNewsFeed || await seamNewsFetchPromise;
+      seamNewsFeed = feed;
+
+      seamNewsLatestVersion = feed?.latest_version ?? null;
+      if (seamNewsLatestVersion != null) safeLocalStorageSet(SEAM_LAST_READ_VERSION_KEY, seamNewsLatestVersion);
+      hideMoreBadge();
+
+      if (!seamNewsRenderedOnce) {
+        renderMoreFeed(feed);
+        seamNewsRenderedOnce = true;
+      }
+      showMoreContent();
+    } catch {
+      // Fail silently: hide the whole feature if the remote feed can't be loaded.
+      hideMoreButton();
+    }
+  });
+
+  moreClose.addEventListener('click', () => {
+    moreModal.classList.add('hidden');
+  });
+
+  moreModal.addEventListener('click', (e) => {
+    if (e.target === moreModal) moreModal.classList.add('hidden');
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !moreModal.classList.contains('hidden')) {
+      moreModal.classList.add('hidden');
+    }
+  });
+
+  // Start the fetch immediately on app init.
+  if (typeof navigator !== 'undefined' && navigator && navigator.onLine === false) {
+    hideMoreButton();
+    return;
+  }
+  seamNewsFetchPromise = fetchSeamNewsFeed();
+  seamNewsFetchPromise
+    .then((feed) => {
+      seamNewsFeed = feed;
+      seamNewsLatestVersion = feed?.latest_version ?? null;
+
+      const storedLastRead = safeLocalStorageGet(SEAM_LAST_READ_VERSION_KEY);
+      if (seamNewsLatestVersion == null) {
+        hideMoreBadge();
+        return;
+      }
+
+      if (isLatestVersionNewer(seamNewsLatestVersion, storedLastRead)) {
+        const articles = Array.isArray(feed?.articles) ? feed.articles : [];
+        const unreadNewsCount = articles.filter(a => a && a.type === 'news').length;
+        updateMoreBadge(unreadNewsCount);
+      } else {
+        hideMoreBadge();
+      }
+    })
+    .catch(() => {
+      // Silent failure: app continues normally without More.
+      hideMoreButton();
+    });
+}
+
 // ─── INIT ────────────────────────────────────────────────────
 initHelp();
 initEncodingSettings();
+initMoreRemoteNewsPromo();

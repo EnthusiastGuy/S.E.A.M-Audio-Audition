@@ -120,6 +120,34 @@ a.app-logo:hover span { color: var(--text); }
 .btn-sm { padding: 5px 10px; font-size: 12px; }
 .btn-icon { padding: 7px; border-radius: 50%; width: 32px; height: 32px; justify-content: center; }
 
+/* ---- MORE HEADER BADGE ---- */
+.more-btn-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.more-badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  border: 2px solid var(--bg2);
+  font-family: 'Space Mono', monospace;
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  box-shadow: 0 10px 20px rgba(0,0,0,0.35);
+}
+
+.more-badge.hidden { display: none; }
+
 /* ---- TRANSPORT BUTTONS ---- */
 .t-btn {
   background: transparent;

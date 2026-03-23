@@ -34,6 +34,16 @@
       <select class="folder-switcher" id="folder-switcher" style="display:none;" aria-label="Change folder"></select>
       <button class="btn btn-sm btn-icon" id="btn-settings" title="Encoding settings" aria-label="Encoding settings">&#9881;</button>
       <button class="btn btn-sm" id="btn-help">&#8505; Help</button>
+      <div class="more-btn-wrap">
+        <button class="btn btn-sm" id="btn-more" aria-label="More news and promotions" aria-haspopup="dialog" aria-controls="more-modal">More</button>
+        <span
+          class="more-badge hidden"
+          id="more-badge"
+          role="status"
+          aria-live="polite"
+          aria-label="Unread news updates"
+        >0</span>
+      </div>
     </div>
   </div>
 </header>
@@ -331,6 +341,30 @@
         <a href="video/TestVideo.mkv" download>TestVideo.mkv</a>.
       </p>
     </aside>
+    </div>
+  </div>
+</div>
+
+<!-- MORE MODAL -->
+<div class="modal-overlay hidden" id="more-modal" role="dialog" aria-modal="true" aria-labelledby="more-modal-title">
+  <div class="modal-box more-modal-box">
+    <button type="button" class="modal-close" id="more-close" aria-label="Close more">&times;</button>
+    <h2 id="more-modal-title">More — News &amp; Promotions</h2>
+
+    <div class="more-loading" id="more-loading">Loading...</div>
+
+    <div class="more-content hidden" id="more-content">
+      <div class="more-sections">
+        <section class="more-section" aria-label="News section">
+          <h3>News</h3>
+          <div class="more-list" id="more-news-list"></div>
+        </section>
+
+        <section class="more-section" aria-label="Other updates section">
+          <h3>Others</h3>
+          <div class="more-list" id="more-others-list"></div>
+        </section>
+      </div>
     </div>
   </div>
 </div>

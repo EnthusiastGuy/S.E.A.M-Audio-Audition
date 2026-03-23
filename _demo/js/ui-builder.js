@@ -154,7 +154,10 @@ function makeDownloadControl(fmt, songIdx) {
   const song = STATE.songs[fmt][songIdx];
   const key = `${fmt}_${songIdx}`;
   const ps = ensurePlayerState(fmt, songIdx);
-  if (!song || !song.mainHandle || !ps) return null;
+  // Show stitched-composition export whenever a timeline can be built,
+  // even if the optional full-song file is missing.
+  const hasExportableSource = !!song && (!!song.mainHandle || (Array.isArray(song.parts) && song.parts.length > 0));
+  if (!hasExportableSource || !ps) return null;
 
   const wrap = document.createElement('div');
   wrap.className = 'download-split';

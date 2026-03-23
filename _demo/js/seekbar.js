@@ -140,7 +140,11 @@ function renderBricks(fmt, songIdx, totalDur) {
     const wave = document.createElement('div');
     wave.className = 'part-brick-wave';
     brick.appendChild(wave);
-    wireBrickWaveform(wave, ps, item.partIndex);
+    if (partShowsBrickWaveform(ps, item.partIndex)) {
+      wireBrickWaveform(wave, ps, item.partIndex);
+    } else {
+      wave.style.backgroundImage = 'none';
+    }
 
     const lbl = document.createElement('span');
     lbl.className = 'part-brick-label';
@@ -187,6 +191,13 @@ function renderBricks(fmt, songIdx, totalDur) {
 /** One vertical line per CSS pixel of the wave area (capped); stroke scales so on-screen width stays constant. */
 const BRICK_WAVE_MAX_COLUMNS = 24000;
 const BRICK_WAVE_LINE_CSS_PX = 0.32;
+/** Skip waveform rendering for parts longer than this (expensive; large buffers). */
+const BRICK_WAVEFORM_MAX_DURATION_SEC = 20;
+
+function partShowsBrickWaveform(ps, partIndex) {
+  const d = ps.partDurations[partIndex] || 0;
+  return d > 0 && d <= BRICK_WAVEFORM_MAX_DURATION_SEC;
+}
 
 function disconnectBrickWaveObservers(ps) {
   if (!ps || !ps._brickWaveObservers) return;
@@ -231,6 +242,7 @@ function updateBrickWaveformEl(waveEl, ps, partIndex) {
 
 function getBrickWaveformDataUri(ps, partIndex, widthPx) {
   if (!ps || !ps.buffers) return null;
+  if (!partShowsBrickWaveform(ps, partIndex)) return null;
   if (!ps._brickWaveCache) ps._brickWaveCache = {};
 
   const w = Math.max(1, Math.floor(widthPx));
@@ -663,6 +675,7 @@ function drawBrickPreviewCanvas(ctx, w, h, ps, centerGlobal, totalDur) {
 
     const bufC = ps.buffers[segC.partIndex];
     if (!bufC) continue;
+    if (!partShowsBrickWaveform(ps, segC.partIndex)) continue;
 
     let peakSum = 0;
     let n = 0;
@@ -789,7 +802,8 @@ function partMiniTimeToX(tTime, tCenter, windowSec, w) {
  * Continuous horizontal time; waveform uses wrapped sample time so the next loop iteration
  * appears to the right of the seam. No zebra — uniform background. Loop seams only at n×duration.
  */
-function drawPartMiniScrollingBricks(ctx, w, h, buf, partIndex, totalDur, tPlay) {
+function drawPartMiniScrollingBricks(ctx, w, h, buf, partIndex, ps, tPlay) {
+  const totalDur = buf.duration || ps.partDurations[partIndex] || 0;
   const floorAmp = 0.07;
   const halfAmpPx = h * 0.38;
   const cy = h * 0.5;
@@ -806,26 +820,28 @@ function drawPartMiniScrollingBricks(ctx, w, h, buf, partIndex, totalDur, tPlay)
   ctx.fillRect(0, 0, w, h);
 
   const color = partColorCss(partIndex);
-  for (let x = 0; x < w; x++) {
-    let peakSum = 0;
-    let n = 0;
-    for (let s = 0; s < BRICK_PREVIEW_AA_SAMPLES; s++) {
-      const u = (x + (s + 0.5) / BRICK_PREVIEW_AA_SAMPLES) / w;
-      const tAbs = tCenter + (u - 0.5) * windowSec;
-      if (!isFinite(tAbs)) continue;
-      const tl = wrapPartMiniTime(tAbs, totalDur);
-      peakSum += samplePeakLocal(buf, tl);
-      n++;
+  if (partShowsBrickWaveform(ps, partIndex)) {
+    for (let x = 0; x < w; x++) {
+      let peakSum = 0;
+      let n = 0;
+      for (let s = 0; s < BRICK_PREVIEW_AA_SAMPLES; s++) {
+        const u = (x + (s + 0.5) / BRICK_PREVIEW_AA_SAMPLES) / w;
+        const tAbs = tCenter + (u - 0.5) * windowSec;
+        if (!isFinite(tAbs)) continue;
+        const tl = wrapPartMiniTime(tAbs, totalDur);
+        peakSum += samplePeakLocal(buf, tl);
+        n++;
+      }
+      if (n === 0) continue;
+      const peak = peakSum / n;
+      const amp = Math.max(floorAmp, peak);
+      const barH = Math.max(1, amp * halfAmpPx * 2);
+      ctx.fillStyle = color;
+      ctx.globalAlpha = 0.92;
+      ctx.fillRect(x, cy - barH * 0.5, 1, barH);
     }
-    if (n === 0) continue;
-    const peak = peakSum / n;
-    const amp = Math.max(floorAmp, peak);
-    const barH = Math.max(1, amp * halfAmpPx * 2);
-    ctx.fillStyle = color;
-    ctx.globalAlpha = 0.92;
-    ctx.fillRect(x, cy - barH * 0.5, 1, barH);
+    ctx.globalAlpha = 1;
   }
-  ctx.globalAlpha = 1;
 
   ctx.strokeStyle = 'rgba(255, 255, 255, 0.28)';
   ctx.lineWidth = 1;
@@ -893,7 +909,7 @@ function updatePartMiniWaveformPreview(fmt, songIdx, partIndex, ps, globalTime) 
 
   const buf = ps.buffers[partIndex];
   if (!buf) return;
-  const totalDur = buf.duration || 0;
+  const totalDur = buf.duration || ps.partDurations[partIndex] || 0;
   if (totalDur <= 0) return;
 
   const tPlay = globalTime != null ? globalTime : getDirectPartPlaybackPositionForPreview(ps);
@@ -919,5 +935,5 @@ function updatePartMiniWaveformPreview(fmt, songIdx, partIndex, ps, globalTime) 
   ctx.imageSmoothingQuality = 'high';
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-  drawPartMiniScrollingBricks(ctx, w, h, buf, partIndex, totalDur, tPlay);
+  drawPartMiniScrollingBricks(ctx, w, h, buf, partIndex, ps, tPlay);
 }

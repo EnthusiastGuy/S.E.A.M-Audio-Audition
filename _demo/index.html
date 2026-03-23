@@ -354,16 +354,25 @@
     <div class="more-loading" id="more-loading">Loading...</div>
 
     <div class="more-content hidden" id="more-content">
-      <div class="more-sections">
-        <section class="more-section" aria-label="News section">
-          <h3>News</h3>
-          <div class="more-list" id="more-news-list"></div>
-        </section>
+      <div class="more-layout" role="region" aria-label="More content">
+        <div class="more-left" aria-label="News and archive">
+          <section class="more-section" aria-label="News section">
+            <h3>News</h3>
+            <div class="more-list" id="more-news-list"></div>
+          </section>
 
-        <section class="more-section" aria-label="Other updates section">
-          <h3>Others</h3>
-          <div class="more-list" id="more-others-list"></div>
-        </section>
+          <section class="more-section" aria-label="Archive section">
+            <h3>Archive</h3>
+            <div class="more-list" id="more-archive-list"></div>
+          </section>
+        </div>
+
+        <div class="more-right" aria-label="Pack articles">
+          <section class="more-section" aria-label="Packs section">
+            <h3>Packs</h3>
+            <div class="more-list" id="more-pack-list"></div>
+          </section>
+        </div>
       </div>
     </div>
   </div>

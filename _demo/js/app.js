@@ -939,11 +939,13 @@ function getSeamNewsFeedUrlWithCacheBuster() {
 function renderMoreFeed(feed) {
   const articles = Array.isArray(feed?.articles) ? feed.articles : [];
   const news = articles.filter(a => a && a.type === 'news');
-  const others = articles.filter(a => a && a.type !== 'news');
+  const pack = articles.filter(a => a && a.type === 'pack');
+  const archive = articles.filter(a => a && a.type !== 'news' && a.type !== 'pack');
 
   const newsListEl = document.getElementById('more-news-list');
-  const othersListEl = document.getElementById('more-others-list');
-  if (!newsListEl || !othersListEl) return;
+  const archiveListEl = document.getElementById('more-archive-list');
+  const packListEl = document.getElementById('more-pack-list');
+  if (!newsListEl || !archiveListEl || !packListEl) return;
 
   newsListEl.replaceChildren();
   if (news.length === 0) {
@@ -954,13 +956,22 @@ function renderMoreFeed(feed) {
     for (const a of news) newsListEl.appendChild(renderMoreArticle(a));
   }
 
-  othersListEl.replaceChildren();
-  if (others.length === 0) {
+  archiveListEl.replaceChildren();
+  if (archive.length === 0) {
     const p = document.createElement('p');
-    p.textContent = 'No other updates at the moment.';
-    othersListEl.appendChild(p);
+    p.textContent = 'Nothing in the archive at the moment.';
+    archiveListEl.appendChild(p);
   } else {
-    for (const a of others) othersListEl.appendChild(renderMoreArticle(a));
+    for (const a of archive) archiveListEl.appendChild(renderMoreArticle(a));
+  }
+
+  packListEl.replaceChildren();
+  if (pack.length === 0) {
+    const p = document.createElement('p');
+    p.textContent = 'No pack articles right now.';
+    packListEl.appendChild(p);
+  } else {
+    for (const a of pack) packListEl.appendChild(renderMoreArticle(a));
   }
 }
 

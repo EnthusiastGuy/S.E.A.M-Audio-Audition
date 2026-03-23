@@ -15,6 +15,7 @@ const BP_GRID_W = 560;
 const BP_ORIGIN_X = 32;
 const BP_ORIGIN_Y = 40;
 const BP_SCATTER = 420;
+const BP_UNDO_MAX = 50;
 
 let bpViewport = null;
 let bpWorld = null;
@@ -46,6 +47,11 @@ let saveTimer = null;
 let clusterUiEl = null;
 let playingRoot = null;
 let playLoop = false;
+
+/** @type {Array<Array<{ id: string, fmt: string, songIdx: number, partIndex: number, x: number, y: number }>>} */
+let bpUndoStack = [];
+/** @type {Array<Array<{ id: string, fmt: string, songIdx: number, partIndex: number, x: number, y: number }>>} */
+let bpRedoStack = [];
 
 let pgGain = null;
 /** @type {AudioBufferSourceNode[]} */
@@ -551,6 +557,78 @@ function layoutDefaultBricks(descriptors) {
   return out;
 }
 
+function makeDuplicateBrickId(sourceId) {
+  return `${sourceId}_d${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 9)}`;
+}
+
+function capturePlaygroundBrickSnapshot() {
+  return [...brickMap.values()].map(b => ({
+    id: b.id,
+    fmt: b.fmt,
+    songIdx: b.songIdx,
+    partIndex: b.partIndex,
+    x: b.x,
+    y: b.y,
+  }));
+}
+
+function cloneBrickSnapshot(snap) {
+  return snap.map(b => ({ ...b }));
+}
+
+function snapshotsEqual(a, b) {
+  if (!a || !b || a.length !== b.length) return false;
+  const mb = new Map(b.map(x => [x.id, x]));
+  for (const x of a) {
+    const y = mb.get(x.id);
+    if (!y || x.x !== y.x || x.y !== y.y) return false;
+  }
+  return true;
+}
+
+function applyPlaygroundBrickSnapshot(snapshot) {
+  stopPlaygroundPlayback();
+  removeClusterUi();
+  const layout = snapshot.map(b => ({
+    id: b.id,
+    fmt: b.fmt,
+    songIdx: b.songIdx,
+    partIndex: b.partIndex,
+    x: b.x,
+    y: b.y,
+    width: bpBrickWidthForDur(bpGetPartDuration(b.fmt, b.songIdx, b.partIndex)),
+  }));
+  rebuildBrickDom(layout);
+  if (activeBrickId && !brickMap.has(activeBrickId)) {
+    activeBrickId = brickMap.size ? brickMap.keys().next().value : null;
+  }
+  scheduleSave();
+  updateClusterUi();
+}
+
+function bpPushUndo(beforeSnapshot) {
+  bpRedoStack.length = 0;
+  bpUndoStack.push(cloneBrickSnapshot(beforeSnapshot));
+  while (bpUndoStack.length > BP_UNDO_MAX) bpUndoStack.shift();
+}
+
+function bpUndo() {
+  if (bpUndoStack.length === 0) return;
+  const prev = bpUndoStack.pop();
+  const current = capturePlaygroundBrickSnapshot();
+  bpRedoStack.push(current);
+  applyPlaygroundBrickSnapshot(prev);
+}
+
+function bpRedo() {
+  if (bpRedoStack.length === 0) return;
+  const next = bpRedoStack.pop();
+  const current = capturePlaygroundBrickSnapshot();
+  bpUndoStack.push(current);
+  while (bpUndoStack.length > BP_UNDO_MAX) bpUndoStack.shift();
+  applyPlaygroundBrickSnapshot(next);
+}
+
 function createBrickElement(rec) {
   const el = document.createElement('div');
   el.className = 'bp-brick';
@@ -576,17 +654,45 @@ function createBrickElement(rec) {
     if (e.button !== 0) return;
     e.stopPropagation();
     e.preventDefault();
-    activeBrickId = rec.id;
-    const root = ufFind(rec.id);
-    dragClusterIds = clusterMembers(root);
+
+    const isDuplicateDrag = e.ctrlKey || e.metaKey;
+    let snapshotBeforeDrag = null;
+    let beforeDuplicateSnapshot = null;
+    let workingRec = rec;
+
+    if (isDuplicateDrag) {
+      beforeDuplicateSnapshot = capturePlaygroundBrickSnapshot();
+      const newId = makeDuplicateBrickId(rec.id);
+      workingRec = {
+        id: newId,
+        fmt: rec.fmt,
+        songIdx: rec.songIdx,
+        partIndex: rec.partIndex,
+        x: rec.x,
+        y: rec.y,
+        width: rec.width,
+        height: BP_BRICK_H,
+        el: null,
+      };
+      workingRec.el = createBrickElement(workingRec);
+      brickMap.set(newId, workingRec);
+      if (bricksLayer) bricksLayer.appendChild(workingRec.el);
+      ufRebuild();
+    } else {
+      snapshotBeforeDrag = capturePlaygroundBrickSnapshot();
+    }
+
+    activeBrickId = workingRec.id;
+    const root = ufFind(workingRec.id);
+    dragClusterIds = isDuplicateDrag ? [workingRec.id] : clusterMembers(root);
     dragStartPos = new Map();
     for (const id of dragClusterIds) {
       const b = brickMap.get(id);
       if (b) dragStartPos.set(id, { x: b.x, y: b.y });
     }
     const w = screenToWorld(e.clientX, e.clientY);
-    dragOffX = w.x - rec.x;
-    dragOffY = w.y - rec.y;
+    dragOffX = w.x - workingRec.x;
+    dragOffY = w.y - workingRec.y;
     dragPointerId = e.pointerId;
     stopPlaygroundPlayback();
 
@@ -595,7 +701,7 @@ function createBrickElement(rec) {
       const w2 = screenToWorld(ev.clientX, ev.clientY);
       const tx = w2.x - dragOffX;
       const ty = w2.y - dragOffY;
-      const base = dragStartPos.get(rec.id);
+      const base = dragStartPos.get(workingRec.id);
       if (!base) return;
       const dx = tx - base.x;
       const dy = ty - base.y;
@@ -621,6 +727,14 @@ function createBrickElement(rec) {
       ufRebuild();
       scheduleSave();
       updateClusterUi();
+      if (isDuplicateDrag) {
+        if (beforeDuplicateSnapshot) bpPushUndo(beforeDuplicateSnapshot);
+      } else {
+        const endSnap = capturePlaygroundBrickSnapshot();
+        if (snapshotBeforeDrag && !snapshotsEqual(snapshotBeforeDrag, endSnap)) {
+          bpPushUndo(snapshotBeforeDrag);
+        }
+      }
       dragClusterIds = [];
     };
 
@@ -767,6 +881,8 @@ function updateClusterUi() {
 function resetPlaygroundLayout() {
   stopPlaygroundPlayback();
   removeClusterUi();
+  bpUndoStack.length = 0;
+  bpRedoStack.length = 0;
   bpZoom = 1;
   bpPanX = 0;
   bpPanY = 0;
@@ -828,7 +944,7 @@ function initBrickPlayground(mainContainer) {
   wrap.className = 'brick-playground';
   wrap.innerHTML = `
     <div class="bp-header">
-      <span class="bp-hint">Drag bricks to snap; scroll to zoom · empty area to pan</span>
+      <span class="bp-hint">Drag to snap · Ctrl-drag duplicate · Ctrl+Z undo / Ctrl+Y redo · scroll zoom · empty area pan</span>
     </div>
     <div class="bp-stage">
       <aside class="bp-floating-tools" id="bp-floating-tools" aria-label="Playground tools">
@@ -927,6 +1043,22 @@ function initBrickPlayground(mainContainer) {
       bpViewport.releasePointerCapture(e.pointerId);
     } catch (err) {}
     scheduleSave();
+  });
+
+  bpViewport.addEventListener('keydown', e => {
+    if (!wrap.classList.contains('active')) return;
+    const mod = e.ctrlKey || e.metaKey;
+    if (!mod) return;
+    const k = e.key.toLowerCase();
+    if (k === 'z' && !e.shiftKey) {
+      e.preventDefault();
+      bpUndo();
+      return;
+    }
+    if (k === 'y' || (k === 'z' && e.shiftKey)) {
+      e.preventDefault();
+      bpRedo();
+    }
   });
 
   initPlaygroundFloatingTools(wrap);

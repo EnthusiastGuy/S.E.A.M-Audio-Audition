@@ -764,6 +764,38 @@ function updateClusterUi() {
   }
 }
 
+function resetPlaygroundLayout() {
+  stopPlaygroundPlayback();
+  removeClusterUi();
+  bpZoom = 1;
+  bpPanX = 0;
+  bpPanY = 0;
+  updateWorldTransform();
+  const layout = layoutDefaultBricks(collectDescriptors());
+  rebuildBrickDom(layout);
+  activeBrickId = brickMap.size ? brickMap.keys().next().value : null;
+  persistPlaygroundBricks();
+  saveSession();
+  updateClusterUi();
+}
+
+function initPlaygroundFloatingTools(wrap) {
+  const tools = wrap.querySelector('#bp-floating-tools');
+  const toggle = wrap.querySelector('#bp-tools-toggle');
+  const resetBtn = wrap.querySelector('#bp-tools-reset');
+  if (!tools || !toggle) return;
+  toggle.addEventListener('click', () => {
+    const collapsed = tools.classList.toggle('bp-floating-tools--collapsed');
+    toggle.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+  });
+  if (resetBtn) {
+    resetBtn.addEventListener('click', () => {
+      resetPlaygroundLayout();
+      playClickUiSound();
+    });
+  }
+}
+
 function rebuildBrickDom(layout) {
   brickMap.clear();
   ufParent.clear();
@@ -798,10 +830,22 @@ function initBrickPlayground(mainContainer) {
     <div class="bp-header">
       <span class="bp-hint">Drag bricks to snap; scroll to zoom · empty area to pan</span>
     </div>
-    <div class="bp-viewport" tabindex="0">
-      <div class="bp-world">
-        <div class="bp-bricks-layer"></div>
-        <div class="bp-hud-layer"></div>
+    <div class="bp-stage">
+      <aside class="bp-floating-tools" id="bp-floating-tools" aria-label="Playground tools">
+        <button type="button" class="bp-tools-toggle" id="bp-tools-toggle" aria-expanded="true" aria-controls="bp-tools-panel">
+          <span class="bp-tools-toggle-label">Tools</span>
+          <span class="bp-tools-chevron" aria-hidden="true">&#9660;</span>
+        </button>
+        <div class="bp-tools-panel" id="bp-tools-panel">
+          <p class="bp-tools-hint">Restore the default brick grid and zoom/pan.</p>
+          <button type="button" class="bp-tools-btn-reset" id="bp-tools-reset">Reset positions</button>
+        </div>
+      </aside>
+      <div class="bp-viewport" tabindex="0">
+        <div class="bp-world">
+          <div class="bp-bricks-layer"></div>
+          <div class="bp-hud-layer"></div>
+        </div>
       </div>
     </div>
   `;
@@ -885,6 +929,7 @@ function initBrickPlayground(mainContainer) {
     scheduleSave();
   });
 
+  initPlaygroundFloatingTools(wrap);
   initPlaygroundViewToggle();
   applyPlaygroundVisibility(!!STATE.playground.mode);
 }

@@ -687,6 +687,10 @@ function bpSnowDrawParticles() {
   ctx.globalAlpha = 1;
 }
 
+function bpIsPlaybackActive() {
+  return pgSeamMode || (playingRoot !== null && pgSources.length > 0);
+}
+
 function bpSnowTick(now, dt) {
   const root = document.getElementById('brick-playground-root');
   if (!root || !root.classList.contains('active') || !bpSnowCtx || !bpViewport) {
@@ -694,7 +698,7 @@ function bpSnowTick(now, dt) {
     return;
   }
 
-  const idle = now - bpSnowLastActivity >= BP_SNOW_IDLE_MS;
+  const idle = !bpIsPlaybackActive() && now - bpSnowLastActivity >= BP_SNOW_IDLE_MS;
   if (idle) {
     if (bpSnowRampStart <= 0) bpSnowRampStart = now;
   } else {
@@ -835,7 +839,12 @@ function bpSnowInit(rootWrap) {
   });
   setInterval(() => {
     const r = document.getElementById('brick-playground-root');
-    if (r && r.classList.contains('active') && performance.now() - bpSnowLastActivity >= BP_SNOW_IDLE_MS) {
+    if (
+      r &&
+      r.classList.contains('active') &&
+      !bpIsPlaybackActive() &&
+      performance.now() - bpSnowLastActivity >= BP_SNOW_IDLE_MS
+    ) {
       bpSnowEnsureLoop();
     }
   }, 4000);
@@ -1883,6 +1892,50 @@ function updateWorldTransform() {
   bpWorld.style.transformOrigin = '0 0';
   bpVisSyncCanvasLayout();
   bpSnowSyncCanvasLayout();
+}
+
+function bpVisibleWorldRect() {
+  if (!bpViewport) return null;
+  const vw = bpViewport.clientWidth;
+  const vh = bpViewport.clientHeight;
+  if (vw <= 0 || vh <= 0) return null;
+  const left = (-bpPanX) / bpZoom;
+  const top = (-bpPanY) / bpZoom;
+  const right = left + vw / bpZoom;
+  const bottom = top + vh / bpZoom;
+  return { left, top, right, bottom };
+}
+
+function bpRectIntersects(a, b) {
+  return !(a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top);
+}
+
+function bpHasAnyVisibleBricks() {
+  const vr = bpVisibleWorldRect();
+  if (!vr) return false;
+  for (const b of brickMap.values()) {
+    const br = {
+      left: b.x,
+      top: b.y,
+      right: b.x + b.width,
+      bottom: b.y + b.height,
+    };
+    if (bpRectIntersects(vr, br)) return true;
+  }
+  return false;
+}
+
+function bpCenterViewportOnAllBricks() {
+  if (!bpViewport || brickMap.size === 0) return;
+  const box = clusterBBox([...brickMap.keys()]);
+  if (!box) return;
+  const cx = (box.minX + box.maxX) / 2;
+  const cy = (box.minY + box.maxY) / 2;
+  const vw = bpViewport.clientWidth;
+  const vh = bpViewport.clientHeight;
+  bpPanX = vw * 0.5 - cx * bpZoom;
+  bpPanY = vh * 0.5 - cy * bpZoom;
+  updateWorldTransform();
 }
 
 function scheduleSave() {
@@ -2946,6 +2999,10 @@ function applyPlaygroundVisibility(playground) {
   saveSession();
   if (playground && bpViewport) {
     bpSnowBumpActivity(false);
+    if (brickMap.size > 0 && !bpHasAnyVisibleBricks()) {
+      bpCenterViewportOnAllBricks();
+      scheduleSave();
+    }
     bpViewport.focus();
     updateClusterUi();
     bpVisResize();

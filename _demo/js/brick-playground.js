@@ -178,6 +178,13 @@ let bpVisRaf = 0;
 let bpVisLastAt = 0;
 let bpVisEnergy = 0;
 let bpVisPhase = 0;
+/** @type {Float32Array|null} */
+let bpVisCapY = null;
+/** @type {Float32Array|null} */
+let bpVisCapV = null;
+/** @type {Float32Array|null} */
+let bpVisCapHold = null;
+let bpVisCapCount = 0;
 
 function bpVisualizerEnsureAnalyser() {
   if (bpVisAnalyser) return bpVisAnalyser;
@@ -258,6 +265,19 @@ function bpVisAt(arr, idx) {
   return arr[i0] * (1 - t) + arr[i1] * t;
 }
 
+function bpVisEnsureCaps(count) {
+  if (bpVisCapY && bpVisCapV && bpVisCapHold && bpVisCapCount === count) return;
+  bpVisCapCount = count;
+  bpVisCapY = new Float32Array(count);
+  bpVisCapV = new Float32Array(count);
+  bpVisCapHold = new Float32Array(count);
+  for (let i = 0; i < count; i++) {
+    bpVisCapY[i] = 0;
+    bpVisCapV[i] = 0;
+    bpVisCapHold[i] = 0;
+  }
+}
+
 function bpVisDrawWaveLine(ctx, arr, hueA, hueB, amp, yBase, lineW, glow) {
   const w = bpVisW;
   const h = bpVisH;
@@ -286,11 +306,17 @@ function bpVisDrawWaveLine(ctx, arr, hueA, hueB, amp, yBase, lineW, glow) {
   ctx.stroke();
 }
 
-function bpVisDrawSpectrumPillars(ctx, arr, peaks, env) {
+function bpVisDrawSpectrumPillars(ctx, arr, peaks, env, dt) {
   const w = bpVisW;
   const h = bpVisH;
   const count = 128;
   const baseY = h * 0.84;
+  bpVisEnsureCaps(count);
+  const capY = bpVisCapY;
+  const capV = bpVisCapV;
+  const capHold = bpVisCapHold;
+  const gravity = 1850;
+  const capH = 3.2;
   const topFade = ctx.createLinearGradient(0, 0, 0, baseY);
   topFade.addColorStop(0, 'rgba(14,19,36,0)');
   topFade.addColorStop(1, 'rgba(14,19,36,0.1)');
@@ -315,12 +341,40 @@ function bpVisDrawSpectrumPillars(ctx, arr, peaks, env) {
     ctx.moveTo(x, baseY);
     ctx.lineTo(x, baseY - hh);
     ctx.stroke();
-    if (p > 0.1) {
-      ctx.fillStyle = `hsla(${15 + i * 1.15}, 100%, 66%, ${0.1 + env * 0.13})`;
-      ctx.beginPath();
-      ctx.arc(x, baseY - hh, 1.2 + p * 2.2, 0, Math.PI * 2);
-      ctx.fill();
+    const topY = baseY - hh;
+    if (!capY || !capV || !capHold) continue;
+    if (capY[i] <= 0) {
+      capY[i] = topY;
+      capV[i] = 0;
+      capHold[i] = 0;
+    } else if (topY < capY[i]) {
+      // Rising bar pushes cap upward and refreshes short hover.
+      capY[i] = topY;
+      capV[i] = Math.min(0, capV[i]) - 120;
+      capHold[i] = 0.07 + p * 0.11;
+    } else if (capHold[i] > 0) {
+      capHold[i] = Math.max(0, capHold[i] - dt);
+      capV[i] *= 0.86;
+    } else {
+      capV[i] += gravity * dt;
+      capY[i] += capV[i] * dt;
+      if (capY[i] > topY) {
+        capY[i] = topY;
+        capV[i] = 0;
+      }
+      if (capY[i] > baseY - capH) {
+        capY[i] = baseY - capH;
+        capV[i] = 0;
+      }
     }
+
+    const capA = 0.18 + env * 0.18;
+    const capW = 4.2;
+    const capGrad = ctx.createLinearGradient(0, capY[i] - capH, 0, capY[i] + capH);
+    capGrad.addColorStop(0, `rgba(255, 230, 192, ${capA + 0.08})`);
+    capGrad.addColorStop(1, `rgba(255, 136, 92, ${capA})`);
+    ctx.fillStyle = capGrad;
+    ctx.fillRect(x - capW * 0.5, capY[i] - capH * 0.5, capW, capH);
   }
   ctx.restore();
 }
@@ -368,7 +422,7 @@ function bpVisDrawFrame(dt) {
   ctx.save();
   ctx.globalCompositeOperation = 'source-over';
   bpVisDrawGridGlow(ctx, env);
-  bpVisDrawSpectrumPillars(ctx, arr, peaks, env);
+  bpVisDrawSpectrumPillars(ctx, arr, peaks, env, dt);
   const yBase = bpVisH * 0.84;
   bpVisDrawWaveLine(ctx, arr, 205, 16, 58 + env * 130, yBase, 1.8, 0.26);
   bpVisDrawWaveLine(ctx, peaks, 190, 8, 40 + env * 110, yBase + 8, 1.25, 0.2);

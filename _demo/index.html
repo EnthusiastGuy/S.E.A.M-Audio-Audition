@@ -400,8 +400,38 @@
     </ul>
     <p>Values snap in <strong>5%</strong> steps with a short click sound. You cannot jump straight from max forward to max reverse — turn through the north side of the dial.</p>
 
+    <h3>Brick Playground (snap-and-build view)</h3>
+    <p>Switch to <strong>Playground view</strong> with the sidebar <strong>VIEW</strong> toggle (brick icon). This is a freeform canvas where you can build new sequences by snapping parts from any song, audition those clusters, and export them.</p>
+    <ul>
+      <li><strong>Template rows (combs)</strong> — each song appears as a parking row of template bricks with a vertical <strong>comb spine</strong>. Drag the spine to move that whole song template row.</li>
+      <li><strong>Create bricks</strong> — template bricks are source tiles: click to select; drag about <strong>5px+</strong> to spawn a duplicate into the workspace. Existing workspace bricks can also be duplicated with <strong>Ctrl/Cmd + drag</strong>.</li>
+      <li><strong>Magnet snap</strong> — drag free bricks (or connected groups) near others to auto-snap edges into a cluster.</li>
+      <li><strong>Ghost reorder</strong> — hold a free brick for about <strong>1 second</strong> (without moving) to pick and move just that one brick out of its current sequence without dragging the whole cluster.</li>
+      <li><strong>Seam insert marker</strong> — when dragging near the midpoint between two bricks, a marker appears; dropping there inserts the moved brick(s) between those neighbors in one step.</li>
+      <li><strong>Delete selected cluster</strong> — with Playground focused, press <strong>Delete</strong> / <strong>Backspace</strong> to remove non-template bricks from the active cluster (template source bricks are protected).</li>
+    </ul>
+
+    <h3>Brick Playground cluster controls</h3>
+    <p>Select a brick to show controls for its connected cluster:</p>
+    <ul>
+      <li><strong>Transport</strong> — <strong>Play once</strong>, <strong>Play looped</strong>, and <strong>Seam preview</strong> (same head/tail audition concept as part-sheet seam preview).</li>
+      <li><strong>Seek bar</strong> — appears under the cluster while playing; drag to seek. During seam preview, seek is intentionally disabled.</li>
+      <li><strong>Break apart</strong> — separates a connected cluster into spaced bricks on one row.</li>
+      <li><strong>Remove duplicates</strong> (X icon) — keeps one of each duplicated sound inside the selected cluster.</li>
+      <li><strong>Download cluster mix</strong> — renders the selected cluster left-to-right as one file. Use the format button to cycle <strong>WAV → MP3 → OGG</strong>.</li>
+      <li><strong>Duration badges</strong> — connected clusters with 2+ free bricks show a total-duration badge above them.</li>
+    </ul>
+
+    <h3>Brick Playground navigation &amp; shortcuts</h3>
+    <ul>
+      <li><strong>Pan</strong> — drag empty canvas space.</li>
+      <li><strong>Zoom</strong> — mouse wheel over the viewport (centered at pointer).</li>
+      <li><strong>Undo / redo</strong> — <strong>Ctrl/Cmd + Z</strong> and <strong>Ctrl/Cmd + Y</strong> (also <strong>Ctrl/Cmd + Shift + Z</strong> for redo).</li>
+      <li><strong>Reset positions</strong> — Playground <strong>Tools</strong> panel restores default comb layout plus default zoom/pan.</li>
+    </ul>
+
     <h3>Session persistence</h3>
-    <p>For each root folder, the app saves to <code>localStorage</code>: playlist order, crossfade, speed, per-song <strong>timeline edits</strong>, <strong>loop</strong> choices, <strong>export format</strong> preferences, <strong>encoding</strong>, <strong>waveform performance</strong> and <strong>seam preview length</strong>, and which <strong>part sheets</strong> were left open. Reload the page and reopen the same folder to continue where you left off.</p>
+    <p>For each root folder, the app saves to <code>localStorage</code>: playlist order, crossfade, speed, per-song <strong>timeline edits</strong>, <strong>loop</strong> choices, <strong>export format</strong> preferences, <strong>encoding</strong>, <strong>waveform performance</strong> and <strong>seam preview length</strong>, which <strong>part sheets</strong> were left open, and Brick Playground state (<strong>view mode</strong>, <strong>brick positions</strong>, <strong>zoom/pan</strong>, and Playground <strong>download format</strong>). Reload the page and reopen the same folder to continue where you left off.</p>
 
     <h3>File naming convention</h3>
     <ul>

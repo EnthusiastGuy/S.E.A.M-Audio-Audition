@@ -241,10 +241,19 @@
   pointer-events: none;
 }
 
+.bp-snow-canvas {
+  position: absolute;
+  left: 0;
+  top: 0;
+  pointer-events: none;
+  z-index: 2;
+  image-rendering: auto;
+}
+
 .bp-hud-layer {
   position: absolute;
   inset: 0;
-  z-index: 2;
+  z-index: 3;
   pointer-events: none;
 }
 

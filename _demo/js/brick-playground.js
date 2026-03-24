@@ -40,6 +40,15 @@ const PG_SEAM_SCHEDULE_AHEAD = 0.005;
 const PG_SEAM_FF_TARGET_WALL_SEC = 0.85;
 const PG_SEAM_FF_GAIN = 0.2;
 
+/** Viewport snow: idle before fall, grid deposit on brick tops, gust erosion. */
+const BP_SNOW_IDLE_MS = 20000;
+const BP_SNOW_CELL = 3;
+const BP_SNOW_RAMP_SEC = 95;
+const BP_SNOW_MAX_PARTICLES = 23800;
+const BP_SNOW_BASE_SPAWN = 10.8;
+/** Deposit decay per second when user breaks idle (higher = faster melt). */
+const BP_SNOW_MELT_RATE = 11;
+
 const BP_PLAY_ICON = '&#9654;';
 const BP_PAUSE_ICON = '&#9646;&#9646;';
 const BP_LOOP_ICON = `${BP_PLAY_ICON}<span class="part-loop-glyph" aria-hidden="true">&#8635;</span>`;
@@ -124,6 +133,399 @@ let pgLastSegFlashIdx = null;
 let bpSeamMarkerEl = null;
 /** @type {{ leftId: string, rightId: string, seamX: number, rowY: number }|null} */
 let bpSeamHint = null;
+
+/** @type {HTMLCanvasElement|null} */
+let bpSnowCanvas = null;
+/** @type {CanvasRenderingContext2D|null} */
+let bpSnowCtx = null;
+let bpSnowW = 0;
+let bpSnowH = 0;
+let bpSnowDpr = 1;
+/** @type {Float32Array|null} */
+let bpSnowGrid = null;
+let bpSnowGw = 0;
+let bpSnowGh = 0;
+/** @type {Array<{ x: number, y: number, vx: number, vy: number, r: number, ph: number }>} */
+let bpSnowParticles = [];
+let bpSnowRaf = 0;
+let bpSnowLastActivity = 0;
+let bpSnowRampStart = 0;
+let bpSnowWind = 0;
+let bpSnowWindTarget = 0;
+let bpSnowWindNext = 0;
+let bpSnowGustNext = 0;
+let bpSnowDepositSum = 0;
+let bpSnowSpawnFrac = 0;
+let bpSnowLastFrameAt = 0;
+let bpSnowMelting = false;
+
+/** @param {boolean} [canMeltOnBreak] When false (e.g. view switch), only resets idle timer. */
+function bpSnowBumpActivity(canMeltOnBreak = true) {
+  const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+  const wasLongIdle = now - bpSnowLastActivity >= BP_SNOW_IDLE_MS;
+  bpSnowLastActivity = now;
+  bpSnowRampStart = 0;
+  if (
+    canMeltOnBreak &&
+    wasLongIdle &&
+    (bpSnowDepositSum > 0.04 || bpSnowParticles.length > 0)
+  ) {
+    bpSnowMelting = true;
+    bpSnowParticles.length = 0;
+    bpSnowSpawnFrac = 0;
+  }
+}
+
+function bpSnowApplyMelt(dt) {
+  const g = bpSnowGrid;
+  if (!g) {
+    bpSnowMelting = false;
+    return;
+  }
+  const k = Math.exp(-BP_SNOW_MELT_RATE * dt);
+  let sum = 0;
+  for (let i = 0; i < g.length; i++) {
+    g[i] *= k;
+    if (g[i] < 0.004) g[i] = 0;
+    sum += g[i];
+  }
+  bpSnowDepositSum = sum;
+  if (sum < 0.025) {
+    for (let i = 0; i < g.length; i++) g[i] = 0;
+    bpSnowDepositSum = 0;
+    bpSnowMelting = false;
+  }
+}
+
+function bpSnowResize() {
+  if (!bpSnowCanvas || !bpViewport) return;
+  const w = Math.max(1, Math.floor(bpViewport.clientWidth));
+  const h = Math.max(1, Math.floor(bpViewport.clientHeight));
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  const gw = Math.ceil(w / BP_SNOW_CELL);
+  const gh = Math.ceil(h / BP_SNOW_CELL);
+  if (!bpSnowGrid || gw !== bpSnowGw || gh !== bpSnowGh) {
+    const next = new Float32Array(gw * gh);
+    if (bpSnowGrid && bpSnowGw > 0 && bpSnowGh > 0) {
+      const copyW = Math.min(bpSnowGw, gw);
+      const copyH = Math.min(bpSnowGh, gh);
+      for (let j = 0; j < copyH; j++) {
+        for (let i = 0; i < copyW; i++) {
+          next[j * gw + i] = bpSnowGrid[j * bpSnowGw + i];
+        }
+      }
+    }
+    bpSnowGrid = next;
+    bpSnowGw = gw;
+    bpSnowGh = gh;
+    bpSnowDepositSum = 0;
+    for (let i = 0; i < bpSnowGrid.length; i++) bpSnowDepositSum += bpSnowGrid[i];
+  }
+  bpSnowCanvas.width = Math.floor(w * dpr);
+  bpSnowCanvas.height = Math.floor(h * dpr);
+  bpSnowCanvas.style.width = `${w}px`;
+  bpSnowCanvas.style.height = `${h}px`;
+  bpSnowCtx = bpSnowCanvas.getContext('2d', { alpha: true });
+  if (bpSnowCtx) {
+    bpSnowCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    bpSnowCtx.imageSmoothingEnabled = true;
+  }
+  bpSnowW = w;
+  bpSnowH = h;
+  bpSnowDpr = dpr;
+  bpSnowSyncCanvasLayout();
+}
+
+function bpSnowSyncCanvasLayout() {
+  if (!bpSnowCanvas || !bpViewport || !bpWorld) return;
+  const z = Math.max(0.12, bpZoom);
+  const ww = bpViewport.clientWidth / z;
+  const wh = bpViewport.clientHeight / z;
+  bpSnowCanvas.style.left = `${-bpPanX / z}px`;
+  bpSnowCanvas.style.top = `${-bpPanY / z}px`;
+  bpSnowCanvas.style.width = `${ww}px`;
+  bpSnowCanvas.style.height = `${wh}px`;
+}
+
+function bpSnowGetBrickRectsViewport() {
+  if (!bpViewport || !bricksLayer) return [];
+  const vr = bpViewport.getBoundingClientRect();
+  const out = [];
+  for (const el of bricksLayer.querySelectorAll('.bp-brick')) {
+    const br = el.getBoundingClientRect();
+    out.push({
+      left: br.left - vr.left,
+      top: br.top - vr.top,
+      right: br.right - vr.left,
+      bottom: br.bottom - vr.top,
+    });
+  }
+  return out;
+}
+
+function bpSnowFindLandingTop(px, oldY, newY, rects) {
+  let best = null;
+  for (const r of rects) {
+    if (px < r.left || px > r.right) continue;
+    if (oldY < r.top && newY >= r.top) {
+      if (best === null || r.top < best) best = r.top;
+    }
+  }
+  return best;
+}
+
+function bpSnowDepositLine(px, topY, amount, halfSpread) {
+  const g = bpSnowGrid;
+  if (!g) return;
+  const gw = bpSnowGw;
+  const gh = bpSnowGh;
+  const cy = Math.min(gh - 1, Math.max(0, Math.floor(topY / BP_SNOW_CELL)));
+  for (let dx = -halfSpread; dx <= halfSpread; dx++) {
+    const gx = Math.floor((px + dx * BP_SNOW_CELL * 0.6) / BP_SNOW_CELL);
+    if (gx < 0 || gx >= gw) continue;
+    const dist = 1 / (1 + Math.abs(dx) * 0.28);
+    const idx = cy * gw + gx;
+    const add = amount * dist;
+    const prev = g[idx];
+    g[idx] = Math.min(1.35, g[idx] + add);
+    bpSnowDepositSum += g[idx] - prev;
+  }
+}
+
+function bpSnowErode(dt, windAbs) {
+  const g = bpSnowGrid;
+  if (!g || bpSnowGw < 4 || bpSnowGh < 4) return;
+  const gust = windAbs * 0.0009 * dt * 60;
+  if (Math.random() < 0.00035 * dt * 60 + gust) {
+    const cx = (Math.random() * bpSnowGw) | 0;
+    const cy = (Math.random() * bpSnowGh) | 0;
+    const rad = 4 + Math.random() * (10 + windAbs * 0.08);
+    const rad2 = rad * rad;
+    for (let j = -Math.ceil(rad); j <= Math.ceil(rad); j++) {
+      for (let i = -Math.ceil(rad); i <= Math.ceil(rad); i++) {
+        if (i * i + j * j > rad2) continue;
+        const gx = cx + i;
+        const gy = cy + j;
+        if (gx < 0 || gy < 0 || gx >= bpSnowGw || gy >= bpSnowGh) continue;
+        const idx = gy * bpSnowGw + gx;
+        const prev = g[idx];
+        if (prev <= 0) continue;
+        const loss = prev * (0.25 + Math.random() * 0.45);
+        g[idx] = Math.max(0, prev - loss);
+        bpSnowDepositSum -= loss;
+      }
+    }
+  }
+  if (Math.random() < 0.00012 * dt * 60 + windAbs * 0.00025) {
+    const dir = Math.random() < 0.5 ? -1 : 1;
+    const sh = Math.min(3, 1 + Math.floor(windAbs / 52));
+    const tmp = new Float32Array(g.length);
+    for (let j = 0; j < bpSnowGh; j++) {
+      for (let i = 0; i < bpSnowGw; i++) {
+        const src = i - dir * sh;
+        const v =
+          src >= 0 && src < bpSnowGw ? g[j * bpSnowGw + src] : g[j * bpSnowGw + i] * 0.4;
+        tmp[j * bpSnowGw + i] = v * 0.88;
+      }
+    }
+    let sum = 0;
+    for (let i = 0; i < g.length; i++) {
+      g[i] = tmp[i];
+      sum += g[i];
+    }
+    bpSnowDepositSum = sum;
+  }
+}
+
+function bpSnowDrawDeposit() {
+  const ctx = bpSnowCtx;
+  const g = bpSnowGrid;
+  if (!ctx || !g) return;
+  const cell = BP_SNOW_CELL;
+  for (let j = 0; j < bpSnowGh; j++) {
+    for (let i = 0; i < bpSnowGw; i++) {
+      const v = g[j * bpSnowGw + i];
+      if (v <= 0.02) continue;
+      const x = i * cell;
+      const y = j * cell;
+      const hCap = Math.min(10, 2 + v * 7);
+      const a = 0.14 + Math.min(0.55, v * 0.42);
+      ctx.fillStyle = `rgba(248,252,255,${a})`;
+      ctx.fillRect(x, y - hCap + cell, cell, hCap);
+      ctx.fillStyle = `rgba(220,235,245,${a * 0.45})`;
+      ctx.fillRect(x, y - hCap + cell - 1, cell, 1.2);
+    }
+  }
+}
+
+function bpSnowDrawParticles() {
+  const ctx = bpSnowCtx;
+  if (!ctx) return;
+  ctx.fillStyle = 'rgba(255,255,255,0.92)';
+  for (const p of bpSnowParticles) {
+    const blur = p.r < 0.65 ? 0.85 : 1;
+    ctx.globalAlpha = 0.35 + blur * 0.5;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
+function bpSnowTick(now, dt) {
+  const root = document.getElementById('brick-playground-root');
+  if (!root || !root.classList.contains('active') || !bpSnowCtx || !bpViewport) {
+    bpSnowRaf = 0;
+    return;
+  }
+
+  const idle = now - bpSnowLastActivity >= BP_SNOW_IDLE_MS;
+  if (idle) {
+    if (bpSnowRampStart <= 0) bpSnowRampStart = now;
+  } else {
+    bpSnowRampStart = 0;
+    if (!bpSnowMelting) bpSnowSpawnFrac = 0;
+  }
+
+  const rampT = bpSnowRampStart > 0 ? (now - bpSnowRampStart) / 1000 : 0;
+  const ramp = idle ? Math.min(1, Math.max(0, rampT / BP_SNOW_RAMP_SEC)) : 0;
+  const spawnMul = ramp * ramp * (0.08 + 0.92 * ramp);
+
+  if (now >= bpSnowWindNext) {
+    bpSnowWindNext = now + 1800 + Math.random() * 4200;
+    bpSnowWindTarget = (Math.random() * 2 - 1) * (38 + Math.random() * 95);
+  }
+  const wl = Math.min(1, dt * 2.8);
+  bpSnowWind += (bpSnowWindTarget - bpSnowWind) * wl;
+  if (now >= bpSnowGustNext) {
+    bpSnowGustNext = now + 400 + Math.random() * 900;
+    bpSnowWind += (Math.random() * 2 - 1) * (25 + Math.random() * 70);
+  }
+
+  const windAbs = Math.abs(bpSnowWind);
+
+  if (bpSnowMelting) {
+    bpSnowApplyMelt(dt);
+    const ctxM = bpSnowCtx;
+    if (ctxM) {
+      ctxM.clearRect(0, 0, bpSnowW, bpSnowH);
+      bpSnowDrawDeposit();
+    }
+    bpSnowRaf = bpSnowMelting ? requestAnimationFrame(bpSnowFrame) : 0;
+    return;
+  }
+
+  if (idle && ramp > 0.02) {
+    const rate =
+      BP_SNOW_BASE_SPAWN * spawnMul * Math.max(0.45, bpSnowW / 560) * dt;
+    bpSnowSpawnFrac += rate;
+    while (bpSnowSpawnFrac >= 1 && bpSnowParticles.length < BP_SNOW_MAX_PARTICLES) {
+      bpSnowSpawnFrac -= 1;
+      bpSnowParticles.push({
+        x: Math.random() * bpSnowW,
+        y: -8 - Math.random() * 52,
+        vx: bpSnowWind * 0.09 + (Math.random() * 2 - 1) * 14,
+        vy: 26 + Math.random() * 58 + spawnMul * 48,
+        r: 0.35 + Math.random() * 1.35,
+        ph: Math.random() * Math.PI * 2,
+      });
+    }
+  }
+
+  const rects = bpSnowGetBrickRectsViewport();
+  const next = [];
+  for (const p of bpSnowParticles) {
+    const oldY = p.y;
+    const turb = Math.sin(now * 0.0023 + p.ph) * 14 + Math.sin(now * 0.0011 + p.ph * 2) * 6;
+    p.vx += (bpSnowWind * 0.014 + turb * 0.0045 - p.vx * 0.042) * dt * 60;
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+    p.ph += dt * 1.7;
+
+    const land = bpSnowFindLandingTop(p.x, oldY, p.y, rects);
+    if (land !== null) {
+      const amt = 0.045 + Math.min(0.12, p.r * 0.07) * (0.5 + ramp * 0.5);
+      bpSnowDepositLine(p.x, land, amt, 4);
+      continue;
+    }
+
+    if (p.x < -20 || p.x > bpSnowW + 20 || p.y > bpSnowH + 30) {
+      continue;
+    }
+
+    let hitTop = null;
+    for (const r of rects) {
+      if (p.x >= r.left && p.x <= r.right && p.y >= r.top && p.y <= r.bottom) {
+        hitTop = r.top;
+        break;
+      }
+    }
+    if (hitTop !== null) {
+      bpSnowDepositLine(p.x, hitTop, 0.035, 3);
+      continue;
+    }
+
+    next.push(p);
+  }
+  bpSnowParticles = next;
+
+  bpSnowErode(dt, windAbs);
+
+  const ctx = bpSnowCtx;
+  ctx.clearRect(0, 0, bpSnowW, bpSnowH);
+  bpSnowDrawDeposit();
+  bpSnowDrawParticles();
+
+  const keepGoing =
+    idle ||
+    bpSnowParticles.length > 0 ||
+    bpSnowDepositSum > 0.06 ||
+    bpSnowMelting;
+  if (keepGoing) {
+    bpSnowRaf = requestAnimationFrame(bpSnowFrame);
+  } else {
+    bpSnowRaf = 0;
+  }
+}
+
+function bpSnowFrame(t) {
+  const now = typeof t === 'number' ? t : performance.now();
+  if (!bpSnowLastFrameAt) bpSnowLastFrameAt = now;
+  const dt = Math.min(0.055, Math.max(0.001, (now - bpSnowLastFrameAt) / 1000));
+  bpSnowLastFrameAt = now;
+  bpSnowTick(now, dt);
+}
+
+function bpSnowEnsureLoop() {
+  if (bpSnowRaf) return;
+  const root = document.getElementById('brick-playground-root');
+  if (!root || !root.classList.contains('active')) return;
+  bpSnowLastFrameAt = 0;
+  bpSnowRaf = requestAnimationFrame(bpSnowFrame);
+}
+
+function bpSnowInit(rootWrap) {
+  bpSnowBumpActivity();
+  bpSnowResize();
+  const onResize = () => {
+    if (document.getElementById('brick-playground-root')?.classList.contains('active')) bpSnowResize();
+  };
+  window.addEventListener('resize', onResize);
+  const bump = () => {
+    bpSnowBumpActivity();
+    bpSnowEnsureLoop();
+  };
+  ['pointerdown', 'pointermove', 'wheel', 'keydown', 'touchstart'].forEach(ev => {
+    rootWrap.addEventListener(ev, bump, { passive: true });
+  });
+  setInterval(() => {
+    const r = document.getElementById('brick-playground-root');
+    if (r && r.classList.contains('active') && performance.now() - bpSnowLastActivity >= BP_SNOW_IDLE_MS) {
+      bpSnowEnsureLoop();
+    }
+  }, 4000);
+  bpSnowEnsureLoop();
+}
 
 function ensurePlaygroundGain() {
   if (!pgGain) {
@@ -1159,6 +1561,7 @@ function updateWorldTransform() {
   if (!bpWorld) return;
   bpWorld.style.transform = `translate(${bpPanX}px, ${bpPanY}px) scale(${bpZoom})`;
   bpWorld.style.transformOrigin = '0 0';
+  bpSnowSyncCanvasLayout();
 }
 
 function scheduleSave() {
@@ -2060,6 +2463,7 @@ function initBrickPlayground(mainContainer) {
         <div class="bp-world">
           <div class="bp-combs-layer"></div>
           <div class="bp-bricks-layer"></div>
+          <canvas class="bp-snow-canvas" aria-hidden="true"></canvas>
           <div class="bp-hud-layer"></div>
         </div>
       </div>
@@ -2071,6 +2475,7 @@ function initBrickPlayground(mainContainer) {
   bpWorld = wrap.querySelector('.bp-world');
   combsLayer = wrap.querySelector('.bp-combs-layer');
   bricksLayer = wrap.querySelector('.bp-bricks-layer');
+  bpSnowCanvas = wrap.querySelector('.bp-snow-canvas');
   bpHudRoot = wrap.querySelector('.bp-hud-layer');
   bpEnsureSeamMarker();
 
@@ -2176,6 +2581,7 @@ function initBrickPlayground(mainContainer) {
 
   initPlaygroundFloatingTools(wrap);
   initPlaygroundViewToggle();
+  bpSnowInit(wrap);
   applyPlaygroundVisibility(!!STATE.playground.mode);
 }
 
@@ -2215,7 +2621,13 @@ function applyPlaygroundVisibility(playground) {
   if (main) main.classList.toggle('main-content--playground', playground);
   saveSession();
   if (playground && bpViewport) {
+    bpSnowBumpActivity(false);
     bpViewport.focus();
     updateClusterUi();
+    bpSnowResize();
+    bpSnowEnsureLoop();
+  } else if (!playground && bpSnowRaf) {
+    cancelAnimationFrame(bpSnowRaf);
+    bpSnowRaf = 0;
   }
 }

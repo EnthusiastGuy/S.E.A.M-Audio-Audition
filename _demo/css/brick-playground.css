@@ -377,6 +377,34 @@
   vertical-align: sub;
 }
 
+/* Total duration on the cluster “toolbar” row (same band as play / loop / seam); above cluster UI z-index so every group stays readable */
+.bp-cluster-dur-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+}
+
+.bp-cluster-dur-label {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translate(-50%, -50%);
+  padding: 2px 7px;
+  border-radius: var(--radius-sm);
+  background: rgba(14, 22, 38, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  line-height: 1;
+}
+
+.bp-cluster-dur-label .bp-brick-dur {
+  display: block;
+  font-size: calc(9px * 1.45);
+}
+
 /* Sidebar view toggle */
 .view-mode-group {
   display: flex;

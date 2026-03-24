@@ -79,6 +79,8 @@ let panStartPanY = 0;
 let activeBrickId = null;
 let saveTimer = null;
 let clusterUiEl = null;
+/** Container for total-duration badges on multi-brick clusters (world-space, inside HUD). */
+let bpClusterDurLayer = null;
 let playingRoot = null;
 let playLoop = false;
 let pgSeamMode = false;
@@ -319,6 +321,54 @@ function clusterBBox(ids) {
   }
   if (!isFinite(minX)) return null;
   return { minX, minY, maxX, maxY };
+}
+
+function ensureClusterDurLayer() {
+  if (bpClusterDurLayer || !bpHudRoot) return;
+  bpClusterDurLayer = document.createElement('div');
+  bpClusterDurLayer.className = 'bp-cluster-dur-layer';
+  bpClusterDurLayer.setAttribute('aria-hidden', 'true');
+  bpHudRoot.appendChild(bpClusterDurLayer);
+}
+
+/** Total duration label above each cluster of 2+ connected (non-template) bricks, play order = left to right. */
+function updateClusterDurationLabels() {
+  ensureClusterDurLayer();
+  if (!bpClusterDurLayer) return;
+  bpClusterDurLayer.innerHTML = '';
+  const roots = new Set();
+  for (const id of brickMap.keys()) {
+    const b = brickMap.get(id);
+    if (!b || b.combTemplate) continue;
+    roots.add(ufFind(id));
+  }
+  for (const root of roots) {
+    const ids = clusterMembers(root).filter(i => !brickMap.get(i)?.combTemplate);
+    if (ids.length < 2) continue;
+    const sorted = ids
+      .map(id => brickMap.get(id))
+      .filter(Boolean)
+      .sort((a, b) => a.x - b.x);
+    let totalSec = 0;
+    for (const br of sorted) {
+      totalSec += bpGetPartDuration(br.fmt, br.songIdx, br.partIndex);
+    }
+    const box = clusterBBox(ids);
+    if (!box) continue;
+    const wrap = document.createElement('div');
+    wrap.className = 'bp-cluster-dur-label';
+    const durSpan = document.createElement('span');
+    durSpan.className = 'bp-brick-dur';
+    durSpan.innerHTML = fmtTimeHTML(totalSec);
+    wrap.appendChild(durSpan);
+    const cx = (box.minX + box.maxX) / 2;
+    /** Same vertical band as `.bp-cluster-toolbar` (aligned with play / loop / seam row). */
+    const toolbarH = 36;
+    const cy = box.minY - BP_PAD - toolbarH / 2;
+    wrap.style.left = `${cx}px`;
+    wrap.style.top = `${cy}px`;
+    bpClusterDurLayer.appendChild(wrap);
+  }
 }
 
 function screenToWorld(clientX, clientY) {
@@ -1693,6 +1743,7 @@ function removeClusterUi() {
 }
 
 function repositionClusterUi() {
+  updateClusterDurationLabels();
   if (!clusterUiEl || !activeBrickId) return;
   const root = ufFind(activeBrickId);
   const ids = clusterMembers(root);
@@ -1756,12 +1807,21 @@ function syncBpClusterTransportButtons(ui, root) {
 
 function updateClusterUi() {
   removeClusterUi();
-  if (!bpHudRoot || !activeBrickId) return;
+  if (!bpHudRoot || !activeBrickId) {
+    updateClusterDurationLabels();
+    return;
+  }
   const root = ufFind(activeBrickId);
   const ids = clusterMembers(root);
-  if (ids.length === 0) return;
+  if (ids.length === 0) {
+    updateClusterDurationLabels();
+    return;
+  }
   const box = clusterBBox(ids);
-  if (!box) return;
+  if (!box) {
+    updateClusterDurationLabels();
+    return;
+  }
 
   const ui = document.createElement('div');
   ui.className = 'bp-cluster-ui';
@@ -1906,6 +1966,7 @@ function updateClusterUi() {
     pgRaf = 0;
     tickPlaygroundSeek();
   }
+  updateClusterDurationLabels();
 }
 
 function resetPlaygroundLayout() {
@@ -1973,6 +2034,7 @@ function rebuildBrickDom(layout) {
   ufRebuild();
   syncCombAnchorsFromTemplateBricks();
   rebuildCombDom();
+  updateClusterDurationLabels();
 }
 
 function initBrickPlayground(mainContainer) {

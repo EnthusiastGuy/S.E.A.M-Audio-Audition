@@ -15,6 +15,8 @@ const BP_GRID_W = 560;
 const BP_ORIGIN_X = 32;
 const BP_ORIGIN_Y = 40;
 const BP_SCATTER = 420;
+/** Min gap between brick edges after break so they stay out of magnet snap range (see ufRebuild). */
+const BP_BREAK_GAP = Math.max(BP_SNAP + 10, 28);
 /** Vertical “comb” spine width; teeth (template bricks) sit to the right with wide gaps. */
 const BP_COMB_SPINE_W = 22;
 const BP_COMB_TOOTH_GAP = 38;
@@ -869,39 +871,51 @@ async function bpPlayClusterSeam(root) {
   playClickUiSound();
 }
 
+function bpRectsOverlap(a, b) {
+  return !(
+    a.x + a.width <= b.x ||
+    b.x + b.width <= a.x ||
+    a.y + a.height <= b.y ||
+    b.y + b.height <= a.y
+  );
+}
+
+function bpBreakClusterRowOverlapsExternals(sorted, idSet) {
+  for (const b of sorted) {
+    for (const ob of brickMap.values()) {
+      if (idSet.has(ob.id)) continue;
+      if (bpRectsOverlap(b, ob)) return true;
+    }
+  }
+  return false;
+}
+
 function bpBreakCluster(root) {
   const ids = clusterMembers(root).filter(id => !brickMap.get(id)?.combTemplate);
   if (ids.length === 0) return;
   const snap = capturePlaygroundBrickSnapshot();
   playBreakSound();
   for (const id of ids) ufParent.set(id, id);
-  for (const id of ids) {
-    const b = brickMap.get(id);
-    if (!b) continue;
-    let tries = 0;
-    let nx = b.x + (Math.random() - 0.5) * BP_SCATTER;
-    let ny = b.y + (Math.random() - 0.5) * BP_SCATTER;
-    while (tries++ < 30) {
-      let hit = false;
-      for (const ob of brickMap.values()) {
-        if (ob.id === b.id || ids.includes(ob.id)) continue;
-        const overlap = !(
-          nx + b.width < ob.x ||
-          nx > ob.x + ob.width ||
-          ny + b.height < ob.y ||
-          ny > ob.y + ob.height
-        );
-        if (overlap) {
-          hit = true;
-          break;
-        }
-      }
-      if (!hit) break;
-      nx = b.x + (Math.random() - 0.5) * BP_SCATTER * 1.3;
-      ny = b.y + (Math.random() - 0.5) * BP_SCATTER * 1.3;
+  const sorted = ids
+    .map(id => brickMap.get(id))
+    .filter(Boolean)
+    .sort((a, b) => a.x - b.x);
+  const rowY = sorted.reduce((m, b) => Math.min(m, b.y), Infinity);
+  const idSet = new Set(ids);
+  let x = sorted.reduce((m, b) => Math.min(m, b.x), Infinity);
+  for (const b of sorted) {
+    b.x = x;
+    b.y = rowY;
+    x += b.width + BP_BREAK_GAP;
+  }
+  let step = 0;
+  while (bpBreakClusterRowOverlapsExternals(sorted, idSet) && step++ < 400) {
+    const dx = 12;
+    for (const b of sorted) {
+      b.x += dx;
     }
-    b.x = nx;
-    b.y = ny;
+  }
+  for (const b of sorted) {
     b.el.style.transform = `translate(${b.x}px,${b.y}px)`;
   }
   ufRebuild();

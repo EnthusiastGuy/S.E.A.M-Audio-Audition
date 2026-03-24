@@ -136,6 +136,7 @@ let bpSeamMarkerEl = null;
 /** @type {{ leftId: string, rightId: string, seamX: number, rowY: number }|null} */
 let bpSeamHint = null;
 let bpLabelEditorEl = null;
+let bpClusterMergeEditorEl = null;
 
 /** @type {HTMLCanvasElement|null} */
 let bpSnowCanvas = null;
@@ -946,6 +947,7 @@ function bpTryDeleteActiveBrick() {
   const ids = clusterMembers(root).filter(id => !brickMap.get(id)?.combTemplate);
   if (ids.length === 0) return;
   const snap = capturePlaygroundBrickSnapshot();
+  const oldPartForAnn = bpSnapshotClustersPartition();
   for (const id of ids) {
     const b = brickMap.get(id);
     if (!b) continue;
@@ -954,6 +956,7 @@ function bpTryDeleteActiveBrick() {
   }
   bpPushUndo(snap);
   ufRebuild();
+  bpSyncClusterAnnotationsAfterUf(oldPartForAnn);
   stopPlaygroundPlayback();
   if (activeBrickId && !brickMap.has(activeBrickId)) {
     activeBrickId = brickMap.size ? brickMap.keys().next().value : null;
@@ -964,6 +967,7 @@ function bpTryDeleteActiveBrick() {
 
 function bpDeleteDuplicatesInCluster(root) {
   const snap = capturePlaygroundBrickSnapshot();
+  const oldPartForAnn = bpSnapshotClustersPartition();
   const ids = clusterMembers(root);
   const items = ids
     .map(id => brickMap.get(id))
@@ -985,6 +989,7 @@ function bpDeleteDuplicatesInCluster(root) {
   if (!removed) return;
   bpPushUndo(snap);
   ufRebuild();
+  bpSyncClusterAnnotationsAfterUf(oldPartForAnn);
   stopPlaygroundPlayback();
   if (activeBrickId && !brickMap.has(activeBrickId)) {
     activeBrickId = brickMap.size ? brickMap.keys().next().value : null;
@@ -1025,6 +1030,156 @@ function ufRebuild() {
       if (gapL >= BP_MAGNET_GAP_LO && gapL < BP_MAGNET_GAP_HI) ufUnion(A.id, B.id);
       else if (gapR >= BP_MAGNET_GAP_LO && gapR < BP_MAGNET_GAP_HI) ufUnion(A.id, B.id);
     }
+  }
+}
+
+function ufRebuildAndReconcileAnnotations() {
+  const oldPart = bpSnapshotClustersPartition();
+  ufRebuild();
+  bpSyncClusterAnnotationsAfterUf(oldPart);
+}
+
+function bpSnapshotClustersPartition() {
+  const byRoot = new Map();
+  for (const b of brickMap.values()) {
+    if (b.combTemplate) continue;
+    const r = ufFind(b.id);
+    if (!byRoot.has(r)) byRoot.set(r, []);
+    byRoot.get(r).push(b.id);
+  }
+  for (const ids of byRoot.values()) ids.sort();
+  return byRoot;
+}
+
+function bpAnnField(s) {
+  return String(s || '').trim();
+}
+
+function bpAnnHasAny(ann) {
+  return !!bpAnnField(ann.title) || !!bpAnnField(ann.description);
+}
+
+function bpDeleteClusterAnnotationForIds(ids) {
+  const map =
+    STATE.playground.clusterAnnotations && typeof STATE.playground.clusterAnnotations === 'object'
+      ? STATE.playground.clusterAnnotations
+      : null;
+  if (!map) return;
+  const key = bpClusterAnnotationKey(ids);
+  if (map[key]) {
+    delete map[key];
+    scheduleSave();
+  }
+}
+
+function bpReflowClusterBricksContiguous(memberIds) {
+  const bricks = memberIds
+    .map(id => brickMap.get(id))
+    .filter(b => b && !b.combTemplate)
+    .sort((a, b) => a.x - b.x);
+  if (bricks.length === 0) return;
+  const rowY = Math.min(...bricks.map(b => b.y));
+  let cursorX = Math.min(...bricks.map(b => b.x));
+  for (const b of bricks) {
+    b.x = cursorX;
+    b.y = rowY;
+    cursorX += b.width + BP_BRICK_PACK_GAP;
+    b.el.style.transform = `translate(${b.x}px,${b.y}px)`;
+  }
+}
+
+function bpSyncClusterAnnotationsAfterUf(oldPartition) {
+  const map =
+    STATE.playground.clusterAnnotations && typeof STATE.playground.clusterAnnotations === 'object'
+      ? STATE.playground.clusterAnnotations
+      : null;
+  if (!map) return;
+
+  const newPartition = bpSnapshotClustersPartition();
+  const idToOldRoot = new Map();
+  for (const [root, ids] of oldPartition) {
+    for (const id of ids) idToOldRoot.set(id, root);
+  }
+
+  const sortedNew = [...newPartition.entries()]
+    .map(([root, ids]) => ({
+      root,
+      ids,
+      minX: clusterBBox(ids)?.minX ?? 0,
+    }))
+    .sort((a, b) => a.minX - b.minX);
+
+  const consumedSplitSourceKeys = new Set();
+
+  for (const { ids: newIds } of sortedNew) {
+    const oldRoots = new Set();
+    for (const id of newIds) {
+      const or = idToOldRoot.get(id);
+      if (or !== undefined) oldRoots.add(or);
+    }
+    if (oldRoots.size === 0) continue;
+
+    const contributing = [...oldRoots].map(r => ({
+      root: r,
+      ids: oldPartition.get(r) || [],
+    }));
+
+    const newKey = bpClusterAnnotationKey(newIds);
+
+    if (oldRoots.size === 1) {
+      const oldIdsFull = contributing[0].ids;
+      const oldKeyFull = bpClusterAnnotationKey(oldIdsFull);
+      const sameMembers =
+        oldIdsFull.length === newIds.length && newIds.every(id => oldIdsFull.includes(id));
+      if (!sameMembers) {
+        const isStrictSubset =
+          newIds.length < oldIdsFull.length && newIds.every(id => oldIdsFull.includes(id));
+        if (isStrictSubset && map[oldKeyFull] && !consumedSplitSourceKeys.has(oldKeyFull)) {
+          map[newKey] = { ...map[oldKeyFull] };
+          delete map[oldKeyFull];
+          consumedSplitSourceKeys.add(oldKeyFull);
+        } else if (!isStrictSubset && oldKeyFull !== newKey && map[oldKeyFull]) {
+          map[newKey] = { ...map[oldKeyFull] };
+          delete map[oldKeyFull];
+        }
+      }
+      continue;
+    }
+
+    const withAnn = contributing.map(c => ({
+      ...c,
+      ann: bpGetClusterAnnotationByIds(c.ids),
+    }));
+    const nonempty = withAnn.filter(c => bpAnnHasAny(c.ann));
+
+    for (const c of contributing) {
+      const k = bpClusterAnnotationKey(c.ids);
+      if (map[k]) delete map[k];
+    }
+
+    if (nonempty.length === 0) {
+      continue;
+    }
+    if (nonempty.length === 1) {
+      const ann = nonempty[0].ann;
+      bpSetClusterAnnotationByIds(newIds, ann.title, ann.description);
+      continue;
+    }
+
+    const left = nonempty[0].ann;
+    const right = nonempty[1].ann;
+    const tL = bpAnnField(left.title);
+    const tR = bpAnnField(right.title);
+    const dL = bpAnnField(left.description);
+    const dR = bpAnnField(right.description);
+    const tConflict = !!(tL && tR);
+    const dConflict = !!(dL && dR);
+    if (!tConflict && !dConflict) {
+      bpSetClusterAnnotationByIds(newIds, tL || tR, dL || dR);
+      continue;
+    }
+
+    bpOpenClusterMergeDialog(newIds, { title: left.title, description: left.description }, { title: right.title, description: right.description });
   }
 }
 
@@ -1829,6 +1984,8 @@ function bpBreakCluster(root) {
   const ids = clusterMembers(root).filter(id => !brickMap.get(id)?.combTemplate);
   if (ids.length === 0) return;
   const snap = capturePlaygroundBrickSnapshot();
+  const oldPartForAnn = bpSnapshotClustersPartition();
+  bpDeleteClusterAnnotationForIds(ids);
   playBreakSound();
   for (const id of ids) ufParent.set(id, id);
   const sorted = ids
@@ -1854,6 +2011,7 @@ function bpBreakCluster(root) {
     b.el.style.transform = `translate(${b.x}px,${b.y}px)`;
   }
   ufRebuild();
+  bpSyncClusterAnnotationsAfterUf(oldPartForAnn);
   scheduleSave();
   updateClusterUi();
   bpPushUndo(snap);
@@ -1861,7 +2019,10 @@ function bpBreakCluster(root) {
 
 function bpBreakAll() {
   const snap = capturePlaygroundBrickSnapshot();
+  const oldPartForAnn = bpSnapshotClustersPartition();
   playBreakSound();
+  STATE.playground.clusterAnnotations = {};
+  scheduleSave();
   for (const id of brickMap.keys()) ufParent.set(id, id);
   const all = [...brickMap.values()];
   for (const b of all) {
@@ -1871,6 +2032,7 @@ function bpBreakAll() {
     b.el.style.transform = `translate(${b.x}px,${b.y}px)`;
   }
   ufRebuild();
+  bpSyncClusterAnnotationsAfterUf(oldPartForAnn);
   scheduleSave();
   updateClusterUi();
   bpPushUndo(snap);
@@ -2063,8 +2225,16 @@ function bpCloseLabelEditor() {
   bpLabelEditorEl = null;
 }
 
+function bpCloseClusterMergeEditor() {
+  if (bpClusterMergeEditorEl && bpClusterMergeEditorEl.parentNode) {
+    bpClusterMergeEditorEl.parentNode.removeChild(bpClusterMergeEditorEl);
+  }
+  bpClusterMergeEditorEl = null;
+}
+
 function bpOpenLabelEditor(anchorEl, ids) {
   bpCloseLabelEditor();
+  bpCloseClusterMergeEditor();
   if (!bpHudRoot || !anchorEl || !ids || !ids.length) return;
   const ann = bpGetClusterAnnotationByIds(ids);
   const pop = document.createElement('div');
@@ -2190,6 +2360,134 @@ function bpOpenLabelEditor(anchorEl, ids) {
     if (pop.contains(t) || anchorEl.contains(t)) return;
     close();
     document.removeEventListener('pointerdown', onDocPointerDown, true);
+  };
+  document.addEventListener('pointerdown', onDocPointerDown, true);
+}
+
+function bpOpenClusterMergeDialog(newIds, leftAnn, rightAnn) {
+  bpCloseClusterMergeEditor();
+  bpCloseLabelEditor();
+  if (!bpHudRoot || !newIds?.length) return;
+
+  const tL = bpAnnField(leftAnn?.title);
+  const tR = bpAnnField(rightAnn?.title);
+  const dL = bpAnnField(leftAnn?.description);
+  const dR = bpAnnField(rightAnn?.description);
+  const tConflict = !!(tL && tR);
+  const dConflict = !!(dL && dR);
+
+  const pop = document.createElement('div');
+  pop.className = 'bp-cluster-merge-popover';
+  pop.innerHTML = `
+    <div class="bp-cluster-merge-head">Merge cluster labels</div>
+    <p class="bp-cluster-merge-hint">Left and right show each group before the join. Edit the center to set the combined cluster, or use the arrows to copy one side.</p>
+    <div class="bp-merge-section-label">Title</div>
+    <div class="bp-merge-line bp-merge-line--title">
+      <input type="text" class="bp-merge-side bp-merge-in-left-title" readonly maxlength="120" aria-label="Group 1 title" />
+      <button type="button" class="bp-mini-btn bp-merge-pick bp-merge-pick-left-title" aria-label="Use group 1 title in merged cluster" title="Use group 1 title">→</button>
+      <input type="text" class="bp-merge-center bp-merge-out-title" maxlength="120" placeholder="Merged title" aria-label="Merged title" />
+      <button type="button" class="bp-mini-btn bp-merge-pick bp-merge-pick-right-title" aria-label="Use group 2 title in merged cluster" title="Use group 2 title">←</button>
+      <input type="text" class="bp-merge-side bp-merge-in-right-title" readonly maxlength="120" aria-label="Group 2 title" />
+    </div>
+    <div class="bp-merge-section-label">Description</div>
+    <div class="bp-merge-line bp-merge-line--desc">
+      <textarea class="bp-merge-side bp-merge-in-left-desc" readonly rows="4" maxlength="1000" aria-label="Group 1 description"></textarea>
+      <button type="button" class="bp-mini-btn bp-merge-pick bp-merge-pick-left-desc" aria-label="Use group 1 description in merged cluster" title="Use group 1 description">→</button>
+      <textarea class="bp-merge-center bp-merge-out-desc" rows="4" maxlength="1000" placeholder="Merged description" aria-label="Merged description"></textarea>
+      <button type="button" class="bp-mini-btn bp-merge-pick bp-merge-pick-right-desc" aria-label="Use group 2 description in merged cluster" title="Use group 2 description">←</button>
+      <textarea class="bp-merge-side bp-merge-in-right-desc" readonly rows="4" maxlength="1000" aria-label="Group 2 description"></textarea>
+    </div>
+    <div class="bp-cluster-merge-actions">
+      <button type="button" class="bp-mini-btn bp-merge-ok">OK</button>
+      <button type="button" class="bp-mini-btn bp-merge-cancel">Cancel</button>
+    </div>
+  `;
+  bpHudRoot.appendChild(pop);
+  bpClusterMergeEditorEl = pop;
+
+  pop.style.left = '50%';
+  pop.style.top = '40px';
+  pop.style.transform = 'translateX(-50%)';
+
+  const inLT = pop.querySelector('.bp-merge-in-left-title');
+  const inRT = pop.querySelector('.bp-merge-in-right-title');
+  const outT = pop.querySelector('.bp-merge-out-title');
+  const inLD = pop.querySelector('.bp-merge-in-left-desc');
+  const inRD = pop.querySelector('.bp-merge-in-right-desc');
+  const outD = pop.querySelector('.bp-merge-out-desc');
+
+  inLT.value = tL;
+  inRT.value = tR;
+  inLD.value = dL;
+  inRD.value = dR;
+
+  outT.value = tConflict ? '' : tL || tR;
+  outD.value = dConflict ? '' : dL || dR;
+
+  const pickLT = pop.querySelector('.bp-merge-pick-left-title');
+  const pickRT = pop.querySelector('.bp-merge-pick-right-title');
+  const pickLD = pop.querySelector('.bp-merge-pick-left-desc');
+  const pickRD = pop.querySelector('.bp-merge-pick-right-desc');
+
+  const showPick = (el, on) => {
+    el.style.visibility = on ? 'visible' : 'hidden';
+    el.disabled = !on;
+  };
+  showPick(pickLT, tConflict);
+  showPick(pickRT, tConflict);
+  showPick(pickLD, dConflict);
+  showPick(pickRD, dConflict);
+
+  pickLT.addEventListener('click', ev => {
+    ev.stopPropagation();
+    outT.value = tL;
+    playClickUiSound();
+  });
+  pickRT.addEventListener('click', ev => {
+    ev.stopPropagation();
+    outT.value = tR;
+    playClickUiSound();
+  });
+  pickLD.addEventListener('click', ev => {
+    ev.stopPropagation();
+    outD.value = dL;
+    playClickUiSound();
+  });
+  pickRD.addEventListener('click', ev => {
+    ev.stopPropagation();
+    outD.value = dR;
+    playClickUiSound();
+  });
+
+  const finish = (applyValues, useLeftOnCancel) => {
+    bpCloseClusterMergeEditor();
+    document.removeEventListener('pointerdown', onDocPointerDown, true);
+    if (applyValues) {
+      bpSetClusterAnnotationByIds(newIds, outT.value, outD.value);
+    } else if (useLeftOnCancel) {
+      bpSetClusterAnnotationByIds(newIds, tConflict ? tL : tL || tR, dConflict ? dL : dL || dR);
+    }
+    updateClusterUi();
+    playClickUiSound();
+  };
+
+  pop.querySelector('.bp-merge-ok').addEventListener('click', ev => {
+    ev.stopPropagation();
+    finish(true);
+  });
+  pop.querySelector('.bp-merge-cancel').addEventListener('click', ev => {
+    ev.stopPropagation();
+    finish(false, true);
+  });
+
+  const onDocPointerDown = ev => {
+    if (!bpClusterMergeEditorEl) {
+      document.removeEventListener('pointerdown', onDocPointerDown, true);
+      return;
+    }
+    const t = ev.target;
+    if (pop.contains(t)) return;
+    finish(false, true);
   };
   document.addEventListener('pointerdown', onDocPointerDown, true);
 }
@@ -2441,7 +2739,7 @@ function onCombSpinePointerDown(e, songKey) {
     }
     syncCombAnchorsFromTemplateBricks();
     rebuildCombDom();
-    ufRebuild();
+    ufRebuildAndReconcileAnnotations();
     scheduleSave();
     updateClusterUi();
     const endSnap = capturePlaygroundBrickSnapshot();
@@ -2528,7 +2826,7 @@ function createBrickElement(rec) {
       workingRec.el = createBrickElement(workingRec);
       brickMap.set(newId, workingRec);
       if (bricksLayer) bricksLayer.appendChild(workingRec.el);
-      ufRebuild();
+      ufRebuildAndReconcileAnnotations();
       activeBrickId = workingRec.id;
       dragClusterIds = [workingRec.id];
       dragStartPos = new Map();
@@ -2552,6 +2850,7 @@ function createBrickElement(rec) {
     let lastClientY = e.clientY;
     let dragStarted = !!isDuplicateDrag;
     let ghostMode = false;
+    let ghostClusterMemberIds = null;
     let longPressTimer = null;
     if (!combTemplate && !isDuplicateDrag) {
       longPressTimer = setTimeout(() => {
@@ -2561,6 +2860,7 @@ function createBrickElement(rec) {
         if (nonT.length < 2) return;
         dragStarted = true;
         ghostMode = true;
+        ghostClusterMemberIds = [...nonT];
         snapshotBeforeDrag = capturePlaygroundBrickSnapshot();
         workingRec = rec;
         activeBrickId = rec.id;
@@ -2618,7 +2918,7 @@ function createBrickElement(rec) {
         workingRec.el = createBrickElement(workingRec);
         brickMap.set(newId, workingRec);
         if (bricksLayer) bricksLayer.appendChild(workingRec.el);
-        ufRebuild();
+        ufRebuildAndReconcileAnnotations();
         activeBrickId = workingRec.id;
         dragClusterIds = [workingRec.id];
         dragStartPos = new Map();
@@ -2699,7 +2999,7 @@ function createBrickElement(rec) {
         const h = seamHint;
         if (bpApplySeamInsert(h.leftId, h.rightId, dragClusterIds)) {
           inserted = true;
-          ufRebuild();
+          ufRebuildAndReconcileAnnotations();
           scheduleSave();
           updateClusterUi();
           if (snapshotBeforeDrag && !snapshotsEqual(snapshotBeforeDrag, capturePlaygroundBrickSnapshot())) {
@@ -2708,8 +3008,16 @@ function createBrickElement(rec) {
         }
       }
       if (!inserted) {
-        snapClusterToNeighbors(dragClusterIds);
-        ufRebuild();
+        const ghostMotion =
+          ghostMode &&
+          snapshotBeforeDrag &&
+          snapshotBeforeDrag.some(s => s.id === rec.id && (s.x !== rec.x || s.y !== rec.y));
+        if (ghostMode && ghostMotion && ghostClusterMemberIds && ghostClusterMemberIds.length > 1) {
+          bpReflowClusterBricksContiguous(ghostClusterMemberIds);
+        } else {
+          snapClusterToNeighbors(dragClusterIds);
+        }
+        ufRebuildAndReconcileAnnotations();
         scheduleSave();
         updateClusterUi();
         if (beforeDuplicateSnapshot) {
@@ -2745,6 +3053,7 @@ function removeClusterUi() {
   if (clusterUiEl && clusterUiEl.parentNode) clusterUiEl.parentNode.removeChild(clusterUiEl);
   clusterUiEl = null;
   bpCloseLabelEditor();
+  bpCloseClusterMergeEditor();
 }
 
 function repositionClusterUi() {

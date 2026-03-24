@@ -1065,6 +1065,108 @@
   justify-content: flex-end;
 }
 
+/* --- Cluster label merge (join conflict) --- */
+.bp-cluster-merge-popover {
+  position: absolute;
+  z-index: 25;
+  width: min(920px, calc(100vw - 24px));
+  max-height: min(88vh, 640px);
+  overflow: auto;
+  pointer-events: auto;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(77, 150, 255, 0.45);
+  background: rgba(20, 31, 52, 0.97);
+  box-shadow:
+    0 14px 40px rgba(0, 0, 0, 0.55),
+    0 0 0 1px rgba(255, 255, 255, 0.06) inset;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.bp-cluster-merge-head {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: 0.02em;
+}
+
+.bp-cluster-merge-hint {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text3);
+}
+
+.bp-merge-section-label {
+  font-size: 10px;
+  font-family: 'Space Mono', monospace;
+  letter-spacing: 0.04em;
+  color: var(--text3);
+  margin-top: 4px;
+}
+
+.bp-merge-line {
+  display: grid;
+  grid-template-columns: 1fr auto minmax(140px, 1.15fr) auto 1fr;
+  gap: 6px;
+  align-items: center;
+}
+
+.bp-merge-line--desc {
+  align-items: stretch;
+}
+
+.bp-merge-side {
+  width: 100%;
+  border-radius: 7px;
+  border: 1px solid rgba(100, 120, 150, 0.35);
+  background: rgba(12, 18, 34, 0.65);
+  color: var(--text2);
+  padding: 6px 8px;
+  font-size: 11px;
+  font-family: 'DM Sans', sans-serif;
+  resize: none;
+  min-height: 0;
+}
+
+.bp-merge-side-title {
+  min-height: 32px;
+}
+
+.bp-merge-center {
+  width: 100%;
+  border-radius: 7px;
+  border: 1px solid rgba(78, 205, 196, 0.42);
+  background: rgba(12, 18, 34, 0.92);
+  color: var(--text);
+  padding: 6px 8px;
+  font-size: 12px;
+  font-family: 'DM Sans', sans-serif;
+  resize: vertical;
+  min-height: 72px;
+}
+
+.bp-merge-out-title {
+  min-height: 32px;
+  resize: none;
+}
+
+.bp-merge-pick {
+  min-width: 30px;
+  padding: 0 6px;
+  font-size: 14px;
+  line-height: 1.2;
+}
+
+.bp-cluster-merge-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 6px;
+}
+
 @keyframes bp-outline-pop {
   0% {
     box-shadow: 0 0 0 0 rgba(78, 205, 196, 0.35);

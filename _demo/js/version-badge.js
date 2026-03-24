@@ -1,13 +1,17 @@
 /**
- * Shows V MAJOR.MINOR.<rev> where <rev> comes from _demo/revision.txt (updated by
- * scripts/update-revision.sh on pre-push). Fetches GitHub commit count from the
- * REST API Link header to compare and set hover tooltips / styling.
+ * Shows V MAJOR.MINOR.<rev> where <rev> comes from js/revision-embed.js (works on
+ * file://) with optional refresh from revision.txt over http(s). GitHub commit
+ * count from the REST API Link header for comparison tooltips.
  */
 (function () {
   var COMMITS_API_URL =
     'https://api.github.com/repos/EnthusiastGuy/S.E.A.M-Audio-Audition/commits?per_page=1';
-  var REVISION_TXT_URL = new URL('revision.txt', window.location.href).href;
-  /** Editable: semantic version prefix; revision is read from revision.txt. */
+  var scriptSrc =
+    document.currentScript && document.currentScript.src
+      ? document.currentScript.src
+      : window.location.href;
+  var REVISION_TXT_URL = new URL('../revision.txt', scriptSrc).href;
+  /** Editable: semantic version prefix; revision from revision-embed.js (and optionally revision.txt). */
   var VERSION_MAJOR_MINOR = '1.0';
 
   function parseLastPageFromLinkHeader(linkHeader) {
@@ -26,9 +30,39 @@
 
   function parseRevisionFile(text) {
     var m = String(text || '')
+      .replace(/^\uFEFF/, '')
       .trim()
       .match(/^\d+/);
     return m ? parseInt(m[0], 10) : null;
+  }
+
+  function getEmbeddedRevision() {
+    var v = window.__SEAM_REVISION;
+    return typeof v === 'number' && isFinite(v) ? v : null;
+  }
+
+  function canFetchLocalRevision() {
+    var p = (window.location.protocol || '').toLowerCase();
+    return p === 'http:' || p === 'https:';
+  }
+
+  function loadLocalRevision() {
+    var embedded = getEmbeddedRevision();
+    if (!canFetchLocalRevision()) {
+      return Promise.resolve(embedded);
+    }
+    return fetch(REVISION_TXT_URL, { cache: 'no-store' })
+      .then(function (r) {
+        if (!r.ok) throw new Error('revision txt');
+        return r.text();
+      })
+      .then(parseRevisionFile)
+      .then(function (fromTxt) {
+        return fromTxt != null ? fromTxt : embedded;
+      })
+      .catch(function () {
+        return embedded;
+      });
   }
 
   function applyBadge(localRev, remoteRev) {
@@ -47,7 +81,8 @@
       'Application version ' + VERSION_MAJOR_MINOR + '.' + revStr;
 
     if (localRev == null) {
-      title = 'Missing or invalid revision.txt next to this page.';
+      title =
+        'Missing or invalid revision. Ensure js/revision-embed.js defines window.__SEAM_REVISION.';
       aria = title;
     } else if (remoteRev == null) {
       title = 'Could not check the latest version on GitHub.';
@@ -76,15 +111,7 @@
   }
 
   Promise.all([
-    fetch(REVISION_TXT_URL, { cache: 'no-store' })
-      .then(function (r) {
-        if (!r.ok) throw new Error('revision txt');
-        return r.text();
-      })
-      .then(parseRevisionFile)
-      .catch(function () {
-        return null;
-      }),
+    loadLocalRevision(),
 
     fetch(COMMITS_API_URL, {
       headers: { Accept: 'application/vnd.github+json' },

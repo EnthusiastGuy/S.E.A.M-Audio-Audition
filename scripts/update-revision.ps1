@@ -3,6 +3,7 @@ $ErrorActionPreference = "Stop"
 $root = git rev-parse --show-toplevel
 if (-not $root) { throw "Not a git repository." }
 $out = Join-Path $root "_demo\revision.txt"
+$embed = Join-Path $root "_demo\js\revision-embed.js"
 
 $hasUpstream = $true
 git rev-parse --verify "@{u}" 2>$null | Out-Null
@@ -18,4 +19,8 @@ if ($hasUpstream) {
 
 $utf8NoBom = New-Object System.Text.UTF8Encoding $false
 [System.IO.File]::WriteAllText($out, "$revision`n", $utf8NoBom)
-Write-Host "Wrote revision $revision to _demo/revision.txt"
+$embedBody =
+  "/* Auto-updated by scripts/update-revision.sh (or .ps1) together with ../revision.txt */`n" +
+  "window.__SEAM_REVISION = $revision;`n"
+[System.IO.File]::WriteAllText($embed, $embedBody, $utf8NoBom)
+Write-Host "Wrote revision $revision to _demo/revision.txt and _demo/js/revision-embed.js"

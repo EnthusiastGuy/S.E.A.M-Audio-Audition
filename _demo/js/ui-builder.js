@@ -74,8 +74,8 @@ function buildSongRow(fmt, songIdx, nr) {
   main.className = 'song-row-main';
   main.title = 'Click to view/edit parts';
   main.addEventListener('click', (e) => {
-    // Keep transport/action controls from toggling the parts panel.
-    if (e.target.closest('.col-action')) return;
+    // Real controls use stopPropagation(); empty space in .col-action should still expand/collapse.
+    if (e.target.closest('button, a[href], input, select, textarea')) return;
     togglePartSheet(fmt, songIdx);
   });
 

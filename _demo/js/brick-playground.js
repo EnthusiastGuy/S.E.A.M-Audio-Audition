@@ -3130,25 +3130,108 @@ function bpSerializeExportXml(model) {
   return lines.join('\n');
 }
 
-function bpDownloadPlaygroundGroupsExport(fmt) {
-  const model = bpBuildExportModel();
+/** Assemble export body for a format (not prettified). */
+function bpAssembleExportText(model, fmt) {
   const format = String(fmt || 'txt').toLowerCase();
-  let text = '';
-  let mime = 'text/plain;charset=utf-8';
-  let ext = 'txt';
-  if (format === 'json') {
-    text = JSON.stringify(model, null, 2);
-    mime = 'application/json;charset=utf-8';
-    ext = 'json';
-  } else if (format === 'xml') {
-    text = bpSerializeExportXml(model);
-    mime = 'application/xml;charset=utf-8';
-    ext = 'xml';
-  } else {
-    text = bpSerializeExportTxt(model);
-    mime = 'text/plain;charset=utf-8';
-    ext = 'txt';
+  if (format === 'json') return JSON.stringify(model);
+  if (format === 'xml') return bpSerializeExportXml(model);
+  return bpSerializeExportTxt(model);
+}
+
+function bpPrettifyJsonText(text) {
+  try {
+    return JSON.stringify(JSON.parse(String(text)), null, 2);
+  } catch {
+    return String(text);
   }
+}
+
+function bpXmlAttrEscape(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/\t/g, '&#9;')
+    .replace(/\n/g, '&#10;')
+    .replace(/\r/g, '&#13;');
+}
+
+function bpXmlSerializeAttrs(el) {
+  if (!el.attributes?.length) return '';
+  let s = '';
+  for (let i = 0; i < el.attributes.length; i++) {
+    const a = el.attributes[i];
+    s += ` ${a.name}="${bpXmlAttrEscape(a.value)}"`;
+  }
+  return s;
+}
+
+function bpXmlTextNodeEscape(t) {
+  return String(t ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function bpFormatXmlElementNode(el, depth) {
+  const pad = '  '.repeat(depth);
+  const tag = el.tagName;
+  const attrs = bpXmlSerializeAttrs(el);
+  const children = el.children ? Array.from(el.children) : [];
+  const rawText = [...el.childNodes]
+    .filter(n => n.nodeType === Node.TEXT_NODE)
+    .map(n => n.textContent)
+    .join('')
+    .trim();
+
+  if (children.length === 0 && !rawText) {
+    return `${pad}<${tag}${attrs}></${tag}>`;
+  }
+  if (children.length === 0 && rawText) {
+    return `${pad}<${tag}${attrs}>${bpXmlTextNodeEscape(rawText)}</${tag}>`;
+  }
+  let inner = '';
+  for (const child of children) {
+    inner += `\n${bpFormatXmlElementNode(child, depth + 1)}`;
+  }
+  inner += `\n${pad}`;
+  return `${pad}<${tag}${attrs}>${inner}</${tag}>`;
+}
+
+/** Indent XML using the DOM; falls back to source on parse errors. */
+function bpPrettifyXmlText(xmlSource) {
+  const s = String(xmlSource ?? '').trim();
+  if (!s) return '';
+  try {
+    const doc = new DOMParser().parseFromString(s, 'text/xml');
+    const err = doc.getElementsByTagName('parsererror')[0];
+    if (err) return String(xmlSource);
+    const root = doc.documentElement;
+    if (!root) return String(xmlSource);
+    const decl = `<?xml version="1.0" encoding="UTF-8"?>`;
+    return `${decl}\n${bpFormatXmlElementNode(root, 0)}`;
+  } catch {
+    return String(xmlSource);
+  }
+}
+
+function bpPrettifyExportPreview(text, fmt) {
+  const format = String(fmt || 'txt').toLowerCase();
+  if (format === 'json') return bpPrettifyJsonText(text);
+  if (format === 'xml') return bpPrettifyXmlText(text);
+  return String(text);
+}
+
+function bpExportMimeAndExt(fmt) {
+  const format = String(fmt || 'txt').toLowerCase();
+  if (format === 'json') return { mime: 'application/json;charset=utf-8', ext: 'json' };
+  if (format === 'xml') return { mime: 'application/xml;charset=utf-8', ext: 'xml' };
+  return { mime: 'text/plain;charset=utf-8', ext: 'txt' };
+}
+
+function bpDownloadPlaygroundExportText(text, fmt) {
+  const format = String(fmt || 'txt').toLowerCase();
+  const { mime, ext } = bpExportMimeAndExt(format);
   const blob = new Blob([text], { type: mime });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -3156,6 +3239,122 @@ function bpDownloadPlaygroundGroupsExport(fmt) {
   a.click();
   URL.revokeObjectURL(a.href);
   playClickUiSound();
+}
+
+let bpExportPreviewCleanup = null;
+
+function bpCloseExportPreview() {
+  if (typeof bpExportPreviewCleanup === 'function') {
+    bpExportPreviewCleanup();
+    bpExportPreviewCleanup = null;
+  }
+}
+
+function bpOpenExportPreview(model, fmt) {
+  bpCloseExportPreview();
+  const format = String(fmt || 'txt').toLowerCase();
+  const raw = bpAssembleExportText(model, format);
+  const previewText = bpPrettifyExportPreview(raw, format);
+
+  const overlay = document.createElement('div');
+  overlay.className = 'bp-export-preview-overlay';
+  overlay.setAttribute('role', 'presentation');
+
+  const dialog = document.createElement('div');
+  dialog.className = 'bp-export-preview-dialog';
+  dialog.setAttribute('role', 'dialog');
+  dialog.setAttribute('aria-modal', 'true');
+  dialog.setAttribute('aria-label', 'Export preview');
+  dialog.dataset.exportFormat = format;
+
+  const title = document.createElement('div');
+  title.className = 'bp-export-preview-title';
+  title.textContent = 'Preview & Export';
+
+  const meta = document.createElement('div');
+  meta.className = 'bp-export-preview-meta';
+  meta.textContent =
+    format === 'json' ? 'Format: JSON' : format === 'xml' ? 'Format: XML' : 'Format: plain text';
+
+  const hint = document.createElement('p');
+  hint.className = 'bp-export-preview-hint';
+  hint.textContent =
+    'You can edit this text before exporting — your changes here are exactly what will be saved to the file.';
+
+  const ta = document.createElement('textarea');
+  ta.className = 'bp-export-preview-text';
+  ta.value = previewText;
+  ta.setAttribute('spellcheck', 'false');
+  ta.setAttribute('wrap', 'off');
+
+  const actions = document.createElement('div');
+  actions.className = 'bp-export-preview-actions';
+
+  const btnCancel = document.createElement('button');
+  btnCancel.type = 'button';
+  btnCancel.className = 'bp-export-preview-btn bp-export-preview-btn--cancel';
+  btnCancel.textContent = 'Cancel';
+
+  const btnExport = document.createElement('button');
+  btnExport.type = 'button';
+  btnExport.className = 'bp-export-preview-btn bp-export-preview-btn--primary';
+  btnExport.textContent = 'Export';
+
+  actions.appendChild(btnCancel);
+  actions.appendChild(btnExport);
+  dialog.appendChild(title);
+  dialog.appendChild(meta);
+  dialog.appendChild(hint);
+  dialog.appendChild(ta);
+  dialog.appendChild(actions);
+  overlay.appendChild(dialog);
+  document.body.appendChild(overlay);
+
+  const onKey = ev => {
+    if (ev.key === 'Escape') {
+      ev.preventDefault();
+      bpCloseExportPreview();
+    }
+  };
+
+  const finish = () => {
+    bpExportPreviewCleanup = null;
+    document.removeEventListener('keydown', onKey, true);
+    overlay.removeEventListener('click', onBackdrop);
+    btnCancel.removeEventListener('click', onCancel);
+    btnExport.removeEventListener('click', onExport);
+    dialog.removeEventListener('click', stop);
+    overlay.remove();
+  };
+
+  const stop = ev => ev.stopPropagation();
+
+  const onBackdrop = ev => {
+    if (ev.target === overlay) bpCloseExportPreview();
+  };
+
+  const onCancel = () => bpCloseExportPreview();
+
+  const onExport = () => {
+    const fmtNow = dialog.dataset.exportFormat || 'txt';
+    bpDownloadPlaygroundExportText(ta.value, fmtNow);
+    finish();
+  };
+
+  bpExportPreviewCleanup = () => {
+    finish();
+  };
+
+  document.addEventListener('keydown', onKey, true);
+  overlay.addEventListener('click', onBackdrop);
+  dialog.addEventListener('click', stop);
+  btnCancel.addEventListener('click', onCancel);
+  btnExport.addEventListener('click', onExport);
+
+  requestAnimationFrame(() => {
+    ta.focus();
+    ta.setSelectionRange(0, 0);
+  });
 }
 
 function initPlaygroundFloatingTools(wrap) {
@@ -3178,7 +3377,9 @@ function initPlaygroundFloatingTools(wrap) {
   if (exportBtn && exportFmt) {
     exportBtn.addEventListener('click', () => {
       const fmt = String(exportFmt.value || 'txt').toLowerCase();
-      bpDownloadPlaygroundGroupsExport(fmt);
+      const model = bpBuildExportModel();
+      bpOpenExportPreview(model, fmt);
+      playClickUiSound();
     });
   }
 }
@@ -3235,12 +3436,12 @@ function initBrickPlayground(mainContainer) {
           <p class="bp-tools-hint">Restore the default comb layout and zoom/pan.</p>
           <button type="button" class="bp-tools-btn-reset" id="bp-tools-reset">Reset positions</button>
           <div class="bp-tools-export-row">
+            <button type="button" class="bp-tools-btn-export" id="bp-tools-export">Preview &amp; Export</button>
             <select class="bp-tools-export-select" id="bp-tools-export-format" aria-label="Export format">
               <option value="txt">TXT</option>
               <option value="json">JSON</option>
               <option value="xml">XML</option>
             </select>
-            <button type="button" class="bp-tools-btn-export" id="bp-tools-export">Export</button>
           </div>
         </div>
       </aside>

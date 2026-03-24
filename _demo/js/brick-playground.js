@@ -1243,12 +1243,18 @@ function createBrickElement(rec) {
   const colorIdx = rec.partIndex < 0 ? 0 : rec.partIndex;
   const col = partColor(Math.max(0, colorIdx));
 
+  const durSec = bpGetPartDuration(rec.fmt, rec.songIdx, rec.partIndex);
+  const durHtml = fmtTimeHTML(durSec);
+
   const inner = document.createElement('div');
   inner.className = 'bp-brick-inner';
   inner.style.background = `linear-gradient(145deg, ${col}dd, ${col}88)`;
   inner.innerHTML = `
     <span class="bp-brick-song">${escapeHtml(song?.name || '')}</span>
-    <span class="bp-brick-part">#${escapeHtml(bpPartLabel(rec.fmt, rec.songIdx, rec.partIndex))}</span>
+    <div class="bp-brick-meta">
+      <span class="bp-brick-part">#${escapeHtml(bpPartLabel(rec.fmt, rec.songIdx, rec.partIndex))}</span>
+      <span class="bp-brick-dur">${durHtml}</span>
+    </div>
   `;
   el.appendChild(inner);
 

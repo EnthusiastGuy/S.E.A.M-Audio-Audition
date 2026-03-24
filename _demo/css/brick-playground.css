@@ -302,10 +302,37 @@
   line-height: 1.15;
 }
 
+.bp-brick-meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+  min-width: 0;
+}
+
 .bp-brick-part {
   font-size: 9px;
   font-family: 'Space Mono', monospace;
   color: rgba(255, 255, 255, 0.75);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Same mm:ss:xxx pattern as playlist / seek time — ms in .dur-ms */
+.bp-brick-dur {
+  flex-shrink: 0;
+  font-size: 9px;
+  font-family: 'Space Mono', monospace;
+  font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, 0.88);
+  line-height: 1.2;
+}
+
+.bp-brick-dur .dur-ms {
+  font-size: 0.68em;
+  vertical-align: sub;
 }
 
 /* Sidebar view toggle */

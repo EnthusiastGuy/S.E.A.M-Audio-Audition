@@ -90,6 +90,8 @@ let saveTimer = null;
 let clusterUiEl = null;
 /** Container for total-duration badges on multi-brick clusters (world-space, inside HUD). */
 let bpClusterDurLayer = null;
+/** Container for always-visible cluster titles (world-space, inside HUD). */
+let bpClusterTitleLayer = null;
 let playingRoot = null;
 let playLoop = false;
 let pgSeamMode = false;
@@ -133,6 +135,7 @@ let pgLastSegFlashIdx = null;
 let bpSeamMarkerEl = null;
 /** @type {{ leftId: string, rightId: string, seamX: number, rowY: number }|null} */
 let bpSeamHint = null;
+let bpLabelEditorEl = null;
 
 /** @type {HTMLCanvasElement|null} */
 let bpSnowCanvas = null;
@@ -1059,6 +1062,50 @@ function ensureClusterDurLayer() {
   bpHudRoot.appendChild(bpClusterDurLayer);
 }
 
+function ensureClusterTitleLayer() {
+  if (bpClusterTitleLayer || !bpHudRoot) return;
+  bpClusterTitleLayer = document.createElement('div');
+  bpClusterTitleLayer.className = 'bp-cluster-title-layer';
+  bpHudRoot.appendChild(bpClusterTitleLayer);
+}
+
+function updateClusterTitleLabels() {
+  ensureClusterTitleLayer();
+  if (!bpClusterTitleLayer) return;
+  bpClusterTitleLayer.innerHTML = '';
+  const roots = new Set();
+  for (const id of brickMap.keys()) {
+    const b = brickMap.get(id);
+    if (!b || b.combTemplate) continue;
+    roots.add(ufFind(id));
+  }
+  for (const root of roots) {
+    const ids = clusterMembers(root).filter(i => !brickMap.get(i)?.combTemplate);
+    if (ids.length < 1) continue;
+    const ann = bpGetClusterAnnotationByIds(ids);
+    if (!ann.title) continue;
+    const box = clusterBBox(ids);
+    if (!box) continue;
+    const el = document.createElement('div');
+    el.className = 'bp-cluster-title-floating';
+    const label = document.createElement('span');
+    label.className = 'bp-cluster-title-label';
+    label.textContent = ann.title;
+    el.appendChild(label);
+    if (ann.description) {
+      const tip = document.createElement('span');
+      tip.className = 'bp-cluster-desc-popover';
+      tip.textContent = ann.description;
+      el.appendChild(tip);
+    }
+    const cx = (box.minX + box.maxX) / 2;
+    const y = box.maxY + BP_PAD + 30;
+    el.style.left = `${cx}px`;
+    el.style.top = `${y}px`;
+    bpClusterTitleLayer.appendChild(el);
+  }
+}
+
 /** Total duration label above each cluster of 2+ connected (non-template) bricks, play order = left to right. */
 function updateClusterDurationLabels() {
   ensureClusterDurLayer();
@@ -1097,6 +1144,7 @@ function updateClusterDurationLabels() {
     wrap.style.top = `${cy}px`;
     bpClusterDurLayer.appendChild(wrap);
   }
+  updateClusterTitleLabels();
 }
 
 function screenToWorld(clientX, clientY) {
@@ -1970,6 +2018,180 @@ function persistPlaygroundBricks() {
     combs[k] = { x: v.x, y: v.y };
   }
   STATE.playground.combs = combs;
+  if (!STATE.playground.clusterAnnotations || typeof STATE.playground.clusterAnnotations !== 'object') {
+    STATE.playground.clusterAnnotations = {};
+  }
+}
+
+function bpClusterAnnotationKey(ids) {
+  return [...ids].sort().join('|');
+}
+
+function bpGetClusterAnnotationByIds(ids) {
+  const key = bpClusterAnnotationKey(ids);
+  const map =
+    STATE.playground.clusterAnnotations && typeof STATE.playground.clusterAnnotations === 'object'
+      ? STATE.playground.clusterAnnotations
+      : (STATE.playground.clusterAnnotations = {});
+  const rec = map[key];
+  if (!rec || typeof rec !== 'object') return { key, title: '', description: '' };
+  return {
+    key,
+    title: typeof rec.title === 'string' ? rec.title : '',
+    description: typeof rec.description === 'string' ? rec.description : '',
+  };
+}
+
+function bpSetClusterAnnotationByIds(ids, title, description) {
+  const key = bpClusterAnnotationKey(ids);
+  const map =
+    STATE.playground.clusterAnnotations && typeof STATE.playground.clusterAnnotations === 'object'
+      ? STATE.playground.clusterAnnotations
+      : (STATE.playground.clusterAnnotations = {});
+  const cleanTitle = String(title || '').trim();
+  const cleanDesc = String(description || '').trim();
+  if (!cleanTitle && !cleanDesc) {
+    delete map[key];
+  } else {
+    map[key] = { title: cleanTitle, description: cleanDesc };
+  }
+  scheduleSave();
+}
+
+function bpCloseLabelEditor() {
+  if (bpLabelEditorEl && bpLabelEditorEl.parentNode) bpLabelEditorEl.parentNode.removeChild(bpLabelEditorEl);
+  bpLabelEditorEl = null;
+}
+
+function bpOpenLabelEditor(anchorEl, ids) {
+  bpCloseLabelEditor();
+  if (!bpHudRoot || !anchorEl || !ids || !ids.length) return;
+  const ann = bpGetClusterAnnotationByIds(ids);
+  const pop = document.createElement('div');
+  pop.className = 'bp-label-edit-popover';
+  pop.innerHTML = `
+    <label class="bp-label-edit-field">
+      <span class="bp-label-edit-name">Title</span>
+      <input type="text" class="bp-label-edit-input bp-label-title" maxlength="120" placeholder="Give this cluster a title" />
+    </label>
+    <label class="bp-label-edit-field">
+      <span class="bp-label-edit-name">Description</span>
+      <textarea class="bp-label-edit-input bp-label-description" rows="4" maxlength="1000" placeholder="Optional description"></textarea>
+    </label>
+    <div class="bp-label-edit-actions">
+      <button type="button" class="bp-mini-btn bp-label-ok">OK</button>
+      <button type="button" class="bp-mini-btn bp-label-cancel">Cancel</button>
+      <button type="button" class="bp-mini-btn bp-label-clear">Clear</button>
+    </div>
+  `;
+  bpHudRoot.appendChild(pop);
+  bpLabelEditorEl = pop;
+  const anchorRect = anchorEl.getBoundingClientRect();
+  const hudRect = bpHudRoot.getBoundingClientRect();
+  const vpRect = bpViewport ? bpViewport.getBoundingClientRect() : null;
+  const popW = Math.max(1, pop.offsetWidth || 320);
+  const popH = Math.max(1, pop.offsetHeight || 180);
+  // Convert screen-space icon coords to HUD/world coords so placement remains exact under pan/zoom.
+  const toWorldX = sx => ((sx - (vpRect?.left || 0) - bpPanX) / Math.max(0.12, bpZoom));
+  const toWorldY = sy => ((sy - (vpRect?.top || 0) - bpPanY) / Math.max(0.12, bpZoom));
+  let left = toWorldX(anchorRect.right) + 10;
+  let top = toWorldY(anchorRect.top) - 6;
+  const minLeft = 8;
+  const hudWorldW = Math.max(1, (bpViewport?.clientWidth || hudRect.width) / Math.max(0.12, bpZoom));
+  const hudWorldH = Math.max(1, (bpViewport?.clientHeight || hudRect.height) / Math.max(0.12, bpZoom));
+  const maxLeft = Math.max(minLeft, hudWorldW - popW - 8);
+  // If there is not enough room on the right, place to the left.
+  if (left > maxLeft) left = toWorldX(anchorRect.left) - popW - 10;
+  const minTop = 8;
+  const maxTop = Math.max(minTop, hudWorldH - popH - 8);
+  left = Math.min(maxLeft, Math.max(minLeft, left));
+  top = Math.min(maxTop, Math.max(minTop, top));
+  pop.style.left = `${left}px`;
+  pop.style.top = `${top}px`;
+  const inTitle = pop.querySelector('.bp-label-title');
+  const inDesc = pop.querySelector('.bp-label-description');
+  inTitle.value = ann.title;
+  inDesc.value = ann.description;
+  inTitle.focus();
+  inTitle.select();
+
+  const close = () => {
+    bpCloseLabelEditor();
+  };
+  pop.addEventListener('pointerdown', ev => {
+    const t = ev.target;
+    if (t.closest('input, textarea, button, select, option')) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    const startX = ev.clientX;
+    const startY = ev.clientY;
+    const startLeft = parseFloat(pop.style.left) || 0;
+    const startTop = parseFloat(pop.style.top) || 0;
+    const pid = ev.pointerId;
+    try {
+      pop.setPointerCapture(pid);
+    } catch (err) {}
+    const onMove = mv => {
+      if (mv.pointerId !== pid) return;
+      const nextLeft = startLeft + (mv.clientX - startX);
+      const nextTop = startTop + (mv.clientY - startY);
+      const w = Math.max(1, pop.offsetWidth || 1);
+      const h = Math.max(1, pop.offsetHeight || 1);
+      const clampedLeft = Math.min(
+        Math.max(8, nextLeft),
+        Math.max(8, hudRect.width - w - 8)
+      );
+      const clampedTop = Math.min(
+        Math.max(8, nextTop),
+        Math.max(8, hudRect.height - h - 8)
+      );
+      pop.style.left = `${clampedLeft}px`;
+      pop.style.top = `${clampedTop}px`;
+    };
+    const onUp = up => {
+      if (up.pointerId !== pid) return;
+      pop.removeEventListener('pointermove', onMove);
+      pop.removeEventListener('pointerup', onUp);
+      pop.removeEventListener('pointercancel', onUp);
+      try {
+        pop.releasePointerCapture(pid);
+      } catch (err) {}
+    };
+    pop.addEventListener('pointermove', onMove);
+    pop.addEventListener('pointerup', onUp);
+    pop.addEventListener('pointercancel', onUp);
+  });
+  pop.querySelector('.bp-label-ok').addEventListener('click', ev => {
+    ev.stopPropagation();
+    bpSetClusterAnnotationByIds(ids, inTitle.value, inDesc.value);
+    close();
+    updateClusterUi();
+    playClickUiSound();
+  });
+  pop.querySelector('.bp-label-cancel').addEventListener('click', ev => {
+    ev.stopPropagation();
+    close();
+  });
+  pop.querySelector('.bp-label-clear').addEventListener('click', ev => {
+    ev.stopPropagation();
+    inTitle.value = '';
+    inDesc.value = '';
+    bpSetClusterAnnotationByIds(ids, '', '');
+    close();
+    updateClusterUi();
+    playClickUiSound();
+  });
+  const onDocPointerDown = ev => {
+    if (!bpLabelEditorEl) {
+      document.removeEventListener('pointerdown', onDocPointerDown, true);
+      return;
+    }
+    const t = ev.target;
+    if (pop.contains(t) || anchorEl.contains(t)) return;
+    close();
+    document.removeEventListener('pointerdown', onDocPointerDown, true);
+  };
+  document.addEventListener('pointerdown', onDocPointerDown, true);
 }
 
 function collectDescriptors() {
@@ -2522,6 +2744,7 @@ function escapeHtml(s) {
 function removeClusterUi() {
   if (clusterUiEl && clusterUiEl.parentNode) clusterUiEl.parentNode.removeChild(clusterUiEl);
   clusterUiEl = null;
+  bpCloseLabelEditor();
 }
 
 function repositionClusterUi() {
@@ -2611,6 +2834,7 @@ function updateClusterUi() {
   const toolbarH = 36;
   const seekH = 22;
   const footH = 30;
+  const annotationH = 28;
   const left = box.minX - pad;
   const top = box.minY - pad - toolbarH;
   const w = box.maxX - box.minX + pad * 2;
@@ -2637,6 +2861,11 @@ function updateClusterUi() {
       </div>
     </div>
     <div class="bp-cluster-outline" style="top:${toolbarH}px;height:${borderH}px"></div>
+    <div class="bp-cluster-annotation" style="top:${toolbarH + borderH + seekH + 12}px;">
+      <div class="bp-cluster-annotation-inner">
+        <button type="button" class="bp-mini-btn bp-mini-btn--icon bp-label-edit-btn" title="Edit title and description" aria-label="Edit title and description">&#9998;</button>
+      </div>
+    </div>
     <div class="bp-cluster-seek" style="top:${toolbarH + borderH + 6}px;">
       <div class="bp-seek-track">
         <div class="bp-seek-fill"></div>
@@ -2653,6 +2882,13 @@ function updateClusterUi() {
 
   const outline = ui.querySelector('.bp-cluster-outline');
   outline.style.width = `${w}px`;
+  const editBtn = ui.querySelector('.bp-label-edit-btn');
+  if (editBtn) {
+    editBtn.addEventListener('click', ev => {
+      ev.stopPropagation();
+      bpOpenLabelEditor(editBtn, ids);
+    });
+  }
 
   const breakBtn = ui.querySelector('.bp-break');
   if (breakBtn) {
@@ -2737,6 +2973,8 @@ function updateClusterUi() {
 
   bpHudRoot.appendChild(ui);
   clusterUiEl = ui;
+
+  ui.style.minHeight = `${toolbarH + borderH + seekH + footH + annotationH + 18}px`;
 
   if (!isPlaying) {
     const seekFill = ui.querySelector('.bp-seek-fill');
@@ -2907,7 +3145,12 @@ function initBrickPlayground(mainContainer) {
   }, { passive: false });
 
   bpViewport.addEventListener('pointerdown', e => {
-    if (e.target.closest('.bp-brick') || e.target.closest('.bp-cluster-ui') || e.target.closest('.bp-comb-spine'))
+    if (
+      e.target.closest('.bp-brick') ||
+      e.target.closest('.bp-cluster-ui') ||
+      e.target.closest('.bp-comb-spine') ||
+      e.target.closest('.bp-label-edit-popover')
+    )
       return;
     if (e.button !== 0) return;
     panPointerId = e.pointerId;

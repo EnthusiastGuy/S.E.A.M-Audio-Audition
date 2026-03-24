@@ -1027,6 +1027,12 @@ async function discoverSongs(rootHandle) {
         const df = (pg.downloadFormat || 'wav').toLowerCase();
         const combs =
           pg.combs && typeof pg.combs === 'object' && !Array.isArray(pg.combs) ? { ...pg.combs } : {};
+        const clusterAnnotations =
+          pg.clusterAnnotations &&
+          typeof pg.clusterAnnotations === 'object' &&
+          !Array.isArray(pg.clusterAnnotations)
+            ? { ...pg.clusterAnnotations }
+            : {};
         STATE.playground = {
           mode: !!pg.mode,
           zoom: Number.isFinite(Number(pg.zoom)) ? Math.min(4, Math.max(0.12, Number(pg.zoom))) : 1,
@@ -1035,6 +1041,7 @@ async function discoverSongs(rootHandle) {
           bricks: Array.isArray(pg.bricks) ? pg.bricks : [],
           combs,
           downloadFormat: df === 'mp3' || df === 'ogg' ? df : 'wav',
+          clusterAnnotations,
         };
       }
     }

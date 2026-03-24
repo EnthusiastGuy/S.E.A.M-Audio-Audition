@@ -50,6 +50,8 @@ const STATE = {
     combs: {},
     /** @type {'wav'|'mp3'|'ogg'} */
     downloadFormat: 'wav',
+    /** Optional per-cluster annotation map `{ "brickId|brickId": { title, description } }`. */
+    clusterAnnotations: {},
   },
 };
 
@@ -190,6 +192,12 @@ function loadSession() {
         bricks: Array.isArray(pg.bricks) ? pg.bricks : [],
         combs,
         downloadFormat: df === 'mp3' || df === 'ogg' ? df : 'wav',
+        clusterAnnotations:
+          pg.clusterAnnotations &&
+          typeof pg.clusterAnnotations === 'object' &&
+          !Array.isArray(pg.clusterAnnotations)
+            ? { ...pg.clusterAnnotations }
+            : {},
       };
     }
     return parsed;

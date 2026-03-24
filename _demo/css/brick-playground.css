@@ -404,6 +404,21 @@
   pointer-events: none;
 }
 
+.bp-cluster-title-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+}
+
+.bp-cluster-title-floating {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translate(-50%, -50%);
+  pointer-events: auto;
+}
+
 .bp-cluster-dur-label {
   position: absolute;
   left: 0;
@@ -705,6 +720,145 @@
     0 0 24px rgba(78, 205, 196, 0.08);
   pointer-events: none;
   animation: bp-outline-pop 0.45s ease;
+}
+
+.bp-cluster-annotation {
+  position: absolute;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.bp-cluster-annotation-inner {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  pointer-events: auto;
+}
+
+.bp-cluster-title-wrap {
+  position: relative;
+  display: none;
+}
+
+.bp-cluster-title-wrap--filled {
+  display: inline-flex;
+}
+
+.bp-cluster-title-label {
+  display: inline-block;
+  max-width: 220px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(168, 218, 220, 0.45);
+  background: rgba(14, 22, 38, 0.92);
+  color: var(--text);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bp-cluster-desc-popover {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 7px);
+  z-index: 8;
+  min-width: 210px;
+  max-width: 320px;
+  max-height: 220px;
+  overflow: auto;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(168, 218, 220, 0.44);
+  background: rgba(20, 31, 52, 0.96);
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.45);
+  color: var(--text2);
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-4px);
+  pointer-events: none;
+  transition:
+    opacity 0.16s ease,
+    visibility 0.16s ease,
+    transform 0.16s ease;
+}
+
+.bp-cluster-title-wrap--filled:hover .bp-cluster-desc-popover,
+.bp-cluster-title-floating:hover .bp-cluster-desc-popover {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+.bp-label-edit-btn {
+  min-width: 30px;
+  width: 30px;
+  height: 26px;
+}
+
+.bp-label-edit-popover {
+  position: absolute;
+  z-index: 20;
+  width: min(380px, calc(100vw - 24px));
+  pointer-events: auto;
+  padding: 11px;
+  border-radius: 11px;
+  border: 1px solid rgba(77, 150, 255, 0.4);
+  background: rgba(20, 31, 52, 0.96);
+  box-shadow:
+    0 12px 34px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(255, 255, 255, 0.06) inset;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.bp-label-edit-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.bp-label-edit-name {
+  font-size: 10px;
+  font-family: 'Space Mono', monospace;
+  letter-spacing: 0.04em;
+  color: var(--text3);
+}
+
+.bp-label-edit-input {
+  width: 100%;
+  border-radius: 7px;
+  border: 1px solid rgba(77, 150, 255, 0.35);
+  background: rgba(12, 18, 34, 0.88);
+  color: var(--text);
+  padding: 8px 9px;
+  font-size: 12px;
+  font-family: 'DM Sans', sans-serif;
+}
+
+.bp-label-description {
+  resize: vertical;
+  min-height: 82px;
+}
+
+.bp-label-edit-input:focus {
+  outline: 2px solid rgba(78, 205, 196, 0.45);
+  outline-offset: 1px;
+}
+
+.bp-label-edit-actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
 }
 
 @keyframes bp-outline-pop {

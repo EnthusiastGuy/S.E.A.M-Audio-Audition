@@ -281,6 +281,40 @@
   border-color: rgba(168, 218, 220, 0.55);
 }
 
+.bp-seam-insert-marker {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 3px;
+  pointer-events: none;
+  z-index: 4;
+  border-radius: 2px;
+  background: linear-gradient(
+    180deg,
+    rgba(78, 205, 196, 0.95),
+    rgba(168, 218, 220, 0.75)
+  );
+  box-shadow:
+    0 0 10px rgba(78, 205, 196, 0.55),
+    0 0 0 1px rgba(255, 255, 255, 0.25) inset;
+  animation: bp-seam-marker-pulse 0.9s ease-in-out infinite alternate;
+}
+
+@keyframes bp-seam-marker-pulse {
+  from {
+    opacity: 0.75;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.bp-brick--ghost {
+  opacity: 0.6;
+  filter: saturate(0.85);
+  box-shadow: 0 0 0 2px rgba(78, 205, 196, 0.55);
+}
+
 .bp-brick .brick-preview-flash {
   border-radius: inherit;
 }

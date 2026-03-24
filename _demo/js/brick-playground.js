@@ -8,15 +8,26 @@ const BP_BRICK_H = 42;
 const BP_PX_PER_SEC = 34;
 const BP_MIN_W = 48;
 const BP_MAX_W = 300;
-const BP_SNAP = 18;
+const BP_SNAP = 26;
 const BP_Y_ALIGN = 20;
 const BP_PAD = 4;
 const BP_GRID_W = 560;
 const BP_ORIGIN_X = 32;
 const BP_ORIGIN_Y = 40;
 const BP_SCATTER = 420;
+/** Horizontal gap range (world px) for bricks to count as “touching” for magnet union (wider = easier to join). */
+const BP_MAGNET_GAP_LO = -5;
+const BP_MAGNET_GAP_HI = 14;
 /** Min gap between brick edges after break so they stay out of magnet snap range (see ufRebuild). */
-const BP_BREAK_GAP = Math.max(BP_SNAP + 10, 28);
+const BP_BREAK_GAP = Math.max(BP_MAGNET_GAP_HI + 18, 36);
+/** World px: pointer within this distance of a seam midpoint shows insert marker. */
+const BP_SEAM_HOVER_PX = 20;
+/** Packed row gap after insert/reorder (edges stay within magnet range). */
+const BP_BRICK_PACK_GAP = 2;
+/** Hold still this long (ms) to enter ghost reorder for one brick in a sequence. */
+const BP_GHOST_HOLD_MS = 1000;
+/** Movement before normal drag starts cancels ghost timer (screen px). */
+const BP_DRAG_ARM_PX = 5;
 /** Vertical “comb” spine width; teeth (template bricks) sit to the right with wide gaps. */
 const BP_COMB_SPINE_W = 22;
 const BP_COMB_TOOTH_GAP = 38;
@@ -107,6 +118,10 @@ let pgTotalDur = 0;
 let pgSegmentDur = null;
 /** Last timeline segment index (for transition flash); null until first tick. */
 let pgLastSegFlashIdx = null;
+
+let bpSeamMarkerEl = null;
+/** @type {{ leftId: string, rightId: string, seamX: number, rowY: number }|null} */
+let bpSeamHint = null;
 
 function ensurePlaygroundGain() {
   if (!pgGain) {
@@ -274,8 +289,8 @@ function ufRebuild() {
       if (vOverlap < 10) continue;
       const gapL = B.x - (A.x + A.width);
       const gapR = A.x - (B.x + B.width);
-      if (gapL >= -2 && gapL < 5) ufUnion(A.id, B.id);
-      else if (gapR >= -2 && gapR < 5) ufUnion(A.id, B.id);
+      if (gapL >= BP_MAGNET_GAP_LO && gapL < BP_MAGNET_GAP_HI) ufUnion(A.id, B.id);
+      else if (gapR >= BP_MAGNET_GAP_LO && gapR < BP_MAGNET_GAP_HI) ufUnion(A.id, B.id);
     }
   }
 }
@@ -313,6 +328,92 @@ function screenToWorld(clientX, clientY) {
   return { x: (sx - bpPanX) / bpZoom, y: (sy - bpPanY) / bpZoom };
 }
 
+function bpEnsureSeamMarker() {
+  if (bpSeamMarkerEl || !bpHudRoot) return;
+  bpSeamMarkerEl = document.createElement('div');
+  bpSeamMarkerEl.className = 'bp-seam-insert-marker';
+  bpSeamMarkerEl.setAttribute('aria-hidden', 'true');
+  bpSeamMarkerEl.style.display = 'none';
+  bpHudRoot.appendChild(bpSeamMarkerEl);
+}
+
+function bpClearSeamMarker() {
+  bpSeamHint = null;
+  if (bpSeamMarkerEl) bpSeamMarkerEl.style.display = 'none';
+}
+
+function bpUpdateSeamMarker(worldX, worldY, movedIds) {
+  bpEnsureSeamMarker();
+  const movedSet = new Set(movedIds);
+  let best = null;
+  let bestD = Infinity;
+  const roots = new Set();
+  for (const id of brickMap.keys()) {
+    const br = brickMap.get(id);
+    if (!br || br.combTemplate) continue;
+    roots.add(ufFind(id));
+  }
+  for (const root of roots) {
+    const raw = clusterMembers(root).filter(id => !brickMap.get(id)?.combTemplate);
+    if (raw.length < 2) continue;
+    const sorted = raw
+      .map(id => brickMap.get(id))
+      .filter(Boolean)
+      .sort((a, b) => a.x - b.x);
+    for (let i = 0; i < sorted.length - 1; i++) {
+      const L = sorted[i];
+      const R = sorted[i + 1];
+      if (movedSet.has(L.id) && movedSet.has(R.id)) continue;
+      const gapMid = (L.x + L.width + R.x) / 2;
+      const rowY = (L.y + R.y) / 2;
+      const dy = Math.abs(worldY - rowY);
+      if (dy > BP_BRICK_H * 0.65 + 10) continue;
+      const d = Math.abs(worldX - gapMid);
+      if (d < bestD && d <= BP_SEAM_HOVER_PX) {
+        bestD = d;
+        best = { leftId: L.id, rightId: R.id, seamX: gapMid, rowY };
+      }
+    }
+  }
+  bpSeamHint = best;
+  if (best && bpSeamMarkerEl) {
+    bpSeamMarkerEl.style.display = 'block';
+    bpSeamMarkerEl.style.transform = `translate(${best.seamX - 1}px,${best.rowY}px)`;
+    bpSeamMarkerEl.style.height = `${BP_BRICK_H}px`;
+  } else if (bpSeamMarkerEl) {
+    bpSeamMarkerEl.style.display = 'none';
+  }
+}
+
+function bpApplySeamInsert(leftId, rightId, insertIds) {
+  const L = brickMap.get(leftId);
+  const R = brickMap.get(rightId);
+  if (!L || !R) return false;
+  if (ufFind(leftId) !== ufFind(rightId)) return false;
+  const root = ufFind(leftId);
+  const insertBricks = insertIds.map(id => brickMap.get(id)).filter(Boolean);
+  if (insertBricks.length === 0) return false;
+  const insertSet = new Set(insertIds);
+  const sortedCluster = clusterMembers(root)
+    .map(id => brickMap.get(id))
+    .filter(Boolean)
+    .sort((a, b) => a.x - b.x);
+  const withoutInsert = sortedCluster.filter(b => !insertSet.has(b.id));
+  const idx = withoutInsert.findIndex((b, i) => b.id === leftId && withoutInsert[i + 1]?.id === rightId);
+  if (idx < 0) return false;
+  const insertSorted = [...insertBricks].sort((a, b) => a.x - b.x);
+  const newOrder = [...withoutInsert.slice(0, idx + 1), ...insertSorted, ...withoutInsert.slice(idx + 1)];
+  const rowY = Math.min(...newOrder.map(b => b.y));
+  let cursorX = Math.min(...newOrder.map(b => b.x));
+  for (const b of newOrder) {
+    b.x = cursorX;
+    b.y = rowY;
+    cursorX += b.width + BP_BRICK_PACK_GAP;
+    b.el.style.transform = `translate(${b.x}px,${b.y}px)`;
+  }
+  return true;
+}
+
 function shiftCluster(ids, dx, dy) {
   for (const id of ids) {
     const b = brickMap.get(id);
@@ -339,7 +440,7 @@ function snapClusterToNeighbors(movedIds) {
         const yDist = Math.abs(b.y - ob.y);
         if (yDist > BP_BRICK_H + BP_SNAP) continue;
         const gapR = ob.x - (b.x + b.width);
-        if (gapR >= -3 && gapR < BP_SNAP) {
+        if (gapR >= -5 && gapR < BP_SNAP) {
           const score = Math.abs(gapR) + yDist * 0.3;
           if (score < bestScore) {
             bestScore = score;
@@ -348,7 +449,7 @@ function snapClusterToNeighbors(movedIds) {
           }
         }
         const gapL = b.x - (ob.x + ob.width);
-        if (gapL >= -3 && gapL < BP_SNAP) {
+        if (gapL >= -5 && gapL < BP_SNAP) {
           const score = Math.abs(gapL) + yDist * 0.3;
           if (score < bestScore) {
             bestScore = score;
@@ -1387,24 +1488,61 @@ function createBrickElement(rec) {
       dragPointerId = e.pointerId;
       stopPlaygroundPlayback();
     } else {
-      snapshotBeforeDrag = capturePlaygroundBrickSnapshot();
-      activeBrickId = workingRec.id;
-      const root = ufFind(workingRec.id);
-      dragClusterIds = clusterMembers(root);
-      dragStartPos = new Map();
-      for (const id of dragClusterIds) {
-        const b = brickMap.get(id);
-        if (b) dragStartPos.set(id, { x: b.x, y: b.y });
-      }
-      const w = screenToWorld(e.clientX, e.clientY);
-      dragOffX = w.x - workingRec.x;
-      dragOffY = w.y - workingRec.y;
+      activeBrickId = rec.id;
       dragPointerId = e.pointerId;
       stopPlaygroundPlayback();
+      updateClusterUi();
     }
+
+    let lastClientX = e.clientX;
+    let lastClientY = e.clientY;
+    let dragStarted = !!isDuplicateDrag;
+    let ghostMode = false;
+    let longPressTimer = null;
+    if (!combTemplate && !isDuplicateDrag) {
+      longPressTimer = setTimeout(() => {
+        longPressTimer = null;
+        if (dragStarted) return;
+        const nonT = clusterMembers(ufFind(rec.id)).filter(id => !brickMap.get(id)?.combTemplate);
+        if (nonT.length < 2) return;
+        dragStarted = true;
+        ghostMode = true;
+        snapshotBeforeDrag = capturePlaygroundBrickSnapshot();
+        workingRec = rec;
+        activeBrickId = rec.id;
+        dragClusterIds = [rec.id];
+        dragStartPos = new Map();
+        dragStartPos.set(rec.id, { x: rec.x, y: rec.y });
+        const w = screenToWorld(lastClientX, lastClientY);
+        dragOffX = w.x - rec.x;
+        dragOffY = w.y - rec.y;
+        rec.el.classList.add('bp-brick--ghost');
+        playClickUiSound();
+      }, BP_GHOST_HOLD_MS);
+    }
+
+    const applyDragDelta = ev => {
+      const w2 = screenToWorld(ev.clientX, ev.clientY);
+      const tx = w2.x - dragOffX;
+      const ty = w2.y - dragOffY;
+      const base = dragStartPos.get(workingRec.id);
+      if (!base) return;
+      const dx = tx - base.x;
+      const dy = ty - base.y;
+      for (const id of dragClusterIds) {
+        const b = brickMap.get(id);
+        const orig = dragStartPos.get(id);
+        if (!b || !orig) continue;
+        b.x = orig.x + dx;
+        b.y = orig.y + dy;
+        b.el.style.transform = `translate(${b.x}px,${b.y}px)`;
+      }
+    };
 
     const onMove = ev => {
       if (ev.pointerId !== dragPointerId) return;
+      lastClientX = ev.clientX;
+      lastClientY = ev.clientY;
       if (combTemplate && !combDupActivated) {
         const dist = Math.hypot(ev.clientX - startClientX, ev.clientY - startClientY);
         if (dist < BP_COMB_DUP_THRESHOLD_PX) return;
@@ -1435,21 +1573,44 @@ function createBrickElement(rec) {
         dragOffX = w.x - workingRec.x;
         dragOffY = w.y - workingRec.y;
       }
+      if (!combTemplate && !isDuplicateDrag) {
+        if (!dragStarted) {
+          const dist = Math.hypot(ev.clientX - startClientX, ev.clientY - startClientY);
+          if (dist > BP_DRAG_ARM_PX) {
+            if (longPressTimer) {
+              clearTimeout(longPressTimer);
+              longPressTimer = null;
+            }
+            dragStarted = true;
+            snapshotBeforeDrag = capturePlaygroundBrickSnapshot();
+            activeBrickId = workingRec.id;
+            const root = ufFind(workingRec.id);
+            dragClusterIds = clusterMembers(root);
+            dragStartPos = new Map();
+            for (const id of dragClusterIds) {
+              const b = brickMap.get(id);
+              if (b) dragStartPos.set(id, { x: b.x, y: b.y });
+            }
+            const w = screenToWorld(ev.clientX, ev.clientY);
+            dragOffX = w.x - workingRec.x;
+            dragOffY = w.y - workingRec.y;
+          }
+          return;
+        }
+        if (ghostMode) {
+          if (!dragClusterIds.length || !dragStartPos) return;
+          applyDragDelta(ev);
+          const w2 = screenToWorld(ev.clientX, ev.clientY);
+          bpUpdateSeamMarker(w2.x, w2.y, dragClusterIds);
+          repositionClusterUi();
+          return;
+        }
+      }
       if (!dragClusterIds.length || !dragStartPos) return;
-      const w2 = screenToWorld(ev.clientX, ev.clientY);
-      const tx = w2.x - dragOffX;
-      const ty = w2.y - dragOffY;
-      const base = dragStartPos.get(workingRec.id);
-      if (!base) return;
-      const dx = tx - base.x;
-      const dy = ty - base.y;
-      for (const id of dragClusterIds) {
-        const b = brickMap.get(id);
-        const orig = dragStartPos.get(id);
-        if (!b || !orig) continue;
-        b.x = orig.x + dx;
-        b.y = orig.y + dy;
-        b.el.style.transform = `translate(${b.x}px,${b.y}px)`;
+      applyDragDelta(ev);
+      if (!combTemplate && !isDuplicateDrag && !ghostMode) {
+        const w2 = screenToWorld(ev.clientX, ev.clientY);
+        bpUpdateSeamMarker(w2.x, w2.y, dragClusterIds);
       }
       repositionClusterUi();
     };
@@ -1459,6 +1620,13 @@ function createBrickElement(rec) {
       document.removeEventListener('pointermove', onMove);
       document.removeEventListener('pointerup', onUp);
       document.removeEventListener('pointercancel', onUp);
+      if (longPressTimer) {
+        clearTimeout(longPressTimer);
+        longPressTimer = null;
+      }
+      const seamHint = bpSeamHint;
+      bpClearSeamMarker();
+      rec.el.classList.remove('bp-brick--ghost');
       dragPointerId = null;
       dragStartPos = null;
       if (combTemplate && !combDupActivated) {
@@ -1467,16 +1635,36 @@ function createBrickElement(rec) {
         updateClusterUi();
         return;
       }
-      snapClusterToNeighbors(dragClusterIds);
-      ufRebuild();
-      scheduleSave();
-      updateClusterUi();
-      if (beforeDuplicateSnapshot) {
-        bpPushUndo(beforeDuplicateSnapshot);
-      } else if (!combTemplate && !isDuplicateDrag) {
-        const endSnap = capturePlaygroundBrickSnapshot();
-        if (snapshotBeforeDrag && !snapshotsEqual(snapshotBeforeDrag, endSnap)) {
-          bpPushUndo(snapshotBeforeDrag);
+      if (!combTemplate && !isDuplicateDrag && !dragStarted) {
+        activeBrickId = rec.id;
+        updateClusterUi();
+        return;
+      }
+      let inserted = false;
+      if (seamHint && dragClusterIds.length && !combTemplate && !isDuplicateDrag) {
+        const h = seamHint;
+        if (bpApplySeamInsert(h.leftId, h.rightId, dragClusterIds)) {
+          inserted = true;
+          ufRebuild();
+          scheduleSave();
+          updateClusterUi();
+          if (snapshotBeforeDrag && !snapshotsEqual(snapshotBeforeDrag, capturePlaygroundBrickSnapshot())) {
+            bpPushUndo(snapshotBeforeDrag);
+          }
+        }
+      }
+      if (!inserted) {
+        snapClusterToNeighbors(dragClusterIds);
+        ufRebuild();
+        scheduleSave();
+        updateClusterUi();
+        if (beforeDuplicateSnapshot) {
+          bpPushUndo(beforeDuplicateSnapshot);
+        } else if (!combTemplate && !isDuplicateDrag) {
+          const endSnap = capturePlaygroundBrickSnapshot();
+          if (snapshotBeforeDrag && !snapshotsEqual(snapshotBeforeDrag, endSnap)) {
+            bpPushUndo(snapshotBeforeDrag);
+          }
         }
       }
       dragClusterIds = [];
@@ -1793,7 +1981,7 @@ function initBrickPlayground(mainContainer) {
   wrap.className = 'brick-playground';
   wrap.innerHTML = `
     <div class="bp-header">
-      <span class="bp-hint">Comb spine: move templates · Template: click to select · drag 5px+ to copy · Free brick: drag to snap · Ctrl-drag duplicate · Ctrl+Z / Ctrl+Y · scroll zoom · empty area pan</span>
+      <span class="bp-hint">Comb spine: move templates · Template: click / drag 5px+ to copy · Free brick: drag to snap (hold 1s = ghost reorder) · seam marker = insert between · Ctrl-drag duplicate · Ctrl+Z / Ctrl+Y · scroll zoom · empty area pan</span>
     </div>
     <div class="bp-stage">
       <aside class="bp-floating-tools" id="bp-floating-tools" aria-label="Playground tools">
@@ -1822,6 +2010,7 @@ function initBrickPlayground(mainContainer) {
   combsLayer = wrap.querySelector('.bp-combs-layer');
   bricksLayer = wrap.querySelector('.bp-bricks-layer');
   bpHudRoot = wrap.querySelector('.bp-hud-layer');
+  bpEnsureSeamMarker();
 
   const pg = STATE.playground;
   bpZoom = pg.zoom || 1;

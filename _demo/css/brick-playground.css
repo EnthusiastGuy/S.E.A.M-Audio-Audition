@@ -430,6 +430,7 @@
   flex-direction: column;
   gap: 8px;
   width: 100%;
+  order: 1;
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -500,6 +501,7 @@
 /* Memory estimate card */
 .memory-estimate-panel {
   width: 100%;
+  order: 4;
   padding: 12px 10px 10px;
   background: var(--card);
   border: 1px solid var(--border);

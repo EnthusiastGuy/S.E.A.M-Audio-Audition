@@ -8,6 +8,7 @@
   flex-direction: column;
   align-items: center;
   gap: 6px;
+  order: 2;
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -26,6 +27,7 @@
   flex-direction: column;
   align-items: center;
   gap: 6px;
+  order: 3;
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: var(--radius);

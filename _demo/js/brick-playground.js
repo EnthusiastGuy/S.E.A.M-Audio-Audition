@@ -15,6 +15,12 @@ const BP_GRID_W = 560;
 const BP_ORIGIN_X = 32;
 const BP_ORIGIN_Y = 40;
 const BP_SCATTER = 420;
+/** Vertical “comb” spine width; teeth (template bricks) sit to the right with wide gaps. */
+const BP_COMB_SPINE_W = 22;
+const BP_COMB_TOOTH_GAP = 38;
+const BP_COMB_ROW_GAP = 52;
+/** Screen pixels: drag farther than this on a template brick spawns a duplicate; shorter gesture = select only. */
+const BP_COMB_DUP_THRESHOLD_PX = 5;
 const BP_UNDO_MAX = 50;
 
 const PG_SEAM_SCHEDULE_AHEAD = 0.005;
@@ -31,7 +37,11 @@ const BP_BREAK_MAGNET_SVG = `<svg class="bp-icon-svg bp-break-icon" viewBox="0 0
 let bpViewport = null;
 let bpWorld = null;
 let bpHudRoot = null;
+let combsLayer = null;
 let bricksLayer = null;
+
+/** @type {Map<string, { key: string, fmt: string, songIdx: number, x: number, y: number, el: HTMLElement|null }>} */
+const combMap = new Map();
 
 /** @type {Map<string, { id: string, fmt: string, songIdx: number, partIndex: number, x: number, y: number, width: number, height: number, el: HTMLElement }>} */
 const brickMap = new Map();
@@ -132,6 +142,29 @@ function bpCanonicalBrickId(fmt, songIdx, partIndex) {
   return `bp_${fmt}_${songIdx}_${partIndex}`;
 }
 
+function bpSongKey(fmt, songIdx) {
+  return `${fmt}_${songIdx}`;
+}
+
+/** Canonical parking-lot template bricks (one per part); duplicates have different ids. */
+function bpIsCombTemplateBrick(b) {
+  return b.id === bpCanonicalBrickId(b.fmt, b.songIdx, b.partIndex);
+}
+
+function groupDescriptorsBySong(descriptors) {
+  const order = [];
+  const map = new Map();
+  for (const d of descriptors) {
+    const k = bpSongKey(d.fmt, d.songIdx);
+    if (!map.has(k)) {
+      order.push(k);
+      map.set(k, []);
+    }
+    map.get(k).push(d);
+  }
+  return { order, map };
+}
+
 function bpCountPartKey(key) {
   let n = 0;
   for (const b of brickMap.values()) {
@@ -225,6 +258,7 @@ function ufRebuild() {
     for (let j = i + 1; j < list.length; j++) {
       const A = list[i];
       const B = list[j];
+      if (A.combTemplate || B.combTemplate) continue;
       const vOverlap = Math.min(A.y + A.height, B.y + B.height) - Math.max(A.y, B.y);
       if (vOverlap < 10) continue;
       const gapL = B.x - (A.x + A.width);
@@ -290,6 +324,7 @@ function snapClusterToNeighbors(movedIds) {
       if (!b) continue;
       for (const ob of brickMap.values()) {
         if (cluster.has(ob.id)) continue;
+        if (ob.combTemplate) continue;
         const yDist = Math.abs(b.y - ob.y);
         if (yDist > BP_BRICK_H + BP_SNAP) continue;
         const gapR = ob.x - (b.x + b.width);
@@ -782,7 +817,8 @@ async function bpPlayClusterSeam(root) {
 }
 
 function bpBreakCluster(root) {
-  const ids = clusterMembers(root);
+  const ids = clusterMembers(root).filter(id => !brickMap.get(id)?.combTemplate);
+  if (ids.length === 0) return;
   playBreakSound();
   for (const id of ids) ufParent.set(id, id);
   for (const id of ids) {
@@ -824,6 +860,7 @@ function bpBreakAll() {
   for (const id of brickMap.keys()) ufParent.set(id, id);
   const all = [...brickMap.values()];
   for (const b of all) {
+    if (b.combTemplate) continue;
     b.x += (Math.random() - 0.5) * BP_SCATTER * 1.2;
     b.y += (Math.random() - 0.5) * BP_SCATTER * 1.2;
     b.el.style.transform = `translate(${b.x}px,${b.y}px)`;
@@ -924,6 +961,11 @@ function persistPlaygroundBricks() {
     x: b.x,
     y: b.y,
   }));
+  const combs = {};
+  for (const [k, v] of combMap.entries()) {
+    combs[k] = { x: v.x, y: v.y };
+  }
+  STATE.playground.combs = combs;
 }
 
 function collectDescriptors() {
@@ -950,29 +992,31 @@ function isBrickValid(b) {
   return !!song.parts[b.partIndex];
 }
 
-function layoutDefaultBricks(descriptors) {
-  let colX = BP_ORIGIN_X;
-  let rowY = BP_ORIGIN_Y;
-  let rowH = 0;
+function layoutDefaultCombBricks(descriptors) {
+  const { order, map } = groupDescriptorsBySong(descriptors);
   const out = [];
-  for (const d of descriptors) {
-    const w = bpBrickWidthForDur(bpGetPartDuration(d.fmt, d.songIdx, d.partIndex));
-    if (colX + w > BP_GRID_W) {
-      colX = BP_ORIGIN_X;
-      rowY += rowH + 14;
-      rowH = 0;
+  let row = 0;
+  for (const k of order) {
+    const parts = map.get(k);
+    if (!parts || parts.length === 0) continue;
+    const combX = BP_ORIGIN_X;
+    const combY = BP_ORIGIN_Y + row * (BP_BRICK_H + BP_COMB_ROW_GAP);
+    row++;
+    let x = combX + BP_COMB_SPINE_W + BP_PAD;
+    for (const d of parts) {
+      const w = bpBrickWidthForDur(bpGetPartDuration(d.fmt, d.songIdx, d.partIndex));
+      out.push({
+        id: bpCanonicalBrickId(d.fmt, d.songIdx, d.partIndex),
+        fmt: d.fmt,
+        songIdx: d.songIdx,
+        partIndex: d.partIndex,
+        x,
+        y: combY,
+        width: w,
+        combTemplate: true,
+      });
+      x += w + BP_COMB_TOOTH_GAP;
     }
-    out.push({
-      id: `bp_${d.fmt}_${d.songIdx}_${d.partIndex}`,
-      fmt: d.fmt,
-      songIdx: d.songIdx,
-      partIndex: d.partIndex,
-      x: colX,
-      y: rowY,
-      width: w,
-    });
-    colX += w + 10;
-    rowH = Math.max(rowH, BP_BRICK_H);
   }
   return out;
 }
@@ -1049,9 +1093,147 @@ function bpRedo() {
   applyPlaygroundBrickSnapshot(next);
 }
 
+function syncCombAnchorsFromTemplateBricks() {
+  combMap.clear();
+  const bySong = new Map();
+  for (const b of brickMap.values()) {
+    if (!b.combTemplate) continue;
+    const k = bpSongKey(b.fmt, b.songIdx);
+    if (!bySong.has(k)) bySong.set(k, []);
+    bySong.get(k).push(b);
+  }
+  for (const [k, arr] of bySong) {
+    let minX = Infinity;
+    let minY = Infinity;
+    for (const b of arr) {
+      minX = Math.min(minX, b.x);
+      minY = Math.min(minY, b.y);
+    }
+    const first = arr[0];
+    combMap.set(k, {
+      key: k,
+      fmt: first.fmt,
+      songIdx: first.songIdx,
+      x: minX - BP_COMB_SPINE_W - BP_PAD,
+      y: minY,
+      el: null,
+    });
+  }
+}
+
+function rebuildCombDom() {
+  if (!combsLayer) return;
+  combsLayer.innerHTML = '';
+  const orderedKeys = [];
+  const fmt = 'wav';
+  const songOrder = STATE.order[fmt] || [];
+  for (const songIdx of songOrder) {
+    const k = bpSongKey(fmt, songIdx);
+    if (combMap.has(k)) orderedKeys.push(k);
+  }
+  for (const k of combMap.keys()) {
+    if (!orderedKeys.includes(k)) orderedKeys.push(k);
+  }
+  for (const key of orderedKeys) {
+    const c = combMap.get(key);
+    if (!c) continue;
+    const el = document.createElement('div');
+    el.className = 'bp-comb';
+    el.dataset.songKey = key;
+    const spine = document.createElement('div');
+    spine.className = 'bp-comb-spine';
+    spine.title = 'Drag to move this song’s template row';
+    const song = STATE.songs[c.fmt]?.[c.songIdx];
+    spine.setAttribute('aria-label', `Comb — ${song?.name || 'song'} — drag to move templates`);
+    el.appendChild(spine);
+    el.style.transform = `translate(${c.x}px,${c.y}px)`;
+    c.el = el;
+    combsLayer.appendChild(el);
+    spine.addEventListener('pointerdown', e => onCombSpinePointerDown(e, key));
+  }
+}
+
+function onCombSpinePointerDown(e, songKey) {
+  if (e.button !== 0) return;
+  e.stopPropagation();
+  e.preventDefault();
+  const templateIds = [...brickMap.values()]
+    .filter(b => b.combTemplate && bpSongKey(b.fmt, b.songIdx) === songKey)
+    .map(b => b.id);
+  if (templateIds.length === 0) return;
+  const c = combMap.get(songKey);
+  if (!c) return;
+  const snapshotBeforeDrag = capturePlaygroundBrickSnapshot();
+  const startComb = { x: c.x, y: c.y };
+  dragClusterIds = templateIds;
+  dragStartPos = new Map();
+  for (const id of dragClusterIds) {
+    const b = brickMap.get(id);
+    if (b) dragStartPos.set(id, { x: b.x, y: b.y });
+  }
+  const w = screenToWorld(e.clientX, e.clientY);
+  dragOffX = w.x - c.x;
+  dragOffY = w.y - c.y;
+  dragPointerId = e.pointerId;
+  stopPlaygroundPlayback();
+  const combEl = c.el;
+  if (combEl) combEl.setPointerCapture(e.pointerId);
+
+  const onMove = ev => {
+    if (ev.pointerId !== dragPointerId) return;
+    const w2 = screenToWorld(ev.clientX, ev.clientY);
+    const newCx = w2.x - dragOffX;
+    const newCy = w2.y - dragOffY;
+    const dx = newCx - startComb.x;
+    const dy = newCy - startComb.y;
+    for (const id of dragClusterIds) {
+      const b = brickMap.get(id);
+      const orig = dragStartPos.get(id);
+      if (!b || !orig) continue;
+      b.x = orig.x + dx;
+      b.y = orig.y + dy;
+      b.el.style.transform = `translate(${b.x}px,${b.y}px)`;
+    }
+    c.x = startComb.x + dx;
+    c.y = startComb.y + dy;
+    if (combEl) combEl.style.transform = `translate(${c.x}px,${c.y}px)`;
+    repositionClusterUi();
+  };
+
+  const onUp = ev => {
+    if (ev.pointerId !== dragPointerId) return;
+    document.removeEventListener('pointermove', onMove);
+    document.removeEventListener('pointerup', onUp);
+    document.removeEventListener('pointercancel', onUp);
+    dragPointerId = null;
+    dragStartPos = null;
+    dragClusterIds = [];
+    if (combEl) {
+      try {
+        combEl.releasePointerCapture(ev.pointerId);
+      } catch (err) {}
+    }
+    syncCombAnchorsFromTemplateBricks();
+    rebuildCombDom();
+    ufRebuild();
+    scheduleSave();
+    updateClusterUi();
+    const endSnap = capturePlaygroundBrickSnapshot();
+    if (snapshotBeforeDrag && !snapshotsEqual(snapshotBeforeDrag, endSnap)) {
+      bpPushUndo(snapshotBeforeDrag);
+    }
+  };
+
+  document.addEventListener('pointermove', onMove);
+  document.addEventListener('pointerup', onUp);
+  document.addEventListener('pointercancel', onUp);
+  updateClusterUi();
+}
+
 function createBrickElement(rec) {
   const el = document.createElement('div');
   el.className = 'bp-brick';
+  if (rec.combTemplate) el.classList.add('bp-brick--comb-template');
   el.dataset.id = rec.id;
   el.style.width = `${rec.width}px`;
   el.style.height = `${BP_BRICK_H}px`;
@@ -1075,12 +1257,23 @@ function createBrickElement(rec) {
     e.stopPropagation();
     e.preventDefault();
 
-    const isDuplicateDrag = e.ctrlKey || e.metaKey;
+    const combTemplate = !!rec.combTemplate;
+    const isDuplicateDrag = combTemplate ? false : e.ctrlKey || e.metaKey;
     let snapshotBeforeDrag = null;
     let beforeDuplicateSnapshot = null;
     let workingRec = rec;
+    let combDupActivated = false;
+    const startClientX = e.clientX;
+    const startClientY = e.clientY;
 
-    if (isDuplicateDrag) {
+    if (combTemplate) {
+      activeBrickId = rec.id;
+      dragClusterIds = [];
+      dragStartPos = null;
+      dragPointerId = e.pointerId;
+      stopPlaygroundPlayback();
+      updateClusterUi();
+    } else if (isDuplicateDrag) {
       beforeDuplicateSnapshot = capturePlaygroundBrickSnapshot();
       const newId = makeDuplicateBrickId(rec.id);
       workingRec = {
@@ -1092,32 +1285,75 @@ function createBrickElement(rec) {
         y: rec.y,
         width: rec.width,
         height: BP_BRICK_H,
+        combTemplate: false,
         el: null,
       };
       workingRec.el = createBrickElement(workingRec);
       brickMap.set(newId, workingRec);
       if (bricksLayer) bricksLayer.appendChild(workingRec.el);
       ufRebuild();
+      activeBrickId = workingRec.id;
+      dragClusterIds = [workingRec.id];
+      dragStartPos = new Map();
+      for (const id of dragClusterIds) {
+        const b = brickMap.get(id);
+        if (b) dragStartPos.set(id, { x: b.x, y: b.y });
+      }
+      const w = screenToWorld(e.clientX, e.clientY);
+      dragOffX = w.x - workingRec.x;
+      dragOffY = w.y - workingRec.y;
+      dragPointerId = e.pointerId;
+      stopPlaygroundPlayback();
     } else {
       snapshotBeforeDrag = capturePlaygroundBrickSnapshot();
+      activeBrickId = workingRec.id;
+      const root = ufFind(workingRec.id);
+      dragClusterIds = clusterMembers(root);
+      dragStartPos = new Map();
+      for (const id of dragClusterIds) {
+        const b = brickMap.get(id);
+        if (b) dragStartPos.set(id, { x: b.x, y: b.y });
+      }
+      const w = screenToWorld(e.clientX, e.clientY);
+      dragOffX = w.x - workingRec.x;
+      dragOffY = w.y - workingRec.y;
+      dragPointerId = e.pointerId;
+      stopPlaygroundPlayback();
     }
-
-    activeBrickId = workingRec.id;
-    const root = ufFind(workingRec.id);
-    dragClusterIds = isDuplicateDrag ? [workingRec.id] : clusterMembers(root);
-    dragStartPos = new Map();
-    for (const id of dragClusterIds) {
-      const b = brickMap.get(id);
-      if (b) dragStartPos.set(id, { x: b.x, y: b.y });
-    }
-    const w = screenToWorld(e.clientX, e.clientY);
-    dragOffX = w.x - workingRec.x;
-    dragOffY = w.y - workingRec.y;
-    dragPointerId = e.pointerId;
-    stopPlaygroundPlayback();
 
     const onMove = ev => {
       if (ev.pointerId !== dragPointerId) return;
+      if (combTemplate && !combDupActivated) {
+        const dist = Math.hypot(ev.clientX - startClientX, ev.clientY - startClientY);
+        if (dist < BP_COMB_DUP_THRESHOLD_PX) return;
+        combDupActivated = true;
+        beforeDuplicateSnapshot = capturePlaygroundBrickSnapshot();
+        const newId = makeDuplicateBrickId(rec.id);
+        workingRec = {
+          id: newId,
+          fmt: rec.fmt,
+          songIdx: rec.songIdx,
+          partIndex: rec.partIndex,
+          x: rec.x,
+          y: rec.y,
+          width: rec.width,
+          height: BP_BRICK_H,
+          combTemplate: false,
+          el: null,
+        };
+        workingRec.el = createBrickElement(workingRec);
+        brickMap.set(newId, workingRec);
+        if (bricksLayer) bricksLayer.appendChild(workingRec.el);
+        ufRebuild();
+        activeBrickId = workingRec.id;
+        dragClusterIds = [workingRec.id];
+        dragStartPos = new Map();
+        dragStartPos.set(workingRec.id, { x: workingRec.x, y: workingRec.y });
+        const w = screenToWorld(ev.clientX, ev.clientY);
+        dragOffX = w.x - workingRec.x;
+        dragOffY = w.y - workingRec.y;
+      }
+      if (!dragClusterIds.length || !dragStartPos) return;
       const w2 = screenToWorld(ev.clientX, ev.clientY);
       const tx = w2.x - dragOffX;
       const ty = w2.y - dragOffY;
@@ -1143,13 +1379,19 @@ function createBrickElement(rec) {
       document.removeEventListener('pointercancel', onUp);
       dragPointerId = null;
       dragStartPos = null;
+      if (combTemplate && !combDupActivated) {
+        activeBrickId = rec.id;
+        dragClusterIds = [];
+        updateClusterUi();
+        return;
+      }
       snapClusterToNeighbors(dragClusterIds);
       ufRebuild();
       scheduleSave();
       updateClusterUi();
-      if (isDuplicateDrag) {
-        if (beforeDuplicateSnapshot) bpPushUndo(beforeDuplicateSnapshot);
-      } else {
+      if (beforeDuplicateSnapshot) {
+        bpPushUndo(beforeDuplicateSnapshot);
+      } else if (!combTemplate && !isDuplicateDrag) {
         const endSnap = capturePlaygroundBrickSnapshot();
         if (snapshotBeforeDrag && !snapshotsEqual(snapshotBeforeDrag, endSnap)) {
           bpPushUndo(snapshotBeforeDrag);
@@ -1161,7 +1403,7 @@ function createBrickElement(rec) {
     document.addEventListener('pointermove', onMove);
     document.addEventListener('pointerup', onUp);
     document.addEventListener('pointercancel', onUp);
-    updateClusterUi();
+    if (!combTemplate) updateClusterUi();
   });
 
   return el;
@@ -1405,7 +1647,7 @@ function resetPlaygroundLayout() {
   bpPanX = 0;
   bpPanY = 0;
   updateWorldTransform();
-  const layout = layoutDefaultBricks(collectDescriptors());
+  const layout = layoutDefaultCombBricks(collectDescriptors());
   rebuildBrickDom(layout);
   activeBrickId = brickMap.size ? brickMap.keys().next().value : null;
   persistPlaygroundBricks();
@@ -1438,6 +1680,10 @@ function rebuildBrickDom(layout) {
   for (const item of layout) {
     if (!isBrickValid(item)) continue;
     const w = item.width || bpBrickWidthForDur(bpGetPartDuration(item.fmt, item.songIdx, item.partIndex));
+    const combTemplate =
+      item.combTemplate !== undefined && item.combTemplate !== null
+        ? !!item.combTemplate
+        : bpIsCombTemplateBrick(item);
     const rec = {
       id: item.id,
       fmt: item.fmt,
@@ -1447,6 +1693,7 @@ function rebuildBrickDom(layout) {
       y: item.y,
       width: w,
       height: BP_BRICK_H,
+      combTemplate,
       el: null,
     };
     rec.el = createBrickElement(rec);
@@ -1454,6 +1701,8 @@ function rebuildBrickDom(layout) {
     bricksLayer.appendChild(rec.el);
   }
   ufRebuild();
+  syncCombAnchorsFromTemplateBricks();
+  rebuildCombDom();
 }
 
 function initBrickPlayground(mainContainer) {
@@ -1462,7 +1711,7 @@ function initBrickPlayground(mainContainer) {
   wrap.className = 'brick-playground';
   wrap.innerHTML = `
     <div class="bp-header">
-      <span class="bp-hint">Drag to snap · Ctrl-drag duplicate · Ctrl+Z undo / Ctrl+Y redo · scroll zoom · empty area pan</span>
+      <span class="bp-hint">Comb spine: move templates · Template: click to select · drag 5px+ to copy · Free brick: drag to snap · Ctrl-drag duplicate · Ctrl+Z / Ctrl+Y · scroll zoom · empty area pan</span>
     </div>
     <div class="bp-stage">
       <aside class="bp-floating-tools" id="bp-floating-tools" aria-label="Playground tools">
@@ -1471,12 +1720,13 @@ function initBrickPlayground(mainContainer) {
           <span class="bp-tools-chevron" aria-hidden="true">&#9660;</span>
         </button>
         <div class="bp-tools-panel" id="bp-tools-panel">
-          <p class="bp-tools-hint">Restore the default brick grid and zoom/pan.</p>
+          <p class="bp-tools-hint">Restore the default comb layout and zoom/pan.</p>
           <button type="button" class="bp-tools-btn-reset" id="bp-tools-reset">Reset positions</button>
         </div>
       </aside>
       <div class="bp-viewport" tabindex="0">
         <div class="bp-world">
+          <div class="bp-combs-layer"></div>
           <div class="bp-bricks-layer"></div>
           <div class="bp-hud-layer"></div>
         </div>
@@ -1487,6 +1737,7 @@ function initBrickPlayground(mainContainer) {
 
   bpViewport = wrap.querySelector('.bp-viewport');
   bpWorld = wrap.querySelector('.bp-world');
+  combsLayer = wrap.querySelector('.bp-combs-layer');
   bricksLayer = wrap.querySelector('.bp-bricks-layer');
   bpHudRoot = wrap.querySelector('.bp-hud-layer');
 
@@ -1511,7 +1762,7 @@ function initBrickPlayground(mainContainer) {
         width: bpBrickWidthForDur(bpGetPartDuration(b.fmt, b.songIdx, b.partIndex)),
       }));
   } else {
-    layout = layoutDefaultBricks(desc);
+    layout = layoutDefaultCombBricks(desc);
   }
   rebuildBrickDom(layout);
   if (brickMap.size && !activeBrickId) {
@@ -1537,7 +1788,8 @@ function initBrickPlayground(mainContainer) {
   }, { passive: false });
 
   bpViewport.addEventListener('pointerdown', e => {
-    if (e.target.closest('.bp-brick') || e.target.closest('.bp-cluster-ui')) return;
+    if (e.target.closest('.bp-brick') || e.target.closest('.bp-cluster-ui') || e.target.closest('.bp-comb-spine'))
+      return;
     if (e.button !== 0) return;
     panPointerId = e.pointerId;
     panStartClientX = e.clientX;

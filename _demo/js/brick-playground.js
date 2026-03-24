@@ -50,7 +50,7 @@ const BP_SNOW_BASE_SPAWN = 10.8;
 const BP_SNOW_MELT_RATE = 11;
 
 const BP_PLAY_ICON = '&#9654;';
-const BP_PAUSE_ICON = '&#9646;&#9646;';
+const BP_STOP_ICON = '&#9632;';
 const BP_LOOP_ICON = `${BP_PLAY_ICON}<span class="part-loop-glyph" aria-hidden="true">&#8635;</span>`;
 const BP_SEAM_ICON = `${BP_PLAY_ICON}<span class="part-loop-glyph part-seam-glyph" aria-hidden="true">&#8635;</span>`;
 const BP_DL_ICON = '&#128229;';
@@ -1712,6 +1712,11 @@ function tickPlaygroundSeek() {
 }
 
 async function bpPlayCluster(root, loop) {
+  if (playingRoot === root && !pgSeamMode && pgSources.length > 0) {
+    stopPlaygroundPlayback();
+    playClickUiSound();
+    return;
+  }
   const ids = clusterMembers(root);
   if (ids.length === 0) return;
   await Promise.all(
@@ -2556,7 +2561,7 @@ function syncBpClusterTransportButtons(ui, root) {
     playBtn.title = 'Play once';
     loopBtn.innerHTML = BP_LOOP_ICON;
     loopBtn.title = 'Play looped';
-    seamBtn.innerHTML = BP_PAUSE_ICON;
+    seamBtn.innerHTML = BP_STOP_ICON;
     seamBtn.title = 'Stop seam preview';
     seamBtn.setAttribute('aria-label', 'Stop seam preview');
     return;
@@ -2564,16 +2569,16 @@ function syncBpClusterTransportButtons(ui, root) {
   if (playLoop) {
     playBtn.innerHTML = BP_PLAY_ICON;
     playBtn.title = 'Play once';
-    loopBtn.innerHTML = BP_PAUSE_ICON;
-    loopBtn.title = 'Pause';
-    loopBtn.setAttribute('aria-label', 'Pause loop');
+    loopBtn.innerHTML = BP_STOP_ICON;
+    loopBtn.title = 'Stop loop';
+    loopBtn.setAttribute('aria-label', 'Stop loop');
     seamBtn.innerHTML = BP_SEAM_ICON;
     seamBtn.title = 'Seam preview';
     seamBtn.setAttribute('aria-label', 'Seam preview');
   } else {
-    playBtn.innerHTML = BP_PAUSE_ICON;
-    playBtn.title = 'Pause';
-    playBtn.setAttribute('aria-label', 'Pause');
+    playBtn.innerHTML = BP_STOP_ICON;
+    playBtn.title = 'Stop';
+    playBtn.setAttribute('aria-label', 'Stop');
     loopBtn.innerHTML = BP_LOOP_ICON;
     loopBtn.title = 'Play looped';
     seamBtn.innerHTML = BP_SEAM_ICON;

@@ -418,6 +418,61 @@
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06) inset;
 }
 
+/* JS heap estimate (under VIEW, right-aligned in sidebar) */
+.memory-estimate-panel {
+  width: fit-content;
+  max-width: 100%;
+  margin-top: 4px;
+  margin-left: auto;
+  padding: 8px 8px 10px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.memory-estimate-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.memory-estimate-panel-header .knob-label {
+  margin: 0;
+}
+.memory-estimate-info {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text3);
+  font-size: 14px;
+  line-height: 1;
+  cursor: help;
+  transition: color 0.15s, background 0.15s;
+}
+.memory-estimate-info:hover {
+  color: var(--accent4);
+  background: rgba(78, 205, 196, 0.12);
+}
+.memory-estimate-body {
+  font-family: 'Space Mono', monospace;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  line-height: 1.35;
+  color: var(--accent3);
+  word-break: break-word;
+}
+.memory-estimate-line.memory-estimate-sub {
+  margin-top: 2px;
+  font-size: 8px;
+  font-weight: 500;
+  color: var(--text3);
+}
+
 /* Cluster chrome */
 .bp-cluster-ui {
   position: absolute;

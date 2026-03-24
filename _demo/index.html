@@ -103,6 +103,22 @@
         <button type="button" id="btn-view-playlist" class="view-mode-btn active" title="Song playlist">Playlist</button>
         <button type="button" id="btn-view-playground" class="view-mode-btn" title="Brick playground — snap parts from any song">Playground</button>
       </div>
+      <div class="memory-estimate-panel" role="region" aria-label="JavaScript memory estimate">
+        <div class="memory-estimate-panel-header">
+          <span class="knob-label">MEMORY</span>
+          <button
+            type="button"
+            class="memory-estimate-info"
+            id="memory-estimate-info"
+            aria-label="What this memory estimate means"
+            title="This shows the browser’s JavaScript heap for this page—an approximate snapshot, not total RAM or full tab usage. GPU memory, audio buffers, decoded media, and other native allocations are not included. Chromium-based browsers usually expose this; Firefox and Safari often do not. Values refresh several times per second and can jump when garbage collection runs."
+          >&#8505;</button>
+        </div>
+        <div class="memory-estimate-body">
+          <div class="memory-estimate-line" id="memory-estimate-used">—</div>
+          <div class="memory-estimate-line memory-estimate-sub" id="memory-estimate-cap"></div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -455,6 +471,7 @@
 <script src="js/knob.js"></script>
 <script src="js/controls.js"></script>
 <script src="js/setup-viz.js"></script>
+<script src="js/memory-panel.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

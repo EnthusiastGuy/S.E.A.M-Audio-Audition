@@ -1034,10 +1034,10 @@ function ufRebuild() {
   }
 }
 
-function ufRebuildAndReconcileAnnotations(cancelSnapshot) {
+function ufRebuildAndReconcileAnnotations(cancelState) {
   const oldPart = bpSnapshotClustersPartition();
   ufRebuild();
-  bpSyncClusterAnnotationsAfterUf(oldPart, cancelSnapshot || null);
+  bpSyncClusterAnnotationsAfterUf(oldPart, cancelState || null);
 }
 
 function bpSnapshotClustersPartition() {
@@ -1089,7 +1089,7 @@ function bpReflowClusterBricksContiguous(memberIds) {
   }
 }
 
-function bpSyncClusterAnnotationsAfterUf(oldPartition, cancelSnapshot) {
+function bpSyncClusterAnnotationsAfterUf(oldPartition, cancelState) {
   const map =
     STATE.playground.clusterAnnotations && typeof STATE.playground.clusterAnnotations === 'object'
       ? STATE.playground.clusterAnnotations
@@ -1184,7 +1184,7 @@ function bpSyncClusterAnnotationsAfterUf(oldPartition, cancelSnapshot) {
       newIds,
       { title: left.title, description: left.description },
       { title: right.title, description: right.description },
-      { cancelSnapshot: cancelSnapshot || null }
+      { cancelState: cancelState || null }
     );
   }
 }
@@ -2375,7 +2375,7 @@ function bpOpenClusterMergeDialog(newIds, leftAnn, rightAnn, options) {
   bpCloseClusterMergeEditor();
   bpCloseLabelEditor();
   if (!bpHudRoot || !newIds?.length) return;
-  bpMergeCancelSnapshot = options?.cancelSnapshot ? cloneBrickSnapshot(options.cancelSnapshot) : null;
+  bpMergeCancelSnapshot = options?.cancelState ? cloneMergeCancelState(options.cancelState) : null;
 
   const tL = bpAnnField(leftAnn?.title);
   const tR = bpAnnField(rightAnn?.title);
@@ -2468,13 +2468,13 @@ function bpOpenClusterMergeDialog(newIds, leftAnn, rightAnn, options) {
   });
 
   const finish = applyValues => {
-    const cancelSnap = bpMergeCancelSnapshot ? cloneBrickSnapshot(bpMergeCancelSnapshot) : null;
+    const cancelState = bpMergeCancelSnapshot ? cloneMergeCancelState(bpMergeCancelSnapshot) : null;
     bpCloseClusterMergeEditor();
     document.removeEventListener('pointerdown', onDocPointerDown, true);
     if (applyValues) {
       bpSetClusterAnnotationByIds(newIds, outT.value, outD.value);
-    } else if (cancelSnap) {
-      applyPlaygroundBrickSnapshot(cancelSnap);
+    } else if (cancelState) {
+      restoreMergeCancelState(cancelState);
     }
     updateClusterUi();
     playClickUiSound();
@@ -2571,6 +2571,40 @@ function capturePlaygroundBrickSnapshot() {
 
 function cloneBrickSnapshot(snap) {
   return snap.map(b => ({ ...b }));
+}
+
+function cloneClusterAnnotationsMap(src) {
+  const input = src && typeof src === 'object' ? src : {};
+  const out = {};
+  for (const [k, v] of Object.entries(input)) {
+    if (!v || typeof v !== 'object') continue;
+    out[k] = {
+      title: typeof v.title === 'string' ? v.title : '',
+      description: typeof v.description === 'string' ? v.description : '',
+    };
+  }
+  return out;
+}
+
+function captureMergeCancelState(brickSnapshot) {
+  return {
+    bricks: cloneBrickSnapshot(brickSnapshot || capturePlaygroundBrickSnapshot()),
+    clusterAnnotations: cloneClusterAnnotationsMap(STATE.playground.clusterAnnotations),
+  };
+}
+
+function cloneMergeCancelState(state) {
+  if (!state || typeof state !== 'object') return null;
+  return {
+    bricks: cloneBrickSnapshot(state.bricks || []),
+    clusterAnnotations: cloneClusterAnnotationsMap(state.clusterAnnotations),
+  };
+}
+
+function restoreMergeCancelState(state) {
+  if (!state || !Array.isArray(state.bricks)) return;
+  STATE.playground.clusterAnnotations = cloneClusterAnnotationsMap(state.clusterAnnotations);
+  applyPlaygroundBrickSnapshot(state.bricks);
 }
 
 function snapshotsEqual(a, b) {
@@ -3008,7 +3042,7 @@ function createBrickElement(rec) {
         const h = seamHint;
         if (bpApplySeamInsert(h.leftId, h.rightId, dragClusterIds)) {
           inserted = true;
-          ufRebuildAndReconcileAnnotations(snapshotBeforeDrag);
+          ufRebuildAndReconcileAnnotations(captureMergeCancelState(snapshotBeforeDrag));
           scheduleSave();
           updateClusterUi();
           if (snapshotBeforeDrag && !snapshotsEqual(snapshotBeforeDrag, capturePlaygroundBrickSnapshot())) {
@@ -3026,7 +3060,7 @@ function createBrickElement(rec) {
         } else {
           snapClusterToNeighbors(dragClusterIds);
         }
-        ufRebuildAndReconcileAnnotations(snapshotBeforeDrag);
+        ufRebuildAndReconcileAnnotations(captureMergeCancelState(snapshotBeforeDrag));
         scheduleSave();
         updateClusterUi();
         if (beforeDuplicateSnapshot) {

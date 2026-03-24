@@ -262,13 +262,13 @@ function bpVisDrawWaveLine(ctx, arr, hueA, hueB, amp, yBase, lineW, glow) {
   const w = bpVisW;
   const h = bpVisH;
   const grad = ctx.createLinearGradient(0, h, w, h * 0.1);
-  grad.addColorStop(0, `hsla(${hueA}, 100%, 58%, 0.05)`);
-  grad.addColorStop(0.5, `hsla(${hueB}, 100%, 62%, 0.13)`);
-  grad.addColorStop(1, `hsla(${(hueA + 320) % 360}, 100%, 62%, 0.07)`);
+  grad.addColorStop(0, `hsla(${hueA}, 100%, 58%, 0.09)`);
+  grad.addColorStop(0.5, `hsla(${hueB}, 100%, 62%, 0.2)`);
+  grad.addColorStop(1, `hsla(${(hueA + 320) % 360}, 100%, 62%, 0.12)`);
   ctx.strokeStyle = grad;
   ctx.lineWidth = lineW;
   ctx.shadowColor = `hsla(${hueB}, 100%, 70%, ${glow})`;
-  ctx.shadowBlur = 18;
+  ctx.shadowBlur = 22;
   ctx.beginPath();
   const step = 5;
   for (let x = 0; x <= w + step; x += step) {
@@ -289,11 +289,11 @@ function bpVisDrawWaveLine(ctx, arr, hueA, hueB, amp, yBase, lineW, glow) {
 function bpVisDrawSpectrumPillars(ctx, arr, peaks, env) {
   const w = bpVisW;
   const h = bpVisH;
-  const count = 64;
+  const count = 128;
   const baseY = h * 0.84;
   const topFade = ctx.createLinearGradient(0, 0, 0, baseY);
   topFade.addColorStop(0, 'rgba(14,19,36,0)');
-  topFade.addColorStop(1, 'rgba(14,19,36,0.05)');
+  topFade.addColorStop(1, 'rgba(14,19,36,0.1)');
   ctx.fillStyle = topFade;
   ctx.fillRect(0, 0, w, baseY);
   ctx.save();
@@ -306,17 +306,17 @@ function bpVisDrawSpectrumPillars(ctx, arr, peaks, env) {
     const hh = Math.max(5, (v * 0.5 + p * 0.5) * (h * 0.62) * (0.35 + env * 0.85));
     const g = ctx.createLinearGradient(0, baseY - hh, 0, baseY);
     const hue = 200 - i * 1.8;
-    g.addColorStop(0, `hsla(${hue}, 100%, 65%, 0.08)`);
-    g.addColorStop(0.55, `hsla(${15 + i * 1.2}, 100%, 60%, 0.12)`);
-    g.addColorStop(1, 'rgba(255,255,255,0.01)');
+    g.addColorStop(0, `hsla(${hue}, 100%, 65%, 0.14)`);
+    g.addColorStop(0.55, `hsla(${15 + i * 1.2}, 100%, 60%, 0.2)`);
+    g.addColorStop(1, 'rgba(255,255,255,0.04)');
     ctx.strokeStyle = g;
     ctx.lineWidth = 1.4;
     ctx.beginPath();
     ctx.moveTo(x, baseY);
     ctx.lineTo(x, baseY - hh);
     ctx.stroke();
-    if (p > 0.12) {
-      ctx.fillStyle = `hsla(${15 + i * 1.15}, 100%, 66%, ${0.05 + env * 0.1})`;
+    if (p > 0.1) {
+      ctx.fillStyle = `hsla(${15 + i * 1.15}, 100%, 66%, ${0.1 + env * 0.13})`;
       ctx.beginPath();
       ctx.arc(x, baseY - hh, 1.2 + p * 2.2, 0, Math.PI * 2);
       ctx.fill();
@@ -330,7 +330,7 @@ function bpVisDrawGridGlow(ctx, env) {
   const h = bpVisH;
   const floorY = h * 0.86;
   ctx.save();
-  ctx.strokeStyle = `rgba(124, 175, 255, ${0.035 + env * 0.05})`;
+  ctx.strokeStyle = `rgba(124, 175, 255, ${0.07 + env * 0.08})`;
   ctx.lineWidth = 1;
   for (let y = floorY; y < h; y += 10) {
     ctx.beginPath();
@@ -346,7 +346,7 @@ function bpVisDrawGridGlow(ctx, env) {
     ctx.stroke();
   }
   const floor = ctx.createLinearGradient(0, floorY, 0, h);
-  floor.addColorStop(0, `rgba(100, 155, 255, ${0.05 + env * 0.04})`);
+  floor.addColorStop(0, `rgba(100, 155, 255, ${0.1 + env * 0.08})`);
   floor.addColorStop(1, 'rgba(2,6,14,0)');
   ctx.fillStyle = floor;
   ctx.fillRect(0, floorY, w, h - floorY);

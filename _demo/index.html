@@ -480,20 +480,7 @@
 
     <aside class="help-modal-videos" aria-label="Video tutorials">
       <h3 class="help-modal-videos-title">Video tutorials</h3>
-      <div class="help-video-embed">
-        <video
-          id="help-local-video"
-          controls
-          preload="metadata"
-          playsinline
-        >
-          <source src="video/TestVideo.mkv" type="video/x-matroska" />
-        </video>
-      </div>
-      <p class="help-video-fallback">
-        If the browser cannot play this MKV, download:
-        <a href="video/TestVideo.mkv" download>TestVideo.mkv</a>.
-      </p>
+      <div id="help-video-tutorials-list"></div>
     </aside>
     </div>
   </div>
@@ -550,6 +537,8 @@
 <script src="js/state.js"></script>
 <script src="js/header-viz.js"></script>
 <script src="js/revision-embed.js"></script>
+<script src="js/help-videos-embed.js"></script>
+<script src="js/help-videos.js"></script>
 <script src="js/version-badge.js"></script>
 <script src="js/file-parser.js"></script>
 <script src="js/playback.js"></script>

@@ -7,7 +7,8 @@
   position: sticky;
   top: 0;
   z-index: 100;
-  overflow: hidden;
+  /* Allow project metadata tooltip to extend past the header box (see .project-header-meta-tooltip). */
+  overflow: visible;
   padding: 16px 24px;
   border-bottom: 2px solid var(--accent);
   box-shadow: var(--shadow);
@@ -29,6 +30,7 @@ body.welcome-idle-cinema .app-header {
   border-bottom-width: 0;
   box-shadow: none;
   pointer-events: none;
+  overflow: hidden;
 }
 
 .app-header-viz {
@@ -52,6 +54,140 @@ body.welcome-idle-cinema .app-header {
   flex-wrap: wrap;
   width: 100%;
 }
+
+.project-header-meta {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 2;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.project-header-meta.hidden {
+  display: none;
+}
+
+.project-header-meta-media-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: auto;
+}
+
+/* Invisible hit-target between image and tooltip so :hover isn’t lost when moving the pointer. */
+.project-header-meta-media-wrap--has-tooltip:hover::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  /* Match tooltip width (viewport‑proportional hover bridge). */
+  width: min(88vw, 1100px, calc(100vw - 32px));
+  height: 18px;
+  top: 100%;
+  margin-top: -4px;
+  z-index: 5;
+}
+
+.project-header-meta-image {
+  display: block;
+  max-width: min(320px, 58vw);
+  max-height: 116px;
+  object-fit: contain;
+  border-radius: 10px;
+  border: 1px solid rgba(168, 218, 220, 0.35);
+  box-shadow:
+    0 10px 24px rgba(0, 0, 0, 0.45),
+    0 0 0 1px rgba(255, 255, 255, 0.06) inset;
+  background: rgba(14, 20, 36, 0.7);
+  transition: filter 0.18s ease, transform 0.18s ease;
+}
+
+.project-header-meta-image.hidden {
+  display: none;
+}
+
+.project-header-meta-media-wrap:hover .project-header-meta-image {
+  filter: brightness(1.03);
+  transform: translateY(-1px);
+}
+
+.project-header-meta-info-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  padding: 7px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(168, 218, 220, 0.42);
+  background: rgba(14, 20, 36, 0.86);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  cursor: default;
+  box-shadow:
+    0 8px 22px rgba(0, 0, 0, 0.38),
+    0 0 0 1px rgba(255, 255, 255, 0.04) inset;
+}
+
+.project-header-meta-info-pill.hidden {
+  display: none;
+}
+
+.project-header-meta-media-wrap:hover .project-header-meta-info-pill {
+  border-color: rgba(168, 218, 220, 0.65);
+}
+
+.project-header-meta-tooltip {
+  position: absolute;
+  left: 50%;
+  top: calc(100% + 8px);
+  transform: translateX(-50%);
+  /* Scale with viewport width; cap so ultra‑wide monitors stay readable. */
+  width: min(88vw, 1100px, calc(100vw - 32px));
+  min-width: 0;
+  max-width: none;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(168, 218, 220, 0.36);
+  background: rgba(17, 24, 44, 0.95);
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.45;
+  text-align: left;
+  white-space: pre-wrap;
+  box-shadow:
+    0 14px 30px rgba(0, 0, 0, 0.45),
+    0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+  opacity: 0;
+  z-index: 6;
+  /* When hidden, must not steal hover from the wrap / block clicks. */
+  pointer-events: none;
+  transition: opacity 0.14s ease;
+}
+
+.project-header-meta-tooltip.hidden {
+  display: none;
+}
+
+.project-header-meta-media-wrap:hover .project-header-meta-tooltip:not(.hidden) {
+  opacity: 1;
+  /* Receive pointer events so moving onto the tooltip doesn’t drop :hover on the wrap. */
+  pointer-events: auto;
+}
+
+@media (max-width: 680px) {
+  .project-header-meta-image {
+    max-width: min(220px, 48vw);
+    max-height: 88px;
+  }
+}
+
 .app-logo {
   font-family: 'Space Mono', monospace;
   font-size: 22px;

@@ -764,6 +764,8 @@ const APP_LOADING_QUIPS = [
 let appLoadingQuipTimer = null;
 let appLoadingQuipIndex = 0;
 let appLoadingQuipOrder = [];
+let projectHeaderMetaImageUrl = null;
+let projectHeaderMetaLoadToken = 0;
 
 function shuffleArray(list) {
   const a = list.slice();
@@ -912,10 +914,151 @@ function hideAppLoading() {
   }
 }
 
+function clearProjectHeaderMetadata() {
+  if (projectHeaderMetaImageUrl) {
+    URL.revokeObjectURL(projectHeaderMetaImageUrl);
+    projectHeaderMetaImageUrl = null;
+  }
+  const wrap = document.getElementById('project-header-meta');
+  const mediaWrap = wrap ? wrap.querySelector('.project-header-meta-media-wrap') : null;
+  if (mediaWrap) {
+    mediaWrap.classList.remove('project-header-meta-media-wrap--has-tooltip');
+  }
+  const img = document.getElementById('project-header-meta-image');
+  const infoPill = document.getElementById('project-header-meta-info-pill');
+  const tip = document.getElementById('project-header-meta-tooltip');
+  if (img) {
+    img.removeAttribute('src');
+    img.removeAttribute('aria-describedby');
+    img.alt = '';
+    img.classList.add('hidden');
+  }
+  if (infoPill) {
+    infoPill.classList.add('hidden');
+    infoPill.removeAttribute('aria-describedby');
+  }
+  if (tip) {
+    tip.textContent = '';
+    tip.classList.add('hidden');
+  }
+  if (wrap) {
+    wrap.classList.add('hidden');
+    wrap.setAttribute('aria-hidden', 'true');
+  }
+}
+
+async function getFileHandleByNames(dirHandle, preferredNames) {
+  if (!dirHandle || !Array.isArray(preferredNames) || preferredNames.length === 0) return null;
+  if (typeof dirHandle.getFileHandle === 'function') {
+    for (const name of preferredNames) {
+      try {
+        return await dirHandle.getFileHandle(name, { create: false });
+      } catch (_) {
+        // Continue to next candidate.
+      }
+    }
+  }
+  if (typeof dirHandle.entries !== 'function') return null;
+  const lookup = new Map(preferredNames.map(name => [String(name).toLowerCase(), true]));
+  for await (const [entryName, entryHandle] of dirHandle.entries()) {
+    if (!entryHandle || entryHandle.kind !== 'file') continue;
+    if (lookup.has(String(entryName).toLowerCase())) {
+      return entryHandle;
+    }
+  }
+  return null;
+}
+
+async function readProjectHeaderMetadata(rootHandle) {
+  if (!rootHandle || typeof rootHandle.getDirectoryHandle !== 'function') {
+    return { imageFile: null, infoText: '' };
+  }
+
+  let metadataDir = null;
+  try {
+    metadataDir = await rootHandle.getDirectoryHandle('_metadata', { create: false });
+  } catch (_) {
+    return { imageFile: null, infoText: '' };
+  }
+
+  const imageHandle = await getFileHandleByNames(metadataDir, ['img.png', 'img.jpg', 'img.jpeg']);
+  const infoHandle = await getFileHandleByNames(metadataDir, ['info.txt']);
+
+  let imageFile = null;
+  if (imageHandle && typeof imageHandle.getFile === 'function') {
+    try {
+      imageFile = await imageHandle.getFile();
+    } catch (_) {
+      imageFile = null;
+    }
+  }
+
+  let infoText = '';
+  if (infoHandle && typeof infoHandle.getFile === 'function') {
+    try {
+      infoText = (await (await infoHandle.getFile()).text()).trim();
+    } catch (_) {
+      infoText = '';
+    }
+  }
+
+  return { imageFile, infoText };
+}
+
+function renderProjectHeaderMetadata(meta, rootHandle) {
+  clearProjectHeaderMetadata();
+  if (!meta) return;
+
+  const wrap = document.getElementById('project-header-meta');
+  const img = document.getElementById('project-header-meta-image');
+  const infoPill = document.getElementById('project-header-meta-info-pill');
+  const tip = document.getElementById('project-header-meta-tooltip');
+  if (!wrap || !img || !infoPill || !tip) return;
+
+  const hasInfo = typeof meta.infoText === 'string' && meta.infoText.length > 0;
+  const hasImage = !!meta.imageFile;
+  if (!hasImage && !hasInfo) return;
+
+  if (hasImage) {
+    projectHeaderMetaImageUrl = URL.createObjectURL(meta.imageFile);
+    img.src = projectHeaderMetaImageUrl;
+    const projectName = rootHandle && rootHandle.name ? rootHandle.name : 'Project';
+    img.alt = `${projectName} header image`;
+    img.classList.remove('hidden');
+  } else {
+    infoPill.classList.remove('hidden');
+  }
+
+  if (hasInfo) {
+    tip.textContent = meta.infoText;
+    tip.classList.remove('hidden');
+    const mediaWrap = wrap.querySelector('.project-header-meta-media-wrap');
+    if (mediaWrap) {
+      mediaWrap.classList.add('project-header-meta-media-wrap--has-tooltip');
+    }
+    if (hasImage) {
+      img.setAttribute('aria-describedby', 'project-header-meta-tooltip');
+    } else {
+      infoPill.setAttribute('aria-describedby', 'project-header-meta-tooltip');
+    }
+  }
+
+  wrap.classList.remove('hidden');
+  wrap.setAttribute('aria-hidden', 'false');
+}
+
+async function refreshProjectHeaderMetadata(rootHandle) {
+  const loadToken = ++projectHeaderMetaLoadToken;
+  const meta = await readProjectHeaderMetadata(rootHandle);
+  if (loadToken !== projectHeaderMetaLoadToken) return;
+  renderProjectHeaderMetadata(meta, rootHandle);
+}
+
 async function discoverSongs(rootHandle) {
   const statusEl = document.getElementById('select-status');
   const fmt = 'wav';
   let fmtHandle = null;
+  await refreshProjectHeaderMetadata(rootHandle);
   try {
     fmtHandle = await rootHandle.getDirectoryHandle(fmt, { create: false });
   } catch (e) {

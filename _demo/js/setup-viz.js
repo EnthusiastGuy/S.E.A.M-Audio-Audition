@@ -691,9 +691,18 @@
 
 (function initSetupPerformanceNoteToggle() {
   const btn = document.getElementById('setup-performance-note-toggle');
-  if (!btn) return;
+  const label = btn && btn.querySelector('.setup-performance-note-text');
+  if (!btn || !label) return;
+
+  const textCollapsed = 'Performance tips — click for quick guidance';
+  const textExpanded = 'Performance tips - click again to "nevermind" it.';
+
   btn.addEventListener('click', () => {
     const open = btn.getAttribute('aria-expanded') === 'true';
-    btn.setAttribute('aria-expanded', open ? 'false' : 'true');
+    const next = open ? 'false' : 'true';
+    btn.setAttribute('aria-expanded', next);
+    const isExpanded = next === 'true';
+    label.textContent = isExpanded ? textExpanded : textCollapsed;
+    btn.setAttribute('aria-label', isExpanded ? textExpanded : textCollapsed);
   });
 })();

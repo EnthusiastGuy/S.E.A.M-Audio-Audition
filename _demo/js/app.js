@@ -438,7 +438,7 @@ function pickFolderViaWebkitDirectoryInput() {
       if (typeof rel0 !== 'string' || !rel0.length) {
         fail(
           new Error(
-            'Folder selection is not supported in this browser. Try Chrome or Edge, or open this page via http://localhost.'
+            'Folder selection is not supported in this browser. Try Chrome or Edge, or open this page over http (for example from a local static file server) instead of file://.'
           )
         );
         return true;

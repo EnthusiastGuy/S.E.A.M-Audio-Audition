@@ -17,16 +17,9 @@
 
 ## How to run
 
-There is no build step. Open `_demo/index.html` in the browser (for folder picking, prefer opening via **http://** from a local static server rather than `file://`, depending on browser security rules).
+There is no build step. Open `_demo/index.html` in your browser (double-click the file, or use **File → Open** in Chrome or Edge), then use **Select Folder** to choose your pack’s root directory.
 
-Example with Python:
-
-```bash
-cd _demo
-python -m http.server 8080
-```
-
-Then visit `http://localhost:8080` and use **Select Folder** to choose your pack’s root directory.
+If folder picking misbehaves in your environment, try opening the same file from an **http** URL served by any local static file tool you already use; the app does not depend on a fixed host or port.
 
 ## Repository layout
 

@@ -418,53 +418,82 @@
 .view-mode-group {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
   width: 100%;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 10px 10px;
 }
 
 .view-mode-toggle {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  flex-direction: row;
+  gap: 6px;
+  padding: 4px;
+  border-radius: calc(var(--radius-sm) + 1px);
+  background: rgba(30, 42, 69, 0.58);
+  border: 1px solid rgba(77, 150, 255, 0.22);
 }
 
 .view-mode-btn {
-  width: 100%;
-  padding: 8px 6px;
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 7px 8px;
   border-radius: var(--radius-sm);
-  border: 1px solid var(--border);
-  background: var(--card2);
+  border: 1px solid transparent;
+  background: transparent;
   color: var(--text2);
   font-family: 'Space Mono', monospace;
   font-size: 10px;
   font-weight: 700;
-  letter-spacing: 0.4px;
+  letter-spacing: 0.35px;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  transition:
+    background 0.15s,
+    border-color 0.15s,
+    color 0.15s,
+    box-shadow 0.15s,
+    transform 0.1s;
+}
+
+.view-mode-icon {
+  display: block;
+  width: 20px;
+  height: 20px;
+  margin: 0 auto;
 }
 
 .view-mode-btn:hover {
+  background: rgba(77, 150, 255, 0.14);
   color: var(--text);
-  border-color: rgba(78, 205, 196, 0.45);
+  border-color: rgba(77, 150, 255, 0.48);
+}
+
+.view-mode-btn:active {
+  transform: translateY(1px);
 }
 
 .view-mode-btn.active {
-  background: linear-gradient(135deg, rgba(233, 69, 96, 0.35), rgba(78, 205, 196, 0.2));
+  background: linear-gradient(145deg, rgba(233, 69, 96, 0.45), rgba(78, 205, 196, 0.25));
   border-color: rgba(233, 69, 96, 0.55);
   color: #fff;
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06) inset;
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.08) inset,
+    0 3px 10px rgba(233, 69, 96, 0.22);
 }
 
-/* JS heap estimate (under VIEW, right-aligned in sidebar) */
+/* Memory estimate card */
 .memory-estimate-panel {
-  width: fit-content;
-  max-width: 100%;
-  margin-top: 4px;
-  margin-left: auto;
-  padding: 8px 8px 10px;
+  width: 100%;
+  padding: 12px 10px 10px;
   background: var(--card);
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius);
 }
 .memory-estimate-popover-anchor {
   position: relative;
@@ -569,6 +598,14 @@
   line-height: 1.35;
   color: var(--accent3);
   word-break: break-word;
+}
+.memory-estimate-line.memory-estimate-meta {
+  margin-top: 2px;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: rgba(77, 150, 255, 0.95);
 }
 .memory-estimate-line.memory-estimate-sub {
   margin-top: 2px;

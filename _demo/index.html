@@ -100,32 +100,46 @@
     <div class="view-mode-group" role="group" aria-label="Main view">
       <div class="knob-label">VIEW</div>
       <div class="view-mode-toggle">
-        <button type="button" id="btn-view-playlist" class="view-mode-btn active" title="Song playlist">Playlist</button>
-        <button type="button" id="btn-view-playground" class="view-mode-btn" title="Brick playground — snap parts from any song">Playground</button>
+        <button type="button" id="btn-view-playlist" class="view-mode-btn active" title="Song playlist" aria-label="Playlist view">
+          <svg class="view-mode-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path fill="currentColor" d="M4 6.5h10a1 1 0 1 0 0-2H4a1 1 0 1 0 0 2zm0 6h8a1 1 0 1 0 0-2H4a1 1 0 1 0 0 2zm0 6h8a1 1 0 1 0 0-2H4a1 1 0 1 0 0 2z"/>
+            <circle cx="18.2" cy="17.3" r="2.2" fill="currentColor"/>
+            <path fill="currentColor" d="M20.4 8.3v9h-1.6v-8l-4.6 1.3V9.1l6.2-1.8z"/>
+          </svg>
+        </button>
+        <button type="button" id="btn-view-playground" class="view-mode-btn" title="Brick playground — snap parts from any song" aria-label="Playground view">
+          <svg class="view-mode-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path fill="currentColor" d="M4 7.5c0-1.1.9-2 2-2h12c1.1 0 2 .9 2 2v8c0 1.1-.9 2-2 2H6c-1.1 0-2-.9-2-2v-8zm2 0v8h12v-8H6z"/>
+            <rect x="7.5" y="3.8" width="3" height="2.4" rx="1.1" fill="currentColor"/>
+            <rect x="12.2" y="3.8" width="3" height="2.4" rx="1.1" fill="currentColor"/>
+            <rect x="9.8" y="11.2" width="4.4" height="2.8" rx="1" fill="currentColor"/>
+          </svg>
+        </button>
       </div>
-      <div class="memory-estimate-panel" role="region" aria-label="JavaScript memory estimate">
-        <div class="memory-estimate-popover-anchor">
-          <div class="memory-estimate-panel-header">
-            <span class="knob-label">MEMORY</span>
-            <button
-              type="button"
-              class="memory-estimate-info"
-              id="memory-estimate-info"
-              aria-label="What this memory estimate means"
-              aria-describedby="memory-estimate-tooltip"
-            >&#8505;</button>
-          </div>
-          <div class="memory-estimate-tooltip" id="memory-estimate-tooltip" role="tooltip">
-            <div class="memory-estimate-tooltip-lead">About this estimate</div>
-            <p>This shows the browser’s <strong>JavaScript heap</strong> for this page—an approximate snapshot, not total RAM or full tab usage.</p>
-            <p>GPU memory, audio buffers, decoded media, and other native allocations are not included. Chromium-based browsers usually expose this; Firefox and Safari often do not.</p>
-            <p>Values refresh several times per second and can jump when garbage collection runs.</p>
-          </div>
+    </div>
+    <div class="memory-estimate-panel" role="region" aria-label="Browser memory estimate">
+      <div class="memory-estimate-popover-anchor">
+        <div class="memory-estimate-panel-header">
+          <span class="knob-label">MEMORY</span>
+          <button
+            type="button"
+            class="memory-estimate-info"
+            id="memory-estimate-info"
+            aria-label="What this memory estimate means"
+            aria-describedby="memory-estimate-tooltip"
+          >&#8505;</button>
         </div>
-        <div class="memory-estimate-body">
-          <div class="memory-estimate-line" id="memory-estimate-used">—</div>
-          <div class="memory-estimate-line memory-estimate-sub" id="memory-estimate-cap"></div>
+        <div class="memory-estimate-tooltip" id="memory-estimate-tooltip" role="tooltip">
+          <div class="memory-estimate-tooltip-lead">About this estimate</div>
+          <p>When available, this shows an approximate <strong>tab memory</strong> total from Chromium’s user-agent memory API.</p>
+          <p>If that API is unavailable, it falls back to JavaScript heap only. Browser/task-manager RAM can still be higher due to GPU memory, media decode, audio/native buffers, extensions, and multi-process overhead.</p>
+          <p>Values are sampled periodically, so they can lag briefly and jump after garbage collection.</p>
         </div>
+      </div>
+      <div class="memory-estimate-body">
+        <div class="memory-estimate-line" id="memory-estimate-used">—</div>
+        <div class="memory-estimate-line memory-estimate-meta" id="memory-estimate-source">source: —</div>
+        <div class="memory-estimate-line memory-estimate-sub" id="memory-estimate-cap"></div>
       </div>
     </div>
   </div>

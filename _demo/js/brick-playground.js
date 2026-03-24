@@ -137,6 +137,7 @@ let bpSeamMarkerEl = null;
 let bpSeamHint = null;
 let bpLabelEditorEl = null;
 let bpClusterMergeEditorEl = null;
+let bpMergeCancelSnapshot = null;
 
 /** @type {HTMLCanvasElement|null} */
 let bpSnowCanvas = null;
@@ -1033,10 +1034,10 @@ function ufRebuild() {
   }
 }
 
-function ufRebuildAndReconcileAnnotations() {
+function ufRebuildAndReconcileAnnotations(cancelSnapshot) {
   const oldPart = bpSnapshotClustersPartition();
   ufRebuild();
-  bpSyncClusterAnnotationsAfterUf(oldPart);
+  bpSyncClusterAnnotationsAfterUf(oldPart, cancelSnapshot || null);
 }
 
 function bpSnapshotClustersPartition() {
@@ -1088,7 +1089,7 @@ function bpReflowClusterBricksContiguous(memberIds) {
   }
 }
 
-function bpSyncClusterAnnotationsAfterUf(oldPartition) {
+function bpSyncClusterAnnotationsAfterUf(oldPartition, cancelSnapshot) {
   const map =
     STATE.playground.clusterAnnotations && typeof STATE.playground.clusterAnnotations === 'object'
       ? STATE.playground.clusterAnnotations
@@ -1179,7 +1180,12 @@ function bpSyncClusterAnnotationsAfterUf(oldPartition) {
       continue;
     }
 
-    bpOpenClusterMergeDialog(newIds, { title: left.title, description: left.description }, { title: right.title, description: right.description });
+    bpOpenClusterMergeDialog(
+      newIds,
+      { title: left.title, description: left.description },
+      { title: right.title, description: right.description },
+      { cancelSnapshot: cancelSnapshot || null }
+    );
   }
 }
 
@@ -2230,6 +2236,7 @@ function bpCloseClusterMergeEditor() {
     bpClusterMergeEditorEl.parentNode.removeChild(bpClusterMergeEditorEl);
   }
   bpClusterMergeEditorEl = null;
+  bpMergeCancelSnapshot = null;
 }
 
 function bpOpenLabelEditor(anchorEl, ids) {
@@ -2364,10 +2371,11 @@ function bpOpenLabelEditor(anchorEl, ids) {
   document.addEventListener('pointerdown', onDocPointerDown, true);
 }
 
-function bpOpenClusterMergeDialog(newIds, leftAnn, rightAnn) {
+function bpOpenClusterMergeDialog(newIds, leftAnn, rightAnn, options) {
   bpCloseClusterMergeEditor();
   bpCloseLabelEditor();
   if (!bpHudRoot || !newIds?.length) return;
+  bpMergeCancelSnapshot = options?.cancelSnapshot ? cloneBrickSnapshot(options.cancelSnapshot) : null;
 
   const tL = bpAnnField(leftAnn?.title);
   const tR = bpAnnField(rightAnn?.title);
@@ -2459,13 +2467,14 @@ function bpOpenClusterMergeDialog(newIds, leftAnn, rightAnn) {
     playClickUiSound();
   });
 
-  const finish = (applyValues, useLeftOnCancel) => {
+  const finish = applyValues => {
+    const cancelSnap = bpMergeCancelSnapshot ? cloneBrickSnapshot(bpMergeCancelSnapshot) : null;
     bpCloseClusterMergeEditor();
     document.removeEventListener('pointerdown', onDocPointerDown, true);
     if (applyValues) {
       bpSetClusterAnnotationByIds(newIds, outT.value, outD.value);
-    } else if (useLeftOnCancel) {
-      bpSetClusterAnnotationByIds(newIds, tConflict ? tL : tL || tR, dConflict ? dL : dL || dR);
+    } else if (cancelSnap) {
+      applyPlaygroundBrickSnapshot(cancelSnap);
     }
     updateClusterUi();
     playClickUiSound();
@@ -2477,7 +2486,7 @@ function bpOpenClusterMergeDialog(newIds, leftAnn, rightAnn) {
   });
   pop.querySelector('.bp-merge-cancel').addEventListener('click', ev => {
     ev.stopPropagation();
-    finish(false, true);
+    finish(false);
   });
 
   const onDocPointerDown = ev => {
@@ -2487,7 +2496,7 @@ function bpOpenClusterMergeDialog(newIds, leftAnn, rightAnn) {
     }
     const t = ev.target;
     if (pop.contains(t)) return;
-    finish(false, true);
+    finish(false);
   };
   document.addEventListener('pointerdown', onDocPointerDown, true);
 }
@@ -2999,7 +3008,7 @@ function createBrickElement(rec) {
         const h = seamHint;
         if (bpApplySeamInsert(h.leftId, h.rightId, dragClusterIds)) {
           inserted = true;
-          ufRebuildAndReconcileAnnotations();
+          ufRebuildAndReconcileAnnotations(snapshotBeforeDrag);
           scheduleSave();
           updateClusterUi();
           if (snapshotBeforeDrag && !snapshotsEqual(snapshotBeforeDrag, capturePlaygroundBrickSnapshot())) {
@@ -3017,7 +3026,7 @@ function createBrickElement(rec) {
         } else {
           snapClusterToNeighbors(dragClusterIds);
         }
-        ufRebuildAndReconcileAnnotations();
+        ufRebuildAndReconcileAnnotations(snapshotBeforeDrag);
         scheduleSave();
         updateClusterUi();
         if (beforeDuplicateSnapshot) {
@@ -3053,7 +3062,6 @@ function removeClusterUi() {
   if (clusterUiEl && clusterUiEl.parentNode) clusterUiEl.parentNode.removeChild(clusterUiEl);
   clusterUiEl = null;
   bpCloseLabelEditor();
-  bpCloseClusterMergeEditor();
 }
 
 function repositionClusterUi() {
@@ -3827,7 +3835,8 @@ function initBrickPlayground(mainContainer) {
       e.target.closest('.bp-brick') ||
       e.target.closest('.bp-cluster-ui') ||
       e.target.closest('.bp-comb-spine') ||
-      e.target.closest('.bp-label-edit-popover')
+      e.target.closest('.bp-label-edit-popover') ||
+      e.target.closest('.bp-cluster-merge-popover')
     )
       return;
     if (e.button !== 0) return;

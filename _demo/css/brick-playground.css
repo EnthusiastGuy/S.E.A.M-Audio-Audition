@@ -254,6 +254,8 @@
   top: 0;
   z-index: 1;
   cursor: grab;
+  /* overlay for brick-preview-flash (seekbar.css) */
+  isolation: isolate;
   border-radius: var(--radius-sm);
   box-shadow:
     0 2px 8px rgba(0, 0, 0, 0.35),
@@ -279,7 +281,13 @@
   border-color: rgba(168, 218, 220, 0.55);
 }
 
+.bp-brick .brick-preview-flash {
+  border-radius: inherit;
+}
+
 .bp-brick-inner {
+  position: relative;
+  z-index: 0;
   width: 100%;
   height: 100%;
   border-radius: inherit;

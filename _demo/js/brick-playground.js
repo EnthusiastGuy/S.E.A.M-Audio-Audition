@@ -101,6 +101,10 @@ let pgTimelineStartAC = 0;
 let pgTimelineOffset = 0;
 let pgSortedBricks = [];
 let pgTotalDur = 0;
+/** Segment buffer durations in play order (normal + seam cluster playback). */
+let pgSegmentDur = null;
+/** Last timeline segment index (for transition flash); null until first tick. */
+let pgLastSegFlashIdx = null;
 
 function ensurePlaygroundGain() {
   if (!pgGain) {
@@ -448,6 +452,8 @@ function stopPlaygroundPlayback() {
   stopPlaygroundSourcesOnly();
   pgTransportToken++;
   playingRoot = null;
+  pgSegmentDur = null;
+  pgLastSegFlashIdx = null;
   updateClusterUi();
 }
 
@@ -655,6 +661,8 @@ function scheduleClusterSeamPlay(sorted, clusterRoot) {
   pgSeamSegments = segments;
   pgSeamCumDurations = cumDurations;
   pgSeamMode = true;
+  pgSegmentDur = segments.map(s => s.buf.duration);
+  pgLastSegFlashIdx = null;
 
   pgSeamBus = AC.createGain();
   pgSeamBus.gain.value = 1;
@@ -682,6 +690,8 @@ function scheduleClusterPlayFromOffset(sorted, offsetSec, loop, clusterRoot) {
 
   pgSortedBricks = sorted;
   pgTotalDur = segments.reduce((s, x) => s + x.buf.duration, 0);
+  pgSegmentDur = segments.map(s => s.buf.duration);
+  pgLastSegFlashIdx = null;
   const offsetClamped = Math.min(Math.max(0, offsetSec), Math.max(0, pgTotalDur - 1e-9));
 
   const rate = playbackRateFromKnob();
@@ -745,6 +755,33 @@ function scheduleClusterPlayFromOffset(sorted, offsetSec, loop, clusterRoot) {
   playFrom(offsetClamped);
 }
 
+/** Same pulse as seekbar `brick-preview-flash` (seekbar.css); self-contained so script order does not matter. */
+function bpTriggerBrickPlaygroundFlash(flashEl) {
+  if (!flashEl) return;
+  flashEl.classList.remove('brick-preview-flash--pulse');
+  void flashEl.offsetWidth;
+  flashEl.classList.add('brick-preview-flash--pulse');
+  const onEnd = () => {
+    flashEl.classList.remove('brick-preview-flash--pulse');
+    flashEl.removeEventListener('animationend', onEnd);
+  };
+  flashEl.addEventListener('animationend', onEnd);
+}
+
+function playgroundSegmentIndexForTimelinePos(pos) {
+  if (!pgSegmentDur || !pgSegmentDur.length) return -1;
+  const td = Math.max(0, pgTotalDur);
+  if (td <= 0) return -1;
+  const p = Math.max(0, Math.min(pos, td - 1e-9));
+  let acc = 0;
+  for (let i = 0; i < pgSegmentDur.length; i++) {
+    const end = acc + pgSegmentDur[i];
+    if (p < end - 1e-9 || i === pgSegmentDur.length - 1) return i;
+    acc = end;
+  }
+  return pgSegmentDur.length - 1;
+}
+
 function tickPlaygroundSeek() {
   if (!playingRoot || !clusterUiEl) return;
   const seekFill = clusterUiEl.querySelector('.bp-seek-fill');
@@ -770,6 +807,17 @@ function tickPlaygroundSeek() {
   const pct = pgTotalDur > 0 ? (pos / pgTotalDur) * 100 : 0;
   seekFill.style.width = `${pct}%`;
   seekHandle.style.left = `${pct}%`;
+
+  const segIdx = playgroundSegmentIndexForTimelinePos(pos);
+  if (pgLastSegFlashIdx !== null && segIdx >= 0 && segIdx !== pgLastSegFlashIdx) {
+    const b = pgSortedBricks[segIdx];
+    if (b?.el) {
+      const flashEl = b.el.querySelector('.brick-preview-flash');
+      bpTriggerBrickPlaygroundFlash(flashEl);
+    }
+  }
+  if (segIdx >= 0) pgLastSegFlashIdx = segIdx;
+
   if (pgSeamMode) {
     pgRaf = requestAnimationFrame(tickPlaygroundSeek);
   } else if (pos < pgTotalDur - 0.03 || playLoop) {
@@ -1266,6 +1314,11 @@ function createBrickElement(rec) {
     </div>
   `;
   el.appendChild(inner);
+
+  const flash = document.createElement('div');
+  flash.className = 'brick-preview-flash';
+  flash.setAttribute('aria-hidden', 'true');
+  el.appendChild(flash);
 
   el.addEventListener('pointerdown', e => {
     if (e.button !== 0) return;

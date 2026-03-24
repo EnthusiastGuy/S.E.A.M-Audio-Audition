@@ -159,6 +159,267 @@ let bpSnowSpawnFrac = 0;
 let bpSnowLastFrameAt = 0;
 let bpSnowMelting = false;
 
+/** @type {HTMLCanvasElement|null} */
+let bpVisCanvas = null;
+/** @type {CanvasRenderingContext2D|null} */
+let bpVisCtx = null;
+let bpVisW = 0;
+let bpVisH = 0;
+let bpVisDpr = 1;
+/** @type {AnalyserNode|null} */
+let bpVisAnalyser = null;
+/** @type {Uint8Array|null} */
+let bpVisFreq = null;
+/** @type {Float32Array|null} */
+let bpVisSmooth = null;
+/** @type {Float32Array|null} */
+let bpVisPeaks = null;
+let bpVisRaf = 0;
+let bpVisLastAt = 0;
+let bpVisEnergy = 0;
+let bpVisPhase = 0;
+
+function bpVisualizerEnsureAnalyser() {
+  if (bpVisAnalyser) return bpVisAnalyser;
+  const a = AC.createAnalyser();
+  a.fftSize = 1024;
+  a.smoothingTimeConstant = 0.74;
+  a.minDecibels = -95;
+  a.maxDecibels = -18;
+  bpVisAnalyser = a;
+  bpVisFreq = new Uint8Array(a.frequencyBinCount);
+  bpVisSmooth = new Float32Array(a.frequencyBinCount);
+  bpVisPeaks = new Float32Array(a.frequencyBinCount);
+  return a;
+}
+
+function bpVisSyncCanvasLayout() {
+  if (!bpVisCanvas || !bpViewport || !bpWorld) return;
+  const z = Math.max(0.12, bpZoom);
+  const ww = bpViewport.clientWidth / z;
+  const wh = bpViewport.clientHeight / z;
+  bpVisCanvas.style.left = `${-bpPanX / z}px`;
+  bpVisCanvas.style.top = `${-bpPanY / z}px`;
+  bpVisCanvas.style.width = `${ww}px`;
+  bpVisCanvas.style.height = `${wh}px`;
+}
+
+function bpVisResize() {
+  if (!bpVisCanvas || !bpViewport) return;
+  const w = Math.max(1, Math.floor(bpViewport.clientWidth));
+  const h = Math.max(1, Math.floor(bpViewport.clientHeight));
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  bpVisCanvas.width = Math.floor(w * dpr);
+  bpVisCanvas.height = Math.floor(h * dpr);
+  bpVisCanvas.style.width = `${w}px`;
+  bpVisCanvas.style.height = `${h}px`;
+  bpVisCtx = bpVisCanvas.getContext('2d', { alpha: true });
+  if (bpVisCtx) {
+    bpVisCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    bpVisCtx.imageSmoothingEnabled = true;
+  }
+  bpVisW = w;
+  bpVisH = h;
+  bpVisDpr = dpr;
+  bpVisSyncCanvasLayout();
+}
+
+function bpVisClear() {
+  if (!bpVisCtx) return;
+  bpVisCtx.clearRect(0, 0, bpVisW, bpVisH);
+}
+
+function bpVisReadSpectrum(dt) {
+  const a = bpVisAnalyser;
+  const bins = bpVisFreq;
+  const sm = bpVisSmooth;
+  const pk = bpVisPeaks;
+  if (!a || !bins || !sm || !pk) return 0;
+  a.getByteFrequencyData(bins);
+  let e = 0;
+  const at = Math.min(1, dt * 18);
+  const rt = Math.min(1, dt * 2.1);
+  for (let i = 0; i < bins.length; i++) {
+    const v = bins[i] / 255;
+    const next = sm[i] + (v - sm[i]) * at;
+    sm[i] = next;
+    const peak = Math.max(next, pk[i] - rt);
+    pk[i] = peak;
+    if (i < 160) e += next;
+  }
+  return e / 160;
+}
+
+function bpVisAt(arr, idx) {
+  if (!arr || arr.length === 0) return 0;
+  const i0 = Math.max(0, Math.min(arr.length - 1, Math.floor(idx)));
+  const i1 = Math.max(0, Math.min(arr.length - 1, i0 + 1));
+  const t = Math.max(0, Math.min(1, idx - i0));
+  return arr[i0] * (1 - t) + arr[i1] * t;
+}
+
+function bpVisDrawWaveLine(ctx, arr, hueA, hueB, amp, yBase, lineW, glow) {
+  const w = bpVisW;
+  const h = bpVisH;
+  const grad = ctx.createLinearGradient(0, h, w, h * 0.1);
+  grad.addColorStop(0, `hsla(${hueA}, 100%, 58%, 0.05)`);
+  grad.addColorStop(0.5, `hsla(${hueB}, 100%, 62%, 0.13)`);
+  grad.addColorStop(1, `hsla(${(hueA + 320) % 360}, 100%, 62%, 0.07)`);
+  ctx.strokeStyle = grad;
+  ctx.lineWidth = lineW;
+  ctx.shadowColor = `hsla(${hueB}, 100%, 70%, ${glow})`;
+  ctx.shadowBlur = 18;
+  ctx.beginPath();
+  const step = 5;
+  for (let x = 0; x <= w + step; x += step) {
+    const nx = x / Math.max(1, w);
+    const b = nx * (arr.length - 2);
+    const s = bpVisAt(arr, b);
+    const y =
+      yBase -
+      s * amp -
+      Math.sin(nx * 16 + bpVisPhase * 1.3) * (8 + amp * 0.07) -
+      Math.cos(nx * 10 - bpVisPhase * 0.85) * (5 + amp * 0.045);
+    if (x === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+}
+
+function bpVisDrawSpectrumPillars(ctx, arr, peaks, env) {
+  const w = bpVisW;
+  const h = bpVisH;
+  const count = 64;
+  const baseY = h * 0.84;
+  const topFade = ctx.createLinearGradient(0, 0, 0, baseY);
+  topFade.addColorStop(0, 'rgba(14,19,36,0)');
+  topFade.addColorStop(1, 'rgba(14,19,36,0.05)');
+  ctx.fillStyle = topFade;
+  ctx.fillRect(0, 0, w, baseY);
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  for (let i = 0; i < count; i++) {
+    const x = (i / (count - 1)) * w;
+    const bi = (i / count) * 120;
+    const v = bpVisAt(arr, bi);
+    const p = bpVisAt(peaks, bi);
+    const hh = Math.max(5, (v * 0.5 + p * 0.5) * (h * 0.62) * (0.35 + env * 0.85));
+    const g = ctx.createLinearGradient(0, baseY - hh, 0, baseY);
+    const hue = 200 - i * 1.8;
+    g.addColorStop(0, `hsla(${hue}, 100%, 65%, 0.08)`);
+    g.addColorStop(0.55, `hsla(${15 + i * 1.2}, 100%, 60%, 0.12)`);
+    g.addColorStop(1, 'rgba(255,255,255,0.01)');
+    ctx.strokeStyle = g;
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(x, baseY);
+    ctx.lineTo(x, baseY - hh);
+    ctx.stroke();
+    if (p > 0.12) {
+      ctx.fillStyle = `hsla(${15 + i * 1.15}, 100%, 66%, ${0.05 + env * 0.1})`;
+      ctx.beginPath();
+      ctx.arc(x, baseY - hh, 1.2 + p * 2.2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  ctx.restore();
+}
+
+function bpVisDrawGridGlow(ctx, env) {
+  const w = bpVisW;
+  const h = bpVisH;
+  const floorY = h * 0.86;
+  ctx.save();
+  ctx.strokeStyle = `rgba(124, 175, 255, ${0.035 + env * 0.05})`;
+  ctx.lineWidth = 1;
+  for (let y = floorY; y < h; y += 10) {
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(w, y);
+    ctx.stroke();
+  }
+  const vxStep = Math.max(28, Math.floor(w / 24));
+  for (let x = 0; x < w; x += vxStep) {
+    ctx.beginPath();
+    ctx.moveTo(x, floorY);
+    ctx.lineTo(x + (w * 0.5 - x) * 0.17, h);
+    ctx.stroke();
+  }
+  const floor = ctx.createLinearGradient(0, floorY, 0, h);
+  floor.addColorStop(0, `rgba(100, 155, 255, ${0.05 + env * 0.04})`);
+  floor.addColorStop(1, 'rgba(2,6,14,0)');
+  ctx.fillStyle = floor;
+  ctx.fillRect(0, floorY, w, h - floorY);
+  ctx.restore();
+}
+
+function bpVisDrawFrame(dt) {
+  const ctx = bpVisCtx;
+  const arr = bpVisSmooth;
+  const peaks = bpVisPeaks;
+  if (!ctx || !arr || !peaks || bpVisW < 2 || bpVisH < 2) return;
+
+  const instantaneous = bpVisReadSpectrum(dt);
+  bpVisEnergy += (instantaneous - bpVisEnergy) * Math.min(1, dt * 7.5);
+  const env = Math.min(1, Math.max(0, bpVisEnergy * 2.2));
+  bpVisPhase += dt * (0.9 + env * 3.1);
+
+  ctx.clearRect(0, 0, bpVisW, bpVisH);
+  ctx.save();
+  ctx.globalCompositeOperation = 'source-over';
+  bpVisDrawGridGlow(ctx, env);
+  bpVisDrawSpectrumPillars(ctx, arr, peaks, env);
+  const yBase = bpVisH * 0.84;
+  bpVisDrawWaveLine(ctx, arr, 205, 16, 58 + env * 130, yBase, 1.8, 0.26);
+  bpVisDrawWaveLine(ctx, peaks, 190, 8, 40 + env * 110, yBase + 8, 1.25, 0.2);
+  ctx.restore();
+}
+
+function bpVisFrame(t) {
+  const now = typeof t === 'number' ? t : performance.now();
+  if (!bpVisLastAt) bpVisLastAt = now;
+  const dt = Math.min(0.05, Math.max(0.001, (now - bpVisLastAt) / 1000));
+  bpVisLastAt = now;
+  const root = document.getElementById('brick-playground-root');
+  const active =
+    !!root &&
+    root.classList.contains('active') &&
+    (pgSeamMode || (playingRoot !== null && pgSources.length > 0));
+  if (!active) {
+    bpVisEnergy *= Math.max(0, 1 - dt * 6);
+    if (bpVisEnergy < 0.01) {
+      bpVisClear();
+      bpVisRaf = 0;
+      return;
+    }
+  }
+  bpVisDrawFrame(dt);
+  bpVisRaf = requestAnimationFrame(bpVisFrame);
+}
+
+function bpVisEnsureLoop() {
+  if (bpVisRaf) return;
+  bpVisLastAt = 0;
+  bpVisRaf = requestAnimationFrame(bpVisFrame);
+}
+
+function bpVisInit(rootWrap) {
+  bpVisResize();
+  const onResize = () => {
+    if (document.getElementById('brick-playground-root')?.classList.contains('active')) bpVisResize();
+  };
+  window.addEventListener('resize', onResize);
+  ['pointerdown', 'wheel'].forEach(ev => {
+    rootWrap.addEventListener(
+      ev,
+      () => {
+        if (bpVisRaf) bpVisEnsureLoop();
+      },
+      { passive: true }
+    );
+  });
+}
+
 /** @param {boolean} [canMeltOnBreak] When false (e.g. view switch), only resets idle timer. */
 function bpSnowBumpActivity(canMeltOnBreak = true) {
   const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
@@ -532,6 +793,8 @@ function ensurePlaygroundGain() {
     pgGain = AC.createGain();
     pgGain.gain.value = 1;
     pgGain.connect(masterGain);
+    const analyser = bpVisualizerEnsureAnalyser();
+    pgGain.connect(analyser);
   }
   return pgGain;
 }
@@ -1009,6 +1272,7 @@ function stopPlaygroundPlayback() {
   playingRoot = null;
   pgSegmentDur = null;
   pgLastSegFlashIdx = null;
+  bpVisEnsureLoop();
   updateClusterUi();
 }
 
@@ -1224,6 +1488,7 @@ function scheduleClusterSeamPlay(sorted, clusterRoot) {
   pgSeamBus.connect(ensurePlaygroundGain());
 
   schedulePgSeamHead(segments, 0, clusterRoot);
+  bpVisEnsureLoop();
 }
 
 function scheduleClusterPlayFromOffset(sorted, offsetSec, loop, clusterRoot) {
@@ -1308,6 +1573,7 @@ function scheduleClusterPlayFromOffset(sorted, offsetSec, loop, clusterRoot) {
   }
 
   playFrom(offsetClamped);
+  bpVisEnsureLoop();
 }
 
 /** Same pulse as seekbar `brick-preview-flash` (seekbar.css); self-contained so script order does not matter. */
@@ -1561,6 +1827,7 @@ function updateWorldTransform() {
   if (!bpWorld) return;
   bpWorld.style.transform = `translate(${bpPanX}px, ${bpPanY}px) scale(${bpZoom})`;
   bpWorld.style.transformOrigin = '0 0';
+  bpVisSyncCanvasLayout();
   bpSnowSyncCanvasLayout();
 }
 
@@ -2462,6 +2729,7 @@ function initBrickPlayground(mainContainer) {
       <div class="bp-viewport" tabindex="0">
         <div class="bp-world">
           <div class="bp-combs-layer"></div>
+          <canvas class="bp-vis-canvas" aria-hidden="true"></canvas>
           <div class="bp-bricks-layer"></div>
           <canvas class="bp-snow-canvas" aria-hidden="true"></canvas>
           <div class="bp-hud-layer"></div>
@@ -2475,6 +2743,7 @@ function initBrickPlayground(mainContainer) {
   bpWorld = wrap.querySelector('.bp-world');
   combsLayer = wrap.querySelector('.bp-combs-layer');
   bricksLayer = wrap.querySelector('.bp-bricks-layer');
+  bpVisCanvas = wrap.querySelector('.bp-vis-canvas');
   bpSnowCanvas = wrap.querySelector('.bp-snow-canvas');
   bpHudRoot = wrap.querySelector('.bp-hud-layer');
   bpEnsureSeamMarker();
@@ -2581,6 +2850,7 @@ function initBrickPlayground(mainContainer) {
 
   initPlaygroundFloatingTools(wrap);
   initPlaygroundViewToggle();
+  bpVisInit(wrap);
   bpSnowInit(wrap);
   applyPlaygroundVisibility(!!STATE.playground.mode);
 }
@@ -2624,10 +2894,19 @@ function applyPlaygroundVisibility(playground) {
     bpSnowBumpActivity(false);
     bpViewport.focus();
     updateClusterUi();
+    bpVisResize();
+    bpVisEnsureLoop();
     bpSnowResize();
     bpSnowEnsureLoop();
-  } else if (!playground && bpSnowRaf) {
-    cancelAnimationFrame(bpSnowRaf);
-    bpSnowRaf = 0;
+  } else if (!playground) {
+    if (bpSnowRaf) {
+      cancelAnimationFrame(bpSnowRaf);
+      bpSnowRaf = 0;
+    }
+    if (bpVisRaf) {
+      cancelAnimationFrame(bpVisRaf);
+      bpVisRaf = 0;
+    }
+    bpVisClear();
   }
 }

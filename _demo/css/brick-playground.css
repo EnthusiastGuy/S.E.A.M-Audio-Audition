@@ -241,6 +241,16 @@
   pointer-events: none;
 }
 
+.bp-vis-canvas {
+  position: absolute;
+  left: 0;
+  top: 0;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.72;
+  image-rendering: auto;
+}
+
 .bp-snow-canvas {
   position: absolute;
   left: 0;

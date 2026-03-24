@@ -3006,10 +3006,164 @@ function resetPlaygroundLayout() {
   updateClusterUi();
 }
 
+function bpPartDisplayName(fmt, songIdx, partIndex) {
+  const song = STATE.songs[fmt]?.[songIdx];
+  if (!song) return 'Unknown sound';
+  if (partIndex === -1) return `${song.name} Full`;
+  const part = song.parts?.[partIndex];
+  const partNum = part ? part.num : (partIndex + 1);
+  return `${song.name} ${partNum}`;
+}
+
+function bpDurationMsFromPart(fmt, songIdx, partIndex) {
+  const secs = bpGetPartDuration(fmt, songIdx, partIndex);
+  if (!isFinite(secs) || secs <= 0) return 0;
+  return Math.max(0, Math.round(secs * 1000));
+}
+
+function bpBuildExportModel() {
+  const nonTemplate = [...brickMap.values()].filter(b => !b.combTemplate);
+  const roots = new Map();
+  for (const b of nonTemplate) {
+    const root = ufFind(b.id);
+    if (!roots.has(root)) roots.set(root, []);
+    roots.get(root).push(b);
+  }
+  const groups = [...roots.values()]
+    .map(items => {
+      const sorted = [...items].sort((a, b) => a.x + a.width / 2 - (b.x + b.width / 2));
+      const ids = sorted.map(x => x.id);
+      const ann = bpGetClusterAnnotationByIds(ids);
+      const sounds = sorted.map(x => {
+        const durationMs = bpDurationMsFromPart(x.fmt, x.songIdx, x.partIndex);
+        return {
+          name: bpPartDisplayName(x.fmt, x.songIdx, x.partIndex),
+          durationMs,
+          durationHuman: fmtTime(durationMs / 1000),
+        };
+      });
+      const totalDurationMs = sounds.reduce((sum, x) => sum + x.durationMs, 0);
+      return {
+        _orderX: sorted.length ? (sorted[0].x + sorted[0].width / 2) : 0,
+        title: ann.title || '',
+        description: ann.description || '',
+        totalDurationMs,
+        totalDurationHuman: fmtTime(totalDurationMs / 1000),
+        sounds,
+      };
+    })
+    .sort((a, b) => a._orderX - b._orderX)
+    .map(({ _orderX, ...group }) => group);
+
+  return {
+    packageFolderName: STATE.rootDir?.name || 'library',
+    exportedAt: new Date().toISOString(),
+    groups,
+  };
+}
+
+function bpSerializeExportTxt(model) {
+  const lines = [];
+  lines.push('S.E.A.M Audio Audition - Playground Groups Export');
+  lines.push('='.repeat(52));
+  lines.push(`Package folder: ${model.packageFolderName}`);
+  lines.push(`Exported at: ${model.exportedAt}`);
+  lines.push(`Groups: ${model.groups.length}`);
+  lines.push('');
+  model.groups.forEach((group, idx) => {
+    lines.push(`Group ${idx + 1}`);
+    lines.push('-'.repeat(28));
+    lines.push(`Title: ${group.title || '(untitled)'}`);
+    lines.push(`Description: ${group.description || '(none)'}`);
+    lines.push(`Total duration (ms): ${group.totalDurationMs}`);
+    lines.push(`Total duration (mm:ss:SSS): ${group.totalDurationHuman}`);
+    lines.push('Sounds:');
+    if (!group.sounds.length) {
+      lines.push('  (none)');
+    } else {
+      group.sounds.forEach((sound, soundIdx) => {
+        lines.push(`  ${soundIdx + 1}. ${sound.name}`);
+        lines.push(`     - Duration (ms): ${sound.durationMs}`);
+        lines.push(`     - Duration (mm:ss:SSS): ${sound.durationHuman}`);
+      });
+    }
+    lines.push('');
+  });
+  return lines.join('\n');
+}
+
+function bpEscapeXml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+function bpSerializeExportXml(model) {
+  const lines = [];
+  lines.push('<?xml version="1.0" encoding="UTF-8"?>');
+  lines.push('<playgroundExport>');
+  lines.push(`  <packageFolderName>${bpEscapeXml(model.packageFolderName)}</packageFolderName>`);
+  lines.push(`  <exportedAt>${bpEscapeXml(model.exportedAt)}</exportedAt>`);
+  lines.push('  <groups>');
+  for (const group of model.groups) {
+    lines.push('    <group>');
+    lines.push(`      <title>${bpEscapeXml(group.title)}</title>`);
+    lines.push(`      <description>${bpEscapeXml(group.description)}</description>`);
+    lines.push(`      <totalDurationMs>${group.totalDurationMs}</totalDurationMs>`);
+    lines.push(`      <totalDurationHuman>${bpEscapeXml(group.totalDurationHuman)}</totalDurationHuman>`);
+    lines.push('      <sounds>');
+    for (const sound of group.sounds) {
+      lines.push('        <sound>');
+      lines.push(`          <name>${bpEscapeXml(sound.name)}</name>`);
+      lines.push(`          <durationMs>${sound.durationMs}</durationMs>`);
+      lines.push(`          <durationHuman>${bpEscapeXml(sound.durationHuman)}</durationHuman>`);
+      lines.push('        </sound>');
+    }
+    lines.push('      </sounds>');
+    lines.push('    </group>');
+  }
+  lines.push('  </groups>');
+  lines.push('</playgroundExport>');
+  return lines.join('\n');
+}
+
+function bpDownloadPlaygroundGroupsExport(fmt) {
+  const model = bpBuildExportModel();
+  const format = String(fmt || 'txt').toLowerCase();
+  let text = '';
+  let mime = 'text/plain;charset=utf-8';
+  let ext = 'txt';
+  if (format === 'json') {
+    text = JSON.stringify(model, null, 2);
+    mime = 'application/json;charset=utf-8';
+    ext = 'json';
+  } else if (format === 'xml') {
+    text = bpSerializeExportXml(model);
+    mime = 'application/xml;charset=utf-8';
+    ext = 'xml';
+  } else {
+    text = bpSerializeExportTxt(model);
+    mime = 'text/plain;charset=utf-8';
+    ext = 'txt';
+  }
+  const blob = new Blob([text], { type: mime });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = sanitizeFileName(`playground-groups-${Date.now()}.${ext}`) || `playground-groups.${ext}`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+  playClickUiSound();
+}
+
 function initPlaygroundFloatingTools(wrap) {
   const tools = wrap.querySelector('#bp-floating-tools');
   const toggle = wrap.querySelector('#bp-tools-toggle');
   const resetBtn = wrap.querySelector('#bp-tools-reset');
+  const exportBtn = wrap.querySelector('#bp-tools-export');
+  const exportFmt = wrap.querySelector('#bp-tools-export-format');
   if (!tools || !toggle) return;
   toggle.addEventListener('click', () => {
     const collapsed = tools.classList.toggle('bp-floating-tools--collapsed');
@@ -3019,6 +3173,12 @@ function initPlaygroundFloatingTools(wrap) {
     resetBtn.addEventListener('click', () => {
       resetPlaygroundLayout();
       playClickUiSound();
+    });
+  }
+  if (exportBtn && exportFmt) {
+    exportBtn.addEventListener('click', () => {
+      const fmt = String(exportFmt.value || 'txt').toLowerCase();
+      bpDownloadPlaygroundGroupsExport(fmt);
     });
   }
 }
@@ -3074,6 +3234,14 @@ function initBrickPlayground(mainContainer) {
         <div class="bp-tools-panel" id="bp-tools-panel">
           <p class="bp-tools-hint">Restore the default comb layout and zoom/pan.</p>
           <button type="button" class="bp-tools-btn-reset" id="bp-tools-reset">Reset positions</button>
+          <div class="bp-tools-export-row">
+            <select class="bp-tools-export-select" id="bp-tools-export-format" aria-label="Export format">
+              <option value="txt">TXT</option>
+              <option value="json">JSON</option>
+              <option value="xml">XML</option>
+            </select>
+            <button type="button" class="bp-tools-btn-export" id="bp-tools-export">Export</button>
+          </div>
         </div>
       </aside>
       <div class="bp-viewport" tabindex="0">

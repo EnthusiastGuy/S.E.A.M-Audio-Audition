@@ -188,6 +188,12 @@ body.welcome-idle-cinema .app-header {
   }
 }
 
+.app-logo-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .app-logo {
   font-family: 'Space Mono', monospace;
   font-size: 22px;
@@ -199,19 +205,94 @@ body.welcome-idle-cinema .app-header {
     0 1px 2px rgba(22, 33, 62, 0.95),
     0 0 18px rgba(233, 69, 96, 0.35);
 }
+
+.app-logo-head {
+  display: inline-flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+}
+
+.app-logo-mark {
+  letter-spacing: 3px;
+}
+
+.app-version {
+  font-family: 'DM Sans', 'Space Mono', sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--text3);
+  line-height: 1.2;
+  text-shadow: none;
+  cursor: help;
+}
+
+.app-version-rev--behind {
+  color: var(--crayon1);
+  font-weight: 700;
+}
+
+a.app-logo:hover .app-version {
+  color: var(--text2);
+}
+
+a.app-logo:hover .app-version-rev--behind {
+  color: var(--crayon1);
+}
+
+.app-logo-sub {
+  color: var(--text2);
+  font-size: 12px;
+  letter-spacing: 2px;
+  display: block;
+  margin-top: 2px;
+}
+
 a.app-logo:hover {
   color: var(--accent4);
   text-shadow:
     0 1px 2px rgba(22, 33, 62, 0.95),
     0 0 22px rgba(168, 218, 220, 0.45);
 }
+a.app-logo:hover .app-logo-mark {
+  color: var(--accent4);
+}
 a.app-logo:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 3px;
   border-radius: 4px;
 }
-.app-logo span { color: var(--text2); font-size: 12px; letter-spacing: 2px; display: block; margin-top: 2px; }
-a.app-logo:hover span { color: var(--text); }
+a.app-logo:hover .app-logo-sub { color: var(--text); }
+
+.app-github-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  margin-top: 2px;
+  color: var(--text2);
+  border-radius: 4px;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.app-github-link:hover {
+  color: var(--accent3);
+  background: rgba(168, 218, 220, 0.08);
+}
+
+.app-github-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.app-github-icon {
+  width: 18px;
+  height: 18px;
+  display: block;
+}
 .header-actions { display: flex; gap: 8px; align-items: center; }
 .folder-switcher {
   background: var(--card2);

@@ -1,0 +1,6 @@
+#!/bin/sh
+# Installed by: scripts/install-git-hooks.sh (or copy to .git/hooks/pre-push).
+# Updates _demo/revision.txt to match the commit total after this push (linear FF push).
+
+ROOT="$(git rev-parse --show-toplevel)"
+exec sh "$ROOT/scripts/update-revision.sh"

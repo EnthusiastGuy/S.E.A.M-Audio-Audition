@@ -188,17 +188,22 @@ function bpClusterHasRemovableDuplicates(root) {
 
 function bpTryDeleteActiveBrick() {
   if (!activeBrickId) return;
-  const b = brickMap.get(activeBrickId);
-  if (!b) return;
-  const key = bpPartKey(b.fmt, b.songIdx, b.partIndex);
-  if (bpCountPartKey(key) <= 1) return;
+  const root = ufFind(activeBrickId);
+  const ids = clusterMembers(root).filter(id => !brickMap.get(id)?.combTemplate);
+  if (ids.length === 0) return;
   const snap = capturePlaygroundBrickSnapshot();
-  brickMap.delete(b.id);
-  b.el.remove();
+  for (const id of ids) {
+    const b = brickMap.get(id);
+    if (!b) continue;
+    brickMap.delete(id);
+    b.el.remove();
+  }
   bpPushUndo(snap);
   ufRebuild();
   stopPlaygroundPlayback();
-  activeBrickId = brickMap.size ? brickMap.keys().next().value : null;
+  if (activeBrickId && !brickMap.has(activeBrickId)) {
+    activeBrickId = brickMap.size ? brickMap.keys().next().value : null;
+  }
   scheduleSave();
   updateClusterUi();
 }
@@ -819,6 +824,7 @@ async function bpPlayClusterSeam(root) {
 function bpBreakCluster(root) {
   const ids = clusterMembers(root).filter(id => !brickMap.get(id)?.combTemplate);
   if (ids.length === 0) return;
+  const snap = capturePlaygroundBrickSnapshot();
   playBreakSound();
   for (const id of ids) ufParent.set(id, id);
   for (const id of ids) {
@@ -853,9 +859,11 @@ function bpBreakCluster(root) {
   ufRebuild();
   scheduleSave();
   updateClusterUi();
+  bpPushUndo(snap);
 }
 
 function bpBreakAll() {
+  const snap = capturePlaygroundBrickSnapshot();
   playBreakSound();
   for (const id of brickMap.keys()) ufParent.set(id, id);
   const all = [...brickMap.values()];
@@ -868,6 +876,7 @@ function bpBreakAll() {
   ufRebuild();
   scheduleSave();
   updateClusterUi();
+  bpPushUndo(snap);
 }
 
 async function bpDownloadCluster(root) {

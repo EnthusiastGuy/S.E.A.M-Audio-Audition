@@ -45,6 +45,7 @@ function computeSeamEdgeSec(dur) {
 }
 
 function scheduleSeamHead(fmt, songIdx, partIndex, listItem, ps, buf, dur, edgeSec) {
+  if (!ps._directSeamSkip || ps._directSeamToken?.cancelled) return;
   const audRate = Math.max(1e-6, Math.abs(getDirectPartPlaybackRate()));
   const startAt = AC.currentTime + SEAM_SCHEDULE_AHEAD;
   const src = AC.createBufferSource();
@@ -58,9 +59,7 @@ function scheduleSeamHead(fmt, songIdx, partIndex, listItem, ps, buf, dur, edgeS
 
   const headWall = edgeSec / audRate;
   src.start(startAt, 0);
-  try {
-    src.stop(startAt + headWall);
-  } catch (e) {}
+  try { src.stop(startAt + headWall); } catch (e) {}
 
   ps._directTickStartAC = startAt;
   ps._directTickStartPos = 0;
@@ -78,6 +77,7 @@ function scheduleSeamHead(fmt, songIdx, partIndex, listItem, ps, buf, dur, edgeS
 }
 
 function scheduleSeamFF(fmt, songIdx, partIndex, listItem, ps, buf, dur, edgeSec) {
+  if (!ps._directSeamSkip || ps._directSeamToken?.cancelled) return;
   const rem = dur - 2 * edgeSec;
   const ffRate = Math.min(64, Math.max(8, rem / SEAM_FF_TARGET_WALL_SEC));
   const startAt = AC.currentTime + SEAM_SCHEDULE_AHEAD;
@@ -92,9 +92,7 @@ function scheduleSeamFF(fmt, songIdx, partIndex, listItem, ps, buf, dur, edgeSec
 
   const wallFF = rem / ffRate;
   src.start(startAt, edgeSec);
-  try {
-    src.stop(startAt + wallFF);
-  } catch (e) {}
+  try { src.stop(startAt + wallFF); } catch (e) {}
 
   ps._directTickStartAC = startAt;
   ps._directTickStartPos = edgeSec;
@@ -107,6 +105,7 @@ function scheduleSeamFF(fmt, songIdx, partIndex, listItem, ps, buf, dur, edgeSec
 }
 
 function scheduleSeamTail(fmt, songIdx, partIndex, listItem, ps, buf, dur, edgeSec) {
+  if (!ps._directSeamSkip || ps._directSeamToken?.cancelled) return;
   const audRate = Math.max(1e-6, Math.abs(getDirectPartPlaybackRate()));
   const startAt = AC.currentTime + SEAM_SCHEDULE_AHEAD;
   const src = AC.createBufferSource();
@@ -120,20 +119,53 @@ function scheduleSeamTail(fmt, songIdx, partIndex, listItem, ps, buf, dur, edgeS
 
   const tailWall = edgeSec / audRate;
   const tailOffset = Math.max(0, dur - edgeSec);
+  const tailEndAC = startAt + tailWall;
   src.start(startAt, tailOffset);
-  try {
-    src.stop(startAt + tailWall);
-  } catch (e) {}
+  try { src.stop(tailEndAC); } catch (e) {}
 
   ps._directTickStartAC = startAt;
   ps._directTickStartPos = tailOffset;
   ps._directTickRate = audRate;
 
+  cancelDirectSeamPreScheduled(ps);
+  const nextSrc = AC.createBufferSource();
+  nextSrc.buffer = buf;
+  nextSrc.playbackRate.value = audRate;
+  nextSrc.connect(ps.gainNode);
+  const nextHeadWall = edgeSec / audRate;
+  nextSrc.start(tailEndAC, 0);
+  try { nextSrc.stop(tailEndAC + nextHeadWall); } catch (e) {}
+  ps._directSeamNextSrc = nextSrc;
+
   src.onended = () => {
-    if (ps._directNode !== src || !ps._directSeamSkip) return;
+    if (ps._directNode !== src || !ps._directSeamSkip || ps._directSeamToken?.cancelled) return;
     triggerPartMiniPreviewFlash(fmt, songIdx, partIndex);
-    scheduleSeamHead(fmt, songIdx, partIndex, listItem, ps, buf, dur, edgeSec);
+    ps._directNode = nextSrc;
+    ps._directSeamPhase = 'head';
+    ps._directSeamNextSrc = null;
+    setSeamFfMiniBarClass(ps, fmt, songIdx, partIndex, false);
+    ps._directTickStartAC = tailEndAC;
+    ps._directTickStartPos = 0;
+    ps._directTickRate = audRate;
+
+    nextSrc.onended = () => {
+      if (ps._directNode !== nextSrc || !ps._directSeamSkip) return;
+      const rem = dur - 2 * edgeSec;
+      if (rem <= 1e-6) {
+        scheduleSeamTail(fmt, songIdx, partIndex, listItem, ps, buf, dur, edgeSec);
+      } else {
+        scheduleSeamFF(fmt, songIdx, partIndex, listItem, ps, buf, dur, edgeSec);
+      }
+    };
   };
+}
+
+function cancelDirectSeamPreScheduled(ps) {
+  if (ps._directSeamNextSrc) {
+    try { ps._directSeamNextSrc.stop(); } catch (e) {}
+    try { ps._directSeamNextSrc.disconnect(); } catch (e) {}
+    ps._directSeamNextSrc = null;
+  }
 }
 
 function beginSeamPreviewPlayback(fmt, songIdx, partIndex, listItem, ps, buf) {
@@ -144,7 +176,126 @@ function beginSeamPreviewPlayback(fmt, songIdx, partIndex, listItem, ps, buf) {
   ps._directDuration = dur;
   ps._directSeekOffset = 0;
   ps._directStartAC = AC.currentTime;
+  ps._directSeamToken = { cancelled: false };
   scheduleSeamHead(fmt, songIdx, partIndex, listItem, ps, buf, dur, edgeSec);
+}
+
+function cancelDirectLoopPreScheduled(ps) {
+  if (ps._directLoopNextNode) {
+    try {
+      ps._directLoopNextNode.stop();
+    } catch (e) {}
+    try {
+      ps._directLoopNextNode.disconnect();
+    } catch (e) {}
+    ps._directLoopNextNode = null;
+  }
+  ps._directLoopSegEndAC = null;
+  ps._directLoopNextEndAC = null;
+}
+
+function wireDirectLoopSourceEnded(ps, fmt, songIdx, partIndex, listItem, buf, src) {
+  src.onended = () => {
+    if (ps._directNode !== src) return;
+    if (ps._directLoopNextNode) return;
+    if (!ps._directLoop) return;
+    triggerPartMiniPreviewFlash(fmt, songIdx, partIndex);
+    void playPartDirectly(fmt, songIdx, partIndex, listItem, { loop: true });
+  };
+}
+
+/**
+ * Seamless loop: same mechanism as main timeline — next iteration is pre-scheduled at the exact segment end AC time.
+ */
+function scheduleDirectLoopPlayback(fmt, songIdx, partIndex, listItem, ps, buf, offsetSecs) {
+  cancelDirectLoopPreScheduled(ps);
+  if (ps._directNode) {
+    try {
+      ps._directNode.stop();
+    } catch (e) {}
+    try {
+      ps._directNode.disconnect();
+    } catch (e) {}
+    ps._directNode = null;
+  }
+
+  const rate = getDirectPartPlaybackRate();
+  const absR = Math.max(1e-6, Math.abs(rate));
+  const dur = buf.duration;
+  const key = `${fmt}_${songIdx}`;
+
+  if (rate < 0) {
+    const src = AC.createBufferSource();
+    src.buffer = buf;
+    src.playbackRate.value = rate;
+    src.connect(ps.gainNode);
+    src.start(0, offsetSecs);
+    ps._directNode = src;
+    ps._directStartAC = AC.currentTime;
+    ps._directSeekOffset = offsetSecs;
+    ps._directDuration = dur;
+    src.onended = () => {
+      onDirectPartSourceEnded(ps, key, src, fmt, songIdx, partIndex, listItem);
+    };
+    return;
+  }
+
+  const startAt = AC.currentTime + SEAM_SCHEDULE_AHEAD;
+  const src = AC.createBufferSource();
+  src.buffer = buf;
+  src.playbackRate.value = rate;
+  src.connect(ps.gainNode);
+  ps._directNode = src;
+  ps._directStartAC = startAt;
+  ps._directSeekOffset = offsetSecs;
+  ps._directDuration = dur;
+
+  const segEndAC = startAt + (dur - offsetSecs) / absR;
+  ps._directLoopSegEndAC = segEndAC;
+
+  src.start(startAt, offsetSecs);
+
+  const nextSrc = AC.createBufferSource();
+  nextSrc.buffer = buf;
+  nextSrc.playbackRate.value = rate;
+  nextSrc.connect(ps.gainNode);
+  nextSrc.start(segEndAC, 0);
+  ps._directLoopNextNode = nextSrc;
+  ps._directLoopNextEndAC = segEndAC + dur / absR;
+
+  wireDirectLoopSourceEnded(ps, fmt, songIdx, partIndex, listItem, buf, src);
+}
+
+function tryPromoteDirectLoopFromTick(fmt, songIdx, partIndex, listItem, ps, buf) {
+  if (!ps._directLoop || ps._directSeamSkip) return;
+  if (!ps._directLoopNextNode || ps._directLoopSegEndAC == null) return;
+  if (AC.currentTime < ps._directLoopSegEndAC - 0.005) return;
+
+  const oldNode = ps._directNode;
+  triggerPartMiniPreviewFlash(fmt, songIdx, partIndex);
+  ps._directNode = ps._directLoopNextNode;
+  ps._directStartAC = ps._directLoopSegEndAC;
+  ps._directSeekOffset = 0;
+
+  try { oldNode.stop(); } catch (e) {}
+  try { oldNode.disconnect(); } catch (e) {}
+
+  const segEnd = ps._directLoopNextEndAC;
+  ps._directLoopNextNode = null;
+  ps._directLoopSegEndAC = segEnd;
+  ps._directLoopNextEndAC = null;
+
+  const rate = getDirectPartPlaybackRate();
+  const absR = Math.max(1e-6, Math.abs(rate));
+  const nextSrc = AC.createBufferSource();
+  nextSrc.buffer = buf;
+  nextSrc.playbackRate.value = rate;
+  nextSrc.connect(ps.gainNode);
+  nextSrc.start(segEnd, 0);
+  ps._directLoopNextNode = nextSrc;
+  ps._directLoopNextEndAC = segEnd + buf.duration / absR;
+
+  wireDirectLoopSourceEnded(ps, fmt, songIdx, partIndex, listItem, buf, ps._directNode);
 }
 
 function syncDirectPartTransportButtons(ps, key, partIndex, listItem) {
@@ -278,6 +429,20 @@ function applyPlaybackRateToDirectPart(ps) {
     if (w) void playPartDirectly(ps.fmt, ps.songIdx, ps._directPartIndex, w, { seamSkip: true });
     return;
   }
+  if (ps._directLoop) {
+    const w = getPartListItemWrapper(ps.fmt, ps.songIdx, ps._directPartIndex);
+    if (!w) return;
+    const oldRate = ps._directNode.playbackRate.value;
+    const newRate = getDirectPartPlaybackRate();
+    const elapsed = AC.currentTime - ps._directStartAC;
+    const dur = ps._directDuration || 0;
+    const pos = Math.min(
+      Math.max(0, ps._directSeekOffset + elapsed * oldRate),
+      dur > 0 ? dur : Infinity
+    );
+    void playPartDirectly(ps.fmt, ps.songIdx, ps._directPartIndex, w, { loop: true, loopOffset: pos });
+    return;
+  }
   const oldRate = ps._directNode.playbackRate.value;
   const newRate = getDirectPartPlaybackRate();
   const elapsed = AC.currentTime - ps._directStartAC;
@@ -293,6 +458,9 @@ function applyPlaybackRateToDirectPart(ps) {
 
 function stopDirectPart(ps) {
   ps._directSeamSkip = false;
+  if (ps._directSeamToken) ps._directSeamToken.cancelled = true;
+  cancelDirectLoopPreScheduled(ps);
+  cancelDirectSeamPreScheduled(ps);
   if (ps._directPartIndex != null) {
     setSeamFfMiniBarClass(ps, ps.fmt, ps.songIdx, ps._directPartIndex, false);
   }
@@ -339,6 +507,7 @@ function advanceDirectPartPlayToNext(fmt, songIdx, finishedPartIndex) {
 
 function onDirectPartSourceEnded(ps, key, src, fmt, songIdx, partIndex, listItem) {
   if (ps._directNode !== src) return;
+  if (ps._directLoop && ps._directLoopNextNode) return;
   if (ps._directLoop) {
     ps._directNode = null;
     triggerPartMiniPreviewFlash(fmt, songIdx, partIndex);
@@ -389,6 +558,12 @@ function createTickFunction(fmt, songIdx, partIndex) {
     const ps = STATE.players[key];
     if (!ps || !ps._directNode || ps._directPaused) return;
 
+    if (ps._directLoop && !ps._directSeamSkip) {
+      const buf = ps.buffers[partIndex];
+      const w = getPartListItemWrapper(fmt, songIdx, partIndex);
+      if (buf && w) tryPromoteDirectLoopFromTick(fmt, songIdx, partIndex, w, ps, buf);
+    }
+
     const dur = ps._directDuration;
     let pos;
     if (ps._directSeamSkip) {
@@ -412,8 +587,8 @@ function createTickFunction(fmt, songIdx, partIndex) {
     updatePartMiniWaveformPreview(fmt, songIdx, partIndex, ps, pos);
 
     let stillPlaying;
-    if (ps._directSeamSkip) {
-      stillPlaying = pos < dur - 1e-4;
+    if (ps._directSeamSkip || ps._directLoop) {
+      stillPlaying = true;
     } else {
       const rate = ps._directNode.playbackRate.value;
       stillPlaying = rate >= 0 ? pos < dur - 1e-4 : pos > 1e-4;
@@ -425,6 +600,8 @@ function createTickFunction(fmt, songIdx, partIndex) {
 async function playPartDirectly(fmt, songIdx, partIndex, listItem, opts = {}) {
   const wantLoop = !!opts.loop;
   const wantSeam = !!opts.seamSkip;
+  const loopOffsetSec =
+    opts.loopOffset != null && Number.isFinite(opts.loopOffset) ? Math.max(0, opts.loopOffset) : 0;
   if (AC.state === 'suspended') await AC.resume();
   const key = `${fmt}_${songIdx}`;
   const ps = ensurePlayerState(fmt, songIdx);
@@ -434,7 +611,10 @@ async function playPartDirectly(fmt, songIdx, partIndex, listItem, opts = {}) {
   const buf = ps.buffers[partIndex];
   if (!buf) return;
 
+  const repositionLoop =
+    wantLoop && opts.loopOffset !== undefined && Number.isFinite(opts.loopOffset);
   if (
+    !repositionLoop &&
     ps._directPartIndex === partIndex &&
     ps._directLoop === wantLoop &&
     ps._directSeamSkip === wantSeam &&
@@ -486,6 +666,50 @@ async function playPartDirectly(fmt, songIdx, partIndex, listItem, opts = {}) {
     return;
   }
 
+  const dur = buf.duration;
+
+  if (wantLoop) {
+    scheduleDirectLoopPlayback(fmt, songIdx, partIndex, listItem, ps, buf, loopOffsetSec);
+    syncDirectPartTransportButtons(ps, key, partIndex, listItem);
+    if (stopBtn) stopBtn.style.display = '';
+    if (miniStack) miniStack.classList.add('visible');
+    if (partItem) partItem.classList.add('playing-part');
+    const tickMini = createTickFunction(fmt, songIdx, partIndex);
+    requestAnimationFrame(tickMini);
+    if (miniBar) {
+      miniBar.style.cursor = '';
+      miniBar.title = '';
+      miniBar.onmousedown = e => {
+        if (!ps._directNode) return;
+        e.preventDefault();
+        const performSeek = clientX => {
+          const rect = miniBar.getBoundingClientRect();
+          const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+          const seekPos = ratio * dur;
+          stopDirectPart(ps);
+          scheduleDirectLoopPlayback(fmt, songIdx, partIndex, listItem, ps, buf, seekPos);
+          syncDirectPartTransportButtons(ps, key, partIndex, listItem);
+          if (stopBtn) stopBtn.style.display = '';
+          if (miniStack) miniStack.classList.add('visible');
+          if (partItem) partItem.classList.add('playing-part');
+          ps._directPaused = false;
+          requestAnimationFrame(tickMini);
+        };
+        performSeek(e.clientX);
+        const handleMouseMove = e => {
+          performSeek(e.clientX);
+        };
+        const handleMouseUp = () => {
+          document.removeEventListener('mousemove', handleMouseMove);
+          document.removeEventListener('mouseup', handleMouseUp);
+        };
+        document.addEventListener('mousemove', handleMouseMove);
+        document.addEventListener('mouseup', handleMouseUp);
+      };
+    }
+    return;
+  }
+
   const src = AC.createBufferSource();
   src.buffer = buf;
   src.playbackRate.value = getDirectPartPlaybackRate();
@@ -498,7 +722,6 @@ async function playPartDirectly(fmt, songIdx, partIndex, listItem, opts = {}) {
   if (miniStack) miniStack.classList.add('visible');
   if (partItem) partItem.classList.add('playing-part');
 
-  const dur = buf.duration;
   ps._directStartAC = AC.currentTime;
   ps._directSeekOffset = 0;
   ps._directDuration = dur;

@@ -37,6 +37,10 @@ const BP_COMB_DUP_THRESHOLD_PX = 5;
 const BP_UNDO_MAX = 50;
 
 const PG_SEAM_SCHEDULE_AHEAD = 0.005;
+/** Same idea as main timeline `SCHEDULE_AHEAD`: small lookahead for scheduled `start(when)`. */
+const PG_PLAY_SCHEDULE_AHEAD = 0.005;
+/** Pre-schedule this many loop iterations per batch so wrap is sample-continuous (no onended gap). */
+const PG_LOOP_SCHEDULE_BATCH = 48;
 const PG_SEAM_FF_TARGET_WALL_SEC = 0.85;
 const PG_SEAM_FF_GAIN = 0.2;
 
@@ -107,6 +111,8 @@ let pgSeamTick = {
   ffWallDur: 0,
   ffLogicalSpan: 0,
 };
+/** Pre-scheduled next-cycle head source for gapless seam loop. */
+let pgSeamNextSrc = null;
 
 /** @type {Array<Array<{ id: string, fmt: string, songIdx: number, partIndex: number, x: number, y: number }>>} */
 let bpUndoStack = [];
@@ -1536,6 +1542,15 @@ function stopPlaygroundSourcesOnly() {
       pgGain.gain.setValueAtTime(1, t);
     } catch (e) {}
   }
+  cancelPgSeamPreScheduled();
+}
+
+function cancelPgSeamPreScheduled() {
+  if (pgSeamNextSrc) {
+    try { pgSeamNextSrc.stop(); } catch (e) {}
+    try { pgSeamNextSrc.disconnect(); } catch (e) {}
+    pgSeamNextSrc = null;
+  }
 }
 
 function stopPlaygroundPlayback() {
@@ -1626,9 +1641,7 @@ function schedulePgSeamHead(segments, segIdx, clusterRoot) {
 
   const headWall = edgeSec / audRate;
   src.start(startAt, 0);
-  try {
-    src.stop(startAt + headWall);
-  } catch (e) {}
+  try { src.stop(startAt + headWall); } catch (e) {}
 
   src.onended = () => {
     if (!pgSources.includes(src) || !pgSeamMode) return;
@@ -1670,9 +1683,7 @@ function schedulePgSeamFF(segments, segIdx, clusterRoot) {
   pgTimelineOffset = cum + edgeSec;
 
   src.start(startAt, edgeSec);
-  try {
-    src.stop(startAt + wallFF);
-  } catch (e) {}
+  try { src.stop(startAt + wallFF); } catch (e) {}
 
   src.onended = () => {
     if (!pgSources.includes(src) || !pgSeamMode) return;
@@ -1702,6 +1713,7 @@ function schedulePgSeamTail(segments, segIdx, clusterRoot) {
   schedulePgSeamGain(1, startAt);
 
   const tailWall = edgeSec / audRate;
+  const tailEndAC = startAt + tailWall;
   pgSeamTick = {
     phase: 'tail',
     phaseStartAC: startAt,
@@ -1714,15 +1726,58 @@ function schedulePgSeamTail(segments, segIdx, clusterRoot) {
   pgTimelineOffset = cum + dur - edgeSec;
 
   src.start(startAt, tailOffset);
-  try {
-    src.stop(startAt + tailWall);
-  } catch (e) {}
+  try { src.stop(tailEndAC); } catch (e) {}
 
-  src.onended = () => {
-    if (!pgSources.includes(src) || !pgSeamMode) return;
-    const next = (segIdx + 1) % segments.length;
-    schedulePgSeamHead(segments, next, clusterRoot);
-  };
+  const next = (segIdx + 1) % segments.length;
+  const nextBuf = segments[next].buf;
+  if (nextBuf && nextBuf.duration > 1e-4) {
+    const nextDur = nextBuf.duration;
+    const nextEdgeSec = computePgSeamEdgeSec(nextDur);
+    const nextCum = pgSeamCumDurations[next];
+
+    cancelPgSeamPreScheduled();
+    const nextSrc = AC.createBufferSource();
+    nextSrc.buffer = nextBuf;
+    nextSrc.playbackRate.value = audRate;
+    nextSrc.connect(g);
+    const nextHeadWall = nextEdgeSec / audRate;
+    nextSrc.start(tailEndAC, 0);
+    try { nextSrc.stop(tailEndAC + nextHeadWall); } catch (e) {}
+    pgSeamNextSrc = nextSrc;
+
+    src.onended = () => {
+      if (!pgSources.includes(src) || !pgSeamMode) return;
+      pgSources.push(nextSrc);
+      pgSeamNextSrc = null;
+
+      const nextRem = nextDur - 2 * nextEdgeSec;
+      pgSeamTick = {
+        phase: 'head',
+        phaseStartAC: tailEndAC,
+        phaseStartLogical: nextCum,
+        edge: nextEdgeSec,
+        ffWallDur: 0,
+        ffLogicalSpan: 0,
+      };
+      pgTimelineStartAC = tailEndAC;
+      pgTimelineOffset = nextCum;
+
+      nextSrc.onended = () => {
+        if (!pgSources.includes(nextSrc) || !pgSeamMode) return;
+        if (nextRem <= 1e-6) {
+          schedulePgSeamTail(segments, next, clusterRoot);
+        } else {
+          schedulePgSeamFF(segments, next, clusterRoot);
+        }
+      };
+    };
+  } else {
+    src.onended = () => {
+      if (!pgSources.includes(src) || !pgSeamMode) return;
+      const skip = (next + 1) % segments.length;
+      schedulePgSeamHead(segments, skip, clusterRoot);
+    };
+  }
 }
 
 function scheduleClusterSeamPlay(sorted, clusterRoot) {
@@ -1803,7 +1858,7 @@ function scheduleClusterPlayFromOffset(sorted, offsetSec, loop, clusterRoot) {
     return { startIdx: last, innerOff: Math.max(0, segments[last].buf.duration - 1e-6) };
   }
 
-  function playFrom(totalOff) {
+  function playFrom(totalOff, anchorAC) {
     stopPlaygroundSourcesOnly();
     if (transportToken !== pgTransportToken) return;
 
@@ -1815,27 +1870,35 @@ function scheduleClusterPlayFromOffset(sorted, offsetSec, loop, clusterRoot) {
     const { startIdx, innerOff } = findStart(totalOff);
     pgTimelineOffset = totalOff;
     pgTimelineStartAC = AC.currentTime;
-    let sched = AC.currentTime + 0.05;
+    const t0 = AC.currentTime;
+    let sched =
+      anchorAC != null && anchorAC >= t0 + 1e-4 ? anchorAC : t0 + PG_PLAY_SCHEDULE_AHEAD;
+
+    const iterations = loop ? PG_LOOP_SCHEDULE_BATCH : 1;
     let lastSrc = null;
-    for (let i = startIdx; i < segments.length; i++) {
-      const buf = segments[i].buf;
-      const src = AC.createBufferSource();
-      src.buffer = buf;
-      src.playbackRate.value = rate;
-      src.connect(bus);
-      const off = i === startIdx ? Math.max(0, innerOff) : 0;
-      const wall = (buf.duration - off) / absR;
-      src.start(sched, off);
-      pgSources.push(src);
-      sched += wall;
-      lastSrc = src;
+    for (let iter = 0; iter < iterations; iter++) {
+      const iStart = iter === 0 ? startIdx : 0;
+      for (let i = iStart; i < segments.length; i++) {
+        const buf = segments[i].buf;
+        const src = AC.createBufferSource();
+        src.buffer = buf;
+        src.playbackRate.value = rate;
+        src.connect(bus);
+        const off = iter === 0 && i === startIdx ? Math.max(0, innerOff) : 0;
+        const wall = (buf.duration - off) / absR;
+        src.start(sched, off);
+        pgSources.push(src);
+        sched += wall;
+        lastSrc = src;
+      }
     }
+    const batchEndAC = sched;
     if (lastSrc) {
       lastSrc.onended = () => {
         if (transportToken !== pgTransportToken) return;
         if (!pgSources.length || pgSources[pgSources.length - 1] !== lastSrc) return;
         if (loop) {
-          playFrom(0);
+          playFrom(0, batchEndAC);
         } else {
           stopPlaygroundPlayback();
         }
@@ -1895,7 +1958,13 @@ function tickPlaygroundSeek() {
     pos = Math.min(pos, pgTotalDur);
   } else {
     const elapsed = (AC.currentTime - pgTimelineStartAC) * rate;
-    pos = Math.min(pgTimelineOffset + elapsed, pgTotalDur);
+    let raw = pgTimelineOffset + elapsed;
+    if (playLoop && pgTotalDur > 1e-9) {
+      raw = ((raw % pgTotalDur) + pgTotalDur) % pgTotalDur;
+      pos = raw;
+    } else {
+      pos = Math.min(raw, pgTotalDur);
+    }
   }
   const pct = pgTotalDur > 0 ? (pos / pgTotalDur) * 100 : 0;
   seekFill.style.width = `${pct}%`;

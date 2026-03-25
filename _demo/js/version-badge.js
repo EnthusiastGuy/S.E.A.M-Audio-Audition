@@ -98,7 +98,7 @@
         n +
         ' commit' +
         (n === 1 ? '' : 's') +
-        '.';
+        '. Commit count: ' + remoteRev + '.';
       aria += '. ' + title;
     } else {
       title =

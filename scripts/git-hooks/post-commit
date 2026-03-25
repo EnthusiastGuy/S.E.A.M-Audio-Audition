@@ -1,4 +1,0 @@
-#!/bin/sh
-# Installed by scripts/install-git-hooks.sh — sync revision to current commit count.
-ROOT="$(git rev-parse --show-toplevel)"
-exec sh "$ROOT/scripts/update-revision.sh" head

@@ -1,4 +1,0 @@
-#!/bin/sh
-# After pull/merge — match revision to new HEAD count.
-ROOT="$(git rev-parse --show-toplevel)"
-exec sh "$ROOT/scripts/update-revision.sh" head

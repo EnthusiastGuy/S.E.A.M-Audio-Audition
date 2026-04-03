@@ -2,6 +2,7 @@
    S.E.A.M — Pack demo video export (MP4 via WebCodecs + mp4-muxer)
    Fully offline: frames rendered to canvas → VideoEncoder → muxer,
    audio → AudioEncoder → muxer, combined into MP4.
+   Post-pass: Nero-style chpl chapters in moov.udta (VLC, many players).
    No WASM, no Workers, no fetch — works on file:// and http(s).
    ============================================================= */
 
@@ -641,6 +642,149 @@
       throw new Error(`AAC encoding (${AUDIO_CODEC_STR}) is not supported by this browser.`);
   }
 
+  /* ── MP4 chapter metadata (Nero chpl in moov > udta) ─────── */
+
+  function mp4ReadU32BE(u8, o) {
+    return (
+      (u8[o] << 24) | (u8[o + 1] << 16) | (u8[o + 2] << 8) | u8[o + 3]
+    ) >>> 0;
+  }
+
+  function mp4WriteU32BE(u8, o, v) {
+    u8[o] = (v >>> 24) & 255;
+    u8[o + 1] = (v >>> 16) & 255;
+    u8[o + 2] = (v >>> 8) & 255;
+    u8[o + 3] = v & 255;
+  }
+
+  function mp4ReadFourCC(u8, o) {
+    return String.fromCharCode(u8[o], u8[o + 1], u8[o + 2], u8[o + 3]);
+  }
+
+  const MP4_BOX_CONTAINERS = new Set([
+    'moov',
+    'trak',
+    'mdia',
+    'minf',
+    'stbl',
+    'dinf',
+    'edts',
+    'tref',
+    'udta',
+    'mvex',
+  ]);
+
+  function mp4FindTopLevelBox(u8, type) {
+    let p = 0;
+    while (p + 8 <= u8.length) {
+      const sz = mp4ReadU32BE(u8, p);
+      if (sz < 8) return null;
+      if (p + sz > u8.length) return null;
+      if (mp4ReadFourCC(u8, p + 4) === type) return { offset: p, size: sz };
+      p += sz;
+    }
+    return null;
+  }
+
+  /** Add delta to every chunk offset in stco/co64 under [moovStart, moovEnd). */
+  function mp4PatchChunkOffsetsInMoov(u8, moovStart, moovEnd, delta) {
+    function walk(boxStart, boxEnd) {
+      let p = boxStart + 8;
+      while (p + 8 <= boxEnd) {
+        const sz = mp4ReadU32BE(u8, p);
+        if (sz < 8 || p + sz > boxEnd) break;
+        const typ = mp4ReadFourCC(u8, p + 4);
+        if (typ === 'stco' && sz >= 16) {
+          const n = mp4ReadU32BE(u8, p + 12);
+          let o = p + 16;
+          for (let i = 0; i < n && o + 4 <= p + sz; i++) {
+            mp4WriteU32BE(u8, o, mp4ReadU32BE(u8, o) + delta);
+            o += 4;
+          }
+        } else if (typ === 'co64' && sz >= 16) {
+          const n = mp4ReadU32BE(u8, p + 12);
+          let o = p + 16;
+          for (let i = 0; i < n && o + 8 <= p + sz; i++) {
+            const hi = BigInt(mp4ReadU32BE(u8, o));
+            const lo = BigInt(mp4ReadU32BE(u8, o + 4));
+            let val = (hi << 32n) | lo;
+            val += BigInt(delta);
+            mp4WriteU32BE(u8, o, Number((val >> 32n) & 0xffffffffn));
+            mp4WriteU32BE(u8, o + 4, Number(val & 0xffffffffn));
+            o += 8;
+          }
+        } else if (MP4_BOX_CONTAINERS.has(typ)) {
+          walk(p, p + sz);
+        }
+        p += sz;
+      }
+    }
+    walk(moovStart, moovEnd);
+  }
+
+  /**
+   * Build moov > udta > chpl (Nero-style, FFmpeg-compatible).
+   * Inner layout matches libavformat mov_read_chpl: version 0, flags, uint8 count,
+   * then per chapter uint64 start (100ns), uint8 title len, UTF-8 title.
+   * @param {{ startSec: number, title: string }[]} chapters
+   */
+  function buildUdtaChplBox(chapters) {
+    const enc = new TextEncoder();
+    const body = [];
+    body.push(0, 0, 0, 0);
+    let list = chapters;
+    if (list.length > 255) list = list.slice(0, 255);
+    body.push(list.length);
+    for (const ch of list) {
+      let t = BigInt(Math.round(Math.max(0, ch.startSec) * 1e7));
+      for (let b = 7; b >= 0; b--) {
+        body.push(Number((t >> BigInt(b * 8)) & 0xffn));
+      }
+      let titleBytes = enc.encode(String(ch.title || '').trim());
+      if (titleBytes.length > 255) titleBytes = titleBytes.slice(0, 255);
+      body.push(titleBytes.length);
+      for (let i = 0; i < titleBytes.length; i++) body.push(titleBytes[i]);
+    }
+    const inner = new Uint8Array(body);
+    const chplSize = 8 + inner.byteLength;
+    const udtaSize = 8 + chplSize;
+    const out = new Uint8Array(udtaSize);
+    mp4WriteU32BE(out, 0, udtaSize);
+    out[4] = 0x75;
+    out[5] = 0x64;
+    out[6] = 0x74;
+    out[7] = 0x61;
+    mp4WriteU32BE(out, 8, chplSize);
+    out[12] = 0x63;
+    out[13] = 0x68;
+    out[14] = 0x70;
+    out[15] = 0x6c;
+    out.set(inner, 16);
+    return out;
+  }
+
+  /**
+   * Append udta+chpl inside moov (before following top-level box), fix stco/co64.
+   */
+  function injectNeroChaptersIntoMp4(arrayBuffer, chapters) {
+    if (!chapters || chapters.length === 0) return arrayBuffer;
+    const src = new Uint8Array(arrayBuffer);
+    const moov = mp4FindTopLevelBox(src, 'moov');
+    if (!moov) return arrayBuffer;
+    const insertAt = moov.offset + moov.size;
+    if (insertAt > src.length) return arrayBuffer;
+    const udta = buildUdtaChplBox(chapters);
+    const delta = udta.byteLength;
+    const out = new Uint8Array(src.length + delta);
+    out.set(src.subarray(0, insertAt));
+    out.set(udta, insertAt);
+    out.set(src.subarray(insertAt), insertAt + delta);
+    const newMoovSize = moov.size + delta;
+    mp4WriteU32BE(out, moov.offset, newMoovSize);
+    mp4PatchChunkOffsetsInMoov(out, moov.offset, moov.offset + newMoovSize, delta);
+    return out.buffer.slice(0, out.length);
+  }
+
   /* ── offline MP4 render via WebCodecs + mp4-muxer ───────── */
 
   function chooseFps(durationSec) {
@@ -794,12 +938,19 @@
     audioEncoder.close();
     if (audioError) throw new Error(`Audio encoder error: ${audioError.message || audioError}`);
 
-    /* ---- Phase 3: Finalize ---- */
+    /* ---- Phase 3: Finalize + Nero chapters (moov.udta.chpl) ---- */
     showProgress(95, 'Finalizing MP4…');
     muxer.finalize();
 
+    showProgress(97, 'Embedding chapter markers…');
+    const chapterList = plans.map((p, i) => ({
+      startSec: p.tStartSec,
+      title: playlistChipLabel(i + 1, rawTitles[i]),
+    }));
+    const mp4WithChapters = injectNeroChaptersIntoMp4(target.buffer, chapterList);
+
     showProgress(100, 'Done!');
-    return new Blob([target.buffer], { type: 'video/mp4' });
+    return new Blob([mp4WithChapters], { type: 'video/mp4' });
   }
 
   /* ── export orchestrator ────────────────────────────────── */
@@ -901,7 +1052,7 @@
 
       if (hint) {
         hint.textContent =
-          'Export complete (MP4 + description.txt for YouTube chapters). ' +
+          'Export complete (MP4 with embedded chapters + description.txt for YouTube). ' +
           (bg
             ? ''
             : 'No background image: add img/video_background.jpg and run npm run vendor:video-bg in _demo. ') +

@@ -118,14 +118,15 @@ function showPreviewTooLongMessage(totalSecs) {
   );
 }
 
-async function buildPreviewBuffer(fmt, songIdx) {
+async function buildPreviewBuffer(fmt, songIdx, opts) {
   const key = `${fmt}_${songIdx}`;
   const ps = STATE.players[key];
   if (!ps) return null;
 
   const signature = getPreviewSignature(ps);
   const totalDur = getSequenceTotalDuration(ps);
-  if (totalDur > PREVIEW_MAX_SECONDS) {
+  const skipCap = opts && opts.skipDurationCap;
+  if (!skipCap && totalDur > PREVIEW_MAX_SECONDS) {
     showPreviewTooLongMessage(totalDur);
     return null;
   }
@@ -156,9 +157,12 @@ async function buildPreviewBuffer(fmt, songIdx) {
   }
 
   const rendered = await offline.startRendering();
-  ps.previewBuffer = rendered;
-  ps.previewSignature = signature;
-  ps.previewNeedsRebuild = false;
+  const exportOnly = opts && opts.exportOnly;
+  if (!exportOnly) {
+    ps.previewBuffer = rendered;
+    ps.previewSignature = signature;
+    ps.previewNeedsRebuild = false;
+  }
   return rendered;
 }
 

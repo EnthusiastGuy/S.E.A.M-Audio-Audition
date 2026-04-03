@@ -21,6 +21,7 @@
 <link rel="stylesheet" href="css/modal.css" />
 <link rel="stylesheet" href="css/utilities.css" />
 <link rel="stylesheet" href="css/brick-playground.css" />
+<link rel="stylesheet" href="css/demo-video-export.css" />
 </head>
 <body>
 
@@ -179,6 +180,18 @@
         <div class="memory-estimate-line memory-estimate-sub" id="memory-estimate-cap"></div>
       </div>
     </div>
+    <div class="tools-card" role="region" aria-label="Tools">
+      <div class="knob-label">TOOLS</div>
+      <button
+        type="button"
+        class="tools-demo-video-btn"
+        id="btn-demo-video"
+        title="Build a crossfaded MP4 montage of the current playlist"
+      >Make video demo</button>
+      <p class="tools-card-hint" id="demo-video-hint">
+        Renders a 720p MP4 montage (20–30s per song) with crossfades, background, playlist, and waveforms. Uses browser hardware encoding (WebCodecs). Works offline.
+      </p>
+    </div>
   </div>
 
   <!-- Main scrollable content -->
@@ -235,6 +248,10 @@
       <div class="app-loading-ring"></div>
     </div>
     <p class="app-loading-label" id="app-loading-label">Loading…</p>
+    <div class="app-loading-progress-wrap hidden" id="app-loading-progress-wrap" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+      <div class="app-loading-progress-bar" id="app-loading-progress-bar"></div>
+      <span class="app-loading-progress-pct" id="app-loading-progress-pct"></span>
+    </div>
     <p class="app-loading-subtitle" id="app-loading-subtitle">Warming up the audio goblins...</p>
   </div>
 </div>
@@ -553,5 +570,7 @@
 <script src="js/setup-viz.js"></script>
 <script src="js/memory-panel.js"></script>
 <script src="js/app.js"></script>
+<script src="vendor/mp4-muxer.js"></script>
+<script src="js/demo-video-export.js"></script>
 </body>
 </html>

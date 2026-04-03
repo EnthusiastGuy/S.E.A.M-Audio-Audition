@@ -1098,18 +1098,16 @@ async function discoverSongs(rootHandle) {
       if (song.mainHandle) {
         jobs.push(() =>
           getFileDuration(song.mainHandle).then(d => {
-            song.duration = d;
             song._mainFileDur = d;
           })
         );
-      } else if (song.parts.length > 0) {
-        for (const p of song.parts) {
-          jobs.push(() =>
-            getFileDuration(p.handle).then(d => {
-              p._dur = d;
-            })
-          );
-        }
+      }
+      for (const p of song.parts) {
+        jobs.push(() =>
+          getFileDuration(p.handle).then(d => {
+            p._dur = d;
+          })
+        );
       }
     }
     const totalJobs = jobs.length;
@@ -1136,7 +1134,7 @@ async function discoverSongs(rootHandle) {
     );
 
     for (const song of STATE.songs.wav) {
-      if (!song.mainHandle && song.parts.length > 0) {
+      if (song.parts.length > 0) {
         song.duration = song.parts.reduce((acc, p) => acc + (p._dur || 0), 0);
       }
     }

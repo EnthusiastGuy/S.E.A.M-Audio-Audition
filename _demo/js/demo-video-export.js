@@ -1131,7 +1131,11 @@
         excerpts.push(ex);
         meta.push({
           title: song.name,
-          fullDurationSec: song.duration || composite.duration,
+          // Prefer decoded composite length (accurate); song.duration can lag wrong metadata for main+parts before preload.
+          fullDurationSec:
+            composite && Number.isFinite(composite.duration) && composite.duration > 0
+              ? composite.duration
+              : song.duration || 0,
           partCount: song.parts?.length ?? 0,
           excerptOffsetSec: pick.t0,
           excerptLenSec: pick.clipLen,

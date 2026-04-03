@@ -87,18 +87,13 @@ function syncSongCompositeDuration(fmt, songIdx) {
   const key = `${fmt}_${songIdx}`;
   const ps = STATE.players[key];
   const song = STATE.songs[fmt]?.[songIdx];
-  if (!ps || !song) return;
+  if (!ps || !song || !song.parts.length) return;
 
   let total = 0;
-  for (const item of ps.sequence) {
-    const pi = item.partIndex;
-    let d = ps.partDurations[pi];
-    if (isFinite(d) && d > 0) {
-      total += d;
-      continue;
-    }
-    if (pi === -1) d = song._mainFileDur ?? song.duration ?? 0;
-    else d = song.parts[pi]?._dur || 0;
+  for (let i = 0; i < song.parts.length; i++) {
+    let d = ps.partDurations[i];
+    if (isFinite(d) && d > 0) { total += d; continue; }
+    d = song.parts[i]?._dur || 0;
     if (isFinite(d) && d > 0) total += d;
   }
 

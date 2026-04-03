@@ -106,6 +106,96 @@
     setTimeout(() => URL.revokeObjectURL(url), 8000);
   }
 
+  /**
+   * Parse root folder names like "2301. Dark whimsy & Alchemy" or "12) Pack title".
+   * @returns {{ seriesNum: string|null, packTitle: string, raw: string }}
+   */
+  function parsePackFolderName(rootName) {
+    const raw = String(rootName || '').trim();
+    if (!raw) return { seriesNum: null, packTitle: '', raw: '' };
+    const dot = raw.match(/^\s*(\d{1,6})\s*[\.)]\s+(.+)$/);
+    if (dot) return { seriesNum: dot[1], packTitle: dot[2].trim(), raw };
+    const paren = raw.match(/^\s*(\d{1,6})\s*\)\s+(.+)$/);
+    if (paren) return { seriesNum: paren[1], packTitle: paren[2].trim(), raw };
+    const dash = raw.match(/^\s*(\d{1,6})\s*[-–—]\s+(.+)$/);
+    if (dash) return { seriesNum: dash[1], packTitle: dash[2].trim(), raw };
+    return { seriesNum: null, packTitle: raw, raw };
+  }
+
+  /** Draw centered lines (y = top of first line); returns y below last line. */
+  function wrapTextCentered(ctx, text, centerX, y, maxW, lineH) {
+    ctx.textBaseline = 'top';
+    const words = String(text || '').split(/\s+/).filter(Boolean);
+    let line = '';
+    let yy = y;
+    for (let i = 0; i < words.length; i++) {
+      const test = line ? `${line} ${words[i]}` : words[i];
+      if (ctx.measureText(test).width > maxW && line) {
+        const w = ctx.measureText(line).width;
+        ctx.fillText(line, centerX - w / 2, yy);
+        line = words[i];
+        yy += lineH;
+      } else {
+        line = test;
+      }
+    }
+    if (line) {
+      const w = ctx.measureText(line).width;
+      ctx.fillText(line, centerX - w / 2, yy);
+      yy += lineH;
+    }
+    return yy;
+  }
+
+  /** Draw wrapped left-aligned text (y = top of first line); returns y below last line. */
+  function wrapTextReturnBottom(ctx, text, x, y, maxW, lineH) {
+    ctx.textBaseline = 'top';
+    const words = String(text || '').split(/\s+/).filter(Boolean);
+    let line = '';
+    let yy = y;
+    for (let i = 0; i < words.length; i++) {
+      const test = line ? `${line} ${words[i]}` : words[i];
+      if (ctx.measureText(test).width > maxW && line) {
+        ctx.fillText(line, x, yy);
+        line = words[i];
+        yy += lineH;
+      } else {
+        line = test;
+      }
+    }
+    if (line) {
+      ctx.fillText(line, x, yy);
+      yy += lineH;
+    }
+    return yy;
+  }
+
+  function drawSeriesNumberBadge(ctx, x, y, w, h, seriesNum, s) {
+    const r = Math.max(6, Math.round(8 * s));
+    ctx.save();
+    const g = ctx.createLinearGradient(x, y, x + w, y + h);
+    g.addColorStop(0, 'rgba(233, 69, 96, 0.92)');
+    g.addColorStop(1, 'rgba(78, 205, 196, 0.55)');
+    ctx.fillStyle = g;
+    drawRoundedRect(ctx, x, y, w, h, r);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.28)';
+    ctx.lineWidth = Math.max(1, s);
+    ctx.stroke();
+
+    ctx.fillStyle = 'rgba(255,255,255,0.88)';
+    ctx.font = `700 ${Math.max(10, Math.round(11 * s))}px "Space Mono", monospace`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('SERIES', x + w / 2, y + h * 0.32);
+
+    ctx.fillStyle = '#fff';
+    ctx.font = `800 ${Math.max(22, Math.round(34 * s))}px "Space Mono", monospace`;
+    ctx.fillText(String(seriesNum), x + w / 2, y + h * 0.62);
+    ctx.textAlign = 'left';
+    ctx.restore();
+  }
+
   /* ── progress bar ───────────────────────────────────────── */
 
   function showProgress(pct, label) {
@@ -292,7 +382,7 @@
    * file:// or cross-origin without CORS). Only draw backgrounds from fetch→Blob→
    * ImageBitmap (same-origin http(s)), or use the gradient fallback.
    */
-  function drawFrame(ctx, tSec, plans, currentIdx, totalPieces, bgBitmap, rawTitles) {
+  function drawFrame(ctx, tSec, plans, currentIdx, totalPieces, bgBitmap, rawTitles, packMeta, exportYear) {
     const W = CANVAS_W;
     const H = CANVAS_H;
     ctx.fillStyle = '#0d1117';
@@ -351,50 +441,83 @@
       x += tw + Math.round(8 * s);
     });
 
+    const seriesNum = packMeta && packMeta.seriesNum;
+    const packLine = (packMeta && (packMeta.packTitle || packMeta.raw)) || '';
+    const footerBand = Math.round(
+      (seriesNum && packLine ? 268 : packLine ? 212 : seriesNum ? 132 : 68) * s,
+    );
     const blockTop = pad + playlistH + Math.round(24 * s);
-    const blockH = H - blockTop - pad - Math.round(52 * s);
+    const blockH = H - blockTop - pad - footerBand;
     const titleW = Math.round(W * 0.38);
     const waveX = pad + titleW + Math.round(20 * s);
     const waveW = W - waveX - pad;
     const waveY = blockTop;
     const waveH = Math.min(Math.round(200 * s), blockH - Math.round(40 * s));
 
+    const titleX = pad;
+    const titleMaxW = Math.max(
+      Math.round(120 * s),
+      waveX - titleX - Math.round(16 * s),
+    );
+
     const plan = plans[currentIdx];
     if (plan) {
-      const titleMaxChars = Math.round(42 * s);
-      const titleEllipsis = Math.max(20, Math.round(40 * s));
-      ctx.fillStyle = 'rgba(255,255,255,0.92)';
-      ctx.font = `700 ${Math.round(26 * s)}px "Space Mono", monospace`;
       const rawName = plan.title;
-      const name =
-        rawName.length > titleMaxChars ? `${rawName.slice(0, titleEllipsis)}…` : rawName;
-      wrapText(ctx, name, pad, blockTop + Math.round(24 * s), titleW - Math.round(8 * s), Math.round(30 * s));
+      ctx.fillStyle = 'rgba(255,255,255,0.94)';
+      ctx.font = `700 ${Math.round(32 * s)}px "Space Mono", monospace`;
+      const titleLineH = Math.round(38 * s);
+      const titleTop = blockTop + Math.round(18 * s);
+      const afterTitle = wrapTextReturnBottom(ctx, rawName, titleX, titleTop, titleMaxW, titleLineH);
 
-      ctx.fillStyle = 'rgba(200, 210, 230, 0.75)';
+      ctx.fillStyle = 'rgba(200, 210, 230, 0.78)';
       ctx.font = `${Math.round(14 * s)}px "Space Mono", monospace`;
-      ctx.fillText(`Full track ${fmtMinSec(plan.fullDurationSec)}`, pad, blockTop + Math.round(104 * s));
-      ctx.fillText(`Timeline parts in folder: ${plan.partCount}`, pad, blockTop + Math.round(128 * s));
-      ctx.fillText(`Demo segment ${currentIdx + 1} of ${totalPieces}`, pad, blockTop + Math.round(152 * s));
+      ctx.textBaseline = 'top';
+      let metaY = afterTitle + Math.round(14 * s);
+      ctx.fillText(`Full track ${fmtMinSec(plan.fullDurationSec)}`, titleX, metaY);
+      metaY += Math.round(24 * s);
+      ctx.fillText(`Timeline parts in folder: ${plan.partCount}`, titleX, metaY);
+      metaY += Math.round(24 * s);
+      ctx.fillText(`Demo segment ${currentIdx + 1} of ${totalPieces}`, titleX, metaY);
 
       drawWaveform(ctx, plan.peaks, waveX, waveY, waveW, waveH, plan.localT(tSec));
     }
-  }
 
-  function wrapText(ctx, text, x, y, maxW, lineH) {
-    const words = text.split(/\s+/);
-    let line = '';
-    let yy = y;
-    for (let i = 0; i < words.length; i++) {
-      const test = line ? `${line} ${words[i]}` : words[i];
-      if (ctx.measureText(test).width > maxW && line) {
-        ctx.fillText(line, x, yy);
-        line = words[i];
-        yy += lineH;
-      } else {
-        line = test;
-      }
+    const creditReserve = Math.round(38 * s);
+    const footerTop = H - footerBand;
+    let footY = footerTop + Math.round(12 * s);
+
+    if (seriesNum) {
+      const badgeW = Math.round(132 * s);
+      const badgeH = Math.round(88 * s);
+      drawSeriesNumberBadge(ctx, (W - badgeW) / 2, footY, badgeW, badgeH, seriesNum, s);
+      footY += badgeH + Math.round(14 * s);
     }
-    if (line) ctx.fillText(line, x, yy);
+
+    if (packLine) {
+      const packFontPx = Math.round(39 * s);
+      const packLineH = Math.round(47 * s);
+      ctx.font = `600 ${packFontPx}px "Space Mono", monospace`;
+      ctx.fillStyle = 'rgba(225, 232, 245, 0.58)';
+      ctx.textBaseline = 'top';
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(
+        pad * 2,
+        footY,
+        W - pad * 4,
+        Math.max(0, H - creditReserve - footY - Math.round(4 * s)),
+      );
+      ctx.clip();
+      wrapTextCentered(ctx, packLine, W / 2, footY, W - pad * 4, packLineH);
+      ctx.restore();
+    }
+
+    ctx.font = `${Math.round(11 * s)}px "Space Mono", monospace`;
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.26)';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillText(`EnthusiastGuy ${exportYear}`, W - pad, H - Math.round(14 * s));
+    ctx.textAlign = 'left';
   }
 
   function drawWaveform(ctx, peaks, x, y, w, h, progress01) {
@@ -531,6 +654,8 @@
     const fps = chooseFps(duration);
     const totalVideoFrames = Math.ceil(duration * fps);
     const totalPieces = plans.length;
+    const packMeta = parsePackFolderName(STATE.rootDir?.name);
+    const exportYear = new Date().getFullYear();
 
     const audioChannels = Math.min(2, mixedBuffer.numberOfChannels);
     const audioRate = mixedBuffer.sampleRate;
@@ -593,7 +718,7 @@
 
       const tSec = f / fps;
       const idx = currentPlanIndex(tSec, plans);
-      drawFrame(ctx, tSec, plans, idx, totalPieces, bgBitmap, rawTitles);
+      drawFrame(ctx, tSec, plans, idx, totalPieces, bgBitmap, rawTitles, packMeta, exportYear);
 
       const vf = new VideoFrame(canvas, { timestamp: Math.round(tSec * 1e6) });
       videoEncoder.encode(vf, { keyFrame: f % keyInterval === 0 });

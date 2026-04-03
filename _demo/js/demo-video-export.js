@@ -21,8 +21,31 @@
   const AUDIO_CODEC_STR = 'mp4a.40.2';
   /** Scale UI from original 1280-wide layout so text/chips stay readable at 1080p. */
   const VIDEO_UI_SCALE = CANVAS_W / 1280;
+  /** Hold wallpaper + pack hero; music starts after this (2–3 s from export seed). */
+  const INTRO_TRANS_SEC = 1.25;
+  const OUTRO_FADE_SEC = 1;
+  const OUTRO_BLACK_SEC = 1;
 
   /* ── tiny helpers ────────────────────────────────────────── */
+
+  function easeInOutCubic(t) {
+    const x = Math.min(1, Math.max(0, t));
+    return x < 0.5 ? 4 * x * x * x : 1 - (-2 * x + 2) ** 3 / 2;
+  }
+
+  function smoothstep01(x) {
+    const t = Math.min(1, Math.max(0, x));
+    return t * t * (3 - 2 * t);
+  }
+
+  function lerp(a, b, t) {
+    return a + (b - a) * t;
+  }
+
+  /** Deterministic intro hold in [2, 3) seconds from pack hash. */
+  function introHoldSecFromSeed(seedU32) {
+    return 2 + ((seedU32 >>> 0) % 1000) / 1000;
+  }
 
   function vendorUrl(rel) {
     return new URL(rel, document.baseURI).href;
@@ -79,14 +102,16 @@
     return `${orderOneBased}. ${t}`;
   }
 
-  function buildYoutubeDescription(plans, totalDurationSec) {
+  function buildYoutubeDescription(plans, totalDurationSec, introLeadInSec) {
+    const lead = Math.max(0, introLeadInSec || 0);
     const lines = [
       'YouTube chapter links (paste into the video description). The first line should start at 0:00.',
       '',
     ];
+    lines.push(`${formatYoutubeChapterTimestamp(0)} Intro`);
     for (let i = 0; i < plans.length; i++) {
       const p = plans[i];
-      const ts = formatYoutubeChapterTimestamp(p.tStartSec);
+      const ts = formatYoutubeChapterTimestamp(lead + p.tStartSec);
       lines.push(`${ts} ${p.title}`);
     }
     lines.push('');
@@ -171,8 +196,9 @@
     return yy;
   }
 
-  function drawSeriesNumberBadge(ctx, x, y, w, h, seriesNum, s) {
-    const r = Math.max(6, Math.round(8 * s));
+  function drawSeriesNumberBadge(ctx, x, y, w, h, seriesNum, s, fontScale = 1) {
+    const fs = Math.max(0.5, fontScale);
+    const r = Math.max(6, Math.round(8 * s * fs));
     ctx.save();
     const g = ctx.createLinearGradient(x, y, x + w, y + h);
     g.addColorStop(0, 'rgba(233, 69, 96, 0.92)');
@@ -181,17 +207,17 @@
     drawRoundedRect(ctx, x, y, w, h, r);
     ctx.fill();
     ctx.strokeStyle = 'rgba(255,255,255,0.28)';
-    ctx.lineWidth = Math.max(1, s);
+    ctx.lineWidth = Math.max(1, s * fs);
     ctx.stroke();
 
     ctx.fillStyle = 'rgba(255,255,255,0.88)';
-    ctx.font = `700 ${Math.max(10, Math.round(11 * s))}px "Space Mono", monospace`;
+    ctx.font = `700 ${Math.max(10, Math.round(11 * s * fs))}px "Space Mono", monospace`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText('SERIES', x + w / 2, y + h * 0.32);
 
     ctx.fillStyle = '#fff';
-    ctx.font = `800 ${Math.max(22, Math.round(34 * s))}px "Space Mono", monospace`;
+    ctx.font = `800 ${Math.max(22, Math.round(34 * s * fs))}px "Space Mono", monospace`;
     ctx.fillText(String(seriesNum), x + w / 2, y + h * 0.62);
     ctx.textAlign = 'left';
     ctx.restore();
@@ -383,9 +409,19 @@
    * file:// or cross-origin without CORS). Only draw backgrounds from fetch→Blob→
    * ImageBitmap (same-origin http(s)), or use the gradient fallback.
    */
-  function drawFrame(ctx, tSec, plans, currentIdx, totalPieces, bgBitmap, rawTitles, packMeta, exportYear) {
+  /**
+   * @param {object} timeline introHoldSec, introTransSec, musicDurSec, outroFadeSec, outroBlackSec
+   */
+  function drawFrame(ctx, tVideo, plans, currentIdx, totalPieces, bgBitmap, rawTitles, packMeta, exportYear, timeline) {
     const W = CANVAS_W;
     const H = CANVAS_H;
+    const {
+      introHoldSec,
+      introTransSec,
+      musicDurSec,
+      outroFadeSec,
+    } = timeline;
+
     ctx.fillStyle = '#0d1117';
     ctx.fillRect(0, 0, W, H);
 
@@ -413,6 +449,18 @@
     const s = VIDEO_UI_SCALE;
     const pad = Math.round(40 * s);
     const playlistH = Math.round(H * 0.14);
+    const transEnd = introHoldSec + introTransSec;
+    let layoutBlend = 1;
+    if (tVideo < introHoldSec) layoutBlend = 0;
+    else if (tVideo < transEnd) layoutBlend = easeInOutCubic((tVideo - introHoldSec) / introTransSec);
+
+    const mainUiAlpha =
+      tVideo < introHoldSec ? 0 : tVideo < transEnd ? easeInOutCubic((tVideo - introHoldSec) / introTransSec) : 1;
+
+    const tMix = Math.min(Math.max(tVideo - introHoldSec, 0), Math.max(1e-9, musicDurSec));
+
+    ctx.save();
+    ctx.globalAlpha = mainUiAlpha;
     ctx.font = `600 ${Math.round(15 * s)}px "Space Mono", monospace`;
     ctx.textBaseline = 'middle';
 
@@ -480,45 +528,82 @@
       metaY += Math.round(24 * s);
       ctx.fillText(`Demo segment ${currentIdx + 1} of ${totalPieces}`, titleX, metaY);
 
-      drawWaveform(ctx, plan.peaks, waveX, waveY, waveW, waveH, plan.localT(tSec));
+      drawWaveform(ctx, plan.peaks, waveX, waveY, waveW, waveH, plan.localT(tMix));
     }
+    ctx.restore();
 
     const creditReserve = Math.round(38 * s);
     const footerTop = H - footerBand;
-    let footY = footerTop + Math.round(12 * s);
+    const finalFootY0 = footerTop + Math.round(12 * s);
+    const finalBadgeW = Math.round(132 * s);
+    const finalBadgeH = Math.round(88 * s);
+    const finalBadgeX = (W - finalBadgeW) / 2;
+    const finalBadgeY = finalFootY0;
+    let finalTitleTop = finalFootY0;
+    if (seriesNum) finalTitleTop = finalBadgeY + finalBadgeH + Math.round(14 * s);
+
+    const introBadgeW = Math.round(158 * s);
+    const introBadgeH = Math.round(104 * s);
+    const introBadgeX = (W - introBadgeW) / 2;
+    const introBadgeY = Math.round(H * 0.3);
+    const introTitleY0 = seriesNum ? introBadgeY + introBadgeH + Math.round(22 * s) : Math.round(H * 0.38);
+    const introPackFont = Math.round(56 * s);
+    const introPackLineH = Math.round(64 * s);
+    const finalPackFont = Math.round(39 * s);
+    const finalPackLineH = Math.round(47 * s);
+
+    const badgeW = seriesNum ? lerp(introBadgeW, finalBadgeW, layoutBlend) : 0;
+    const badgeH = seriesNum ? lerp(introBadgeH, finalBadgeH, layoutBlend) : 0;
+    const badgeX = seriesNum ? lerp(introBadgeX, finalBadgeX, layoutBlend) : 0;
+    const badgeY = seriesNum ? lerp(introBadgeY, finalBadgeY, layoutBlend) : 0;
+    const badgeFontScale = seriesNum ? lerp(1.12, 1, layoutBlend) : 1;
+    const packFontPx = Math.round(lerp(introPackFont, finalPackFont, layoutBlend));
+    const packLineH = Math.round(lerp(introPackLineH, finalPackLineH, layoutBlend));
+    const titleTopLerp = lerp(introTitleY0, finalTitleTop, layoutBlend);
 
     if (seriesNum) {
-      const badgeW = Math.round(132 * s);
-      const badgeH = Math.round(88 * s);
-      drawSeriesNumberBadge(ctx, (W - badgeW) / 2, footY, badgeW, badgeH, seriesNum, s);
-      footY += badgeH + Math.round(14 * s);
+      drawSeriesNumberBadge(ctx, badgeX, badgeY, badgeW, badgeH, seriesNum, s, badgeFontScale);
     }
 
     if (packLine) {
-      const packFontPx = Math.round(39 * s);
-      const packLineH = Math.round(47 * s);
       ctx.font = `600 ${packFontPx}px "Space Mono", monospace`;
-      ctx.fillStyle = 'rgba(225, 232, 245, 0.58)';
+      ctx.fillStyle = 'rgba(225, 232, 245, 0.62)';
       ctx.textBaseline = 'top';
       ctx.save();
       ctx.beginPath();
       ctx.rect(
         pad * 2,
-        footY,
+        titleTopLerp,
         W - pad * 4,
-        Math.max(0, H - creditReserve - footY - Math.round(4 * s)),
+        Math.max(0, H - creditReserve - titleTopLerp - Math.round(4 * s)),
       );
       ctx.clip();
-      wrapTextCentered(ctx, packLine, W / 2, footY, W - pad * 4, packLineH);
+      wrapTextCentered(ctx, packLine, W / 2, titleTopLerp, W - pad * 4, packLineH);
       ctx.restore();
     }
 
+    ctx.save();
+    ctx.globalAlpha = mainUiAlpha;
     ctx.font = `${Math.round(11 * s)}px "Space Mono", monospace`;
     ctx.fillStyle = 'rgba(255, 255, 255, 0.26)';
     ctx.textAlign = 'right';
     ctx.textBaseline = 'alphabetic';
     ctx.fillText(`EnthusiastGuy ${exportYear}`, W - pad, H - Math.round(14 * s));
     ctx.textAlign = 'left';
+    ctx.restore();
+
+    const tMusic = tVideo - introHoldSec;
+    const fadeDur = Math.min(outroFadeSec, musicDurSec > 1e-6 ? musicDurSec : outroFadeSec);
+    const fadeStart = Math.max(0, musicDurSec - fadeDur);
+    let blackA = 0;
+    if (musicDurSec > 0 && tMusic >= fadeStart) {
+      blackA = easeInOutCubic((tMusic - fadeStart) / fadeDur);
+    }
+    if (tMusic >= musicDurSec) blackA = 1;
+    if (blackA > 0) {
+      ctx.fillStyle = `rgba(0,0,0,${blackA})`;
+      ctx.fillRect(0, 0, W, H);
+    }
   }
 
   function drawWaveform(ctx, peaks, x, y, w, h, progress01) {
@@ -793,16 +878,42 @@
     return MAX_FPS;
   }
 
-  async function renderMp4Offline(mixedBuffer, plans, rawTitles, bgBitmap) {
-    const duration = mixedBuffer.duration;
-    const fps = chooseFps(duration);
-    const totalVideoFrames = Math.ceil(duration * fps);
+  function audioGainAtVideoTime(tVideo, timeline) {
+    const { introHoldSec, introTransSec, musicDurSec, outroFadeSec } = timeline;
+    const t = tVideo - introHoldSec;
+    if (t <= 0) return 0;
+    if (t >= musicDurSec) return 0;
+    let g = 1;
+    if (t < introTransSec) g *= smoothstep01(t / introTransSec);
+    const fadeDur = Math.min(outroFadeSec, musicDurSec > 1e-6 ? musicDurSec : outroFadeSec);
+    const fadeStart = Math.max(0, musicDurSec - fadeDur);
+    if (musicDurSec > 0 && t > fadeStart) {
+      g *= 1 - smoothstep01(Math.min(1, (t - fadeStart) / fadeDur));
+    }
+    return g;
+  }
+
+  async function renderMp4Offline(mixedBuffer, plans, rawTitles, bgBitmap, introHoldSec) {
+    const musicDurSec = mixedBuffer.duration;
+    const totalVideoSec = introHoldSec + musicDurSec + OUTRO_BLACK_SEC;
+    const fps = chooseFps(totalVideoSec);
+    const totalVideoFrames = Math.max(1, Math.ceil(totalVideoSec * fps));
     const totalPieces = plans.length;
     const packMeta = parsePackFolderName(STATE.rootDir?.name);
     const exportYear = new Date().getFullYear();
 
+    const timeline = {
+      introHoldSec,
+      introTransSec: INTRO_TRANS_SEC,
+      musicDurSec,
+      outroFadeSec: OUTRO_FADE_SEC,
+      outroBlackSec: OUTRO_BLACK_SEC,
+    };
+
     const audioChannels = Math.min(2, mixedBuffer.numberOfChannels);
     const audioRate = mixedBuffer.sampleRate;
+    const mixLen = mixedBuffer.length;
+    const mixChCount = mixedBuffer.numberOfChannels;
 
     const { Muxer, ArrayBufferTarget } = Mp4Muxer;
     const target = new ArrayBufferTarget();
@@ -860,11 +971,12 @@
     for (let f = 0; f < totalVideoFrames; f++) {
       if (videoError) throw new Error(`Video encoder error: ${videoError.message || videoError}`);
 
-      const tSec = f / fps;
-      const idx = currentPlanIndex(tSec, plans);
-      drawFrame(ctx, tSec, plans, idx, totalPieces, bgBitmap, rawTitles, packMeta, exportYear);
+      const tVideo = f / fps;
+      const tMix = Math.min(Math.max(tVideo - introHoldSec, 0), musicDurSec);
+      const idx = currentPlanIndex(tMix, plans);
+      drawFrame(ctx, tVideo, plans, idx, totalPieces, bgBitmap, rawTitles, packMeta, exportYear, timeline);
 
-      const vf = new VideoFrame(canvas, { timestamp: Math.round(tSec * 1e6) });
+      const vf = new VideoFrame(canvas, { timestamp: Math.round(tVideo * 1e6) });
       videoEncoder.encode(vf, { keyFrame: f % keyInterval === 0 });
       vf.close();
 
@@ -892,10 +1004,10 @@
     videoEncoder.close();
     if (videoError) throw new Error(`Video encoder error: ${videoError.message || videoError}`);
 
-    /* ---- Phase 2: Encode audio ---- */
+    /* ---- Phase 2: Encode audio (intro silence, shaped mix, tail silence) ---- */
     showProgress(65, 'Encoding audio…');
     const audioChunkSize = 8192;
-    const totalAudioSamples = mixedBuffer.length;
+    const totalAudioSamples = Math.ceil(totalVideoSec * audioRate);
     let audioSamplesDone = 0;
 
     for (let offset = 0; offset < totalAudioSamples; offset += audioChunkSize) {
@@ -905,9 +1017,20 @@
       const timestamp = Math.round((offset / audioRate) * 1e6);
 
       const planar = new Float32Array(length * audioChannels);
-      for (let ch = 0; ch < audioChannels; ch++) {
-        const chanData = mixedBuffer.getChannelData(Math.min(ch, mixedBuffer.numberOfChannels - 1));
-        planar.set(chanData.subarray(offset, offset + length), ch * length);
+      for (let frame = 0; frame < length; frame++) {
+        const globalIdx = offset + frame;
+        const tVideo = globalIdx / audioRate;
+        const gain = audioGainAtVideoTime(tVideo, timeline);
+        const tMix = tVideo - introHoldSec;
+        for (let ch = 0; ch < audioChannels; ch++) {
+          let v = 0;
+          if (gain > 0 && tMix >= 0 && tMix < musicDurSec) {
+            const srcIdx = Math.min(mixLen - 1, Math.floor(tMix * audioRate));
+            const chanData = mixedBuffer.getChannelData(Math.min(ch, mixChCount - 1));
+            v = chanData[srcIdx] * gain;
+          }
+          planar[ch * length + frame] = v;
+        }
       }
 
       const ad = new AudioData({
@@ -943,10 +1066,13 @@
     muxer.finalize();
 
     showProgress(97, 'Embedding chapter markers…');
-    const chapterList = plans.map((p, i) => ({
-      startSec: p.tStartSec,
-      title: playlistChipLabel(i + 1, rawTitles[i]),
-    }));
+    const chapterList = [
+      { startSec: 0, title: 'Intro' },
+      ...plans.map((p, i) => ({
+        startSec: introHoldSec + p.tStartSec,
+        title: playlistChipLabel(i + 1, rawTitles[i]),
+      })),
+    ];
     const mp4WithChapters = injectNeroChaptersIntoMp4(target.buffer, chapterList);
 
     showProgress(100, 'Done!');
@@ -981,6 +1107,7 @@
 
       const seed = hashStr(STATE.rootDir?.name || 'pack') ^ (order.length * 2654435761);
       const rnd = mulberry32(seed >>> 0);
+      const introHoldSec = introHoldSecFromSeed(seed >>> 0);
 
       /* ---- gather audio excerpts ---- */
       const excerpts = [];
@@ -1038,13 +1165,14 @@
       const bg = await loadExportSafeBackgroundBitmap();
 
       /* ---- full offline render ---- */
-      const mp4Blob = await renderMp4Offline(mixedBuffer, plans, rawTitles, bg);
+      const mp4Blob = await renderMp4Offline(mixedBuffer, plans, rawTitles, bg, introHoldSec);
 
       /* ---- downloads: MP4 + YouTube description ---- */
       const baseName = sanitizeFileName(STATE.rootDir?.name || 'S.E.A.M_demo');
       triggerDownload(mp4Blob, `${baseName}_demo.mp4`);
 
-      const descText = buildYoutubeDescription(plans, mixedBuffer.duration);
+      const totalVideoDur = introHoldSec + mixedBuffer.duration + OUTRO_BLACK_SEC;
+      const descText = buildYoutubeDescription(plans, totalVideoDur, introHoldSec);
       const descBlob = new Blob([descText], { type: 'text/plain;charset=utf-8' });
       requestAnimationFrame(() => {
         triggerDownload(descBlob, `${baseName}_demo_description.txt`);

@@ -1,2 +1,2 @@
 /* Auto-updated by scripts/update-revision.sh (or .ps1) together with ../revision.txt */
-window.__SEAM_REVISION = 137;
+window.__SEAM_REVISION = 138;

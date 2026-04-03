@@ -9,14 +9,17 @@
   'use strict';
 
   const FMT = 'wav';
-  const CANVAS_W = 1280;
-  const CANVAS_H = 720;
-  const PEAK_BINS = 360;
+  const CANVAS_W = 1920;
+  const CANVAS_H = 1080;
+  const PEAK_BINS = 540;
   const MAX_FPS = 24;
-  const VIDEO_BITRATE = 5_000_000;
+  const VIDEO_BITRATE = 8_000_000;
   const AUDIO_BITRATE = 192_000;
-  const VIDEO_CODEC_STR = 'avc1.4D401F';
+  /** Main profile, level 4.0 — required for 1920×1080 (level 3.1 caps below 1080p). */
+  const VIDEO_CODEC_STR = 'avc1.4d4028';
   const AUDIO_CODEC_STR = 'mp4a.40.2';
+  /** Scale UI from original 1280-wide layout so text/chips stay readable at 1080p. */
+  const VIDEO_UI_SCALE = CANVAS_W / 1280;
 
   /* ── tiny helpers ────────────────────────────────────────── */
 
@@ -316,55 +319,62 @@
     ctx.fillStyle = 'rgba(8, 12, 22, 0.48)';
     ctx.fillRect(0, 0, W, H);
 
-    const pad = 40;
+    const s = VIDEO_UI_SCALE;
+    const pad = Math.round(40 * s);
     const playlistH = Math.round(H * 0.14);
-    ctx.font = '600 15px "Space Mono", monospace';
+    ctx.font = `600 ${Math.round(15 * s)}px "Space Mono", monospace`;
     ctx.textBaseline = 'middle';
 
     let x = pad;
-    let y = pad + 8;
-    const chipH = 28;
-    const chipPad = 8;
+    let y = pad + Math.round(8 * s);
+    const chipH = Math.round(28 * s);
+    const chipPad = Math.round(8 * s);
+    const chipGap = Math.round(6 * s);
+    const chipR = Math.max(4, Math.round(6 * s));
     rawTitles.forEach((rawTitle, i) => {
       const label = playlistChipLabel(i + 1, rawTitle);
       const tw = Math.min(ctx.measureText(label).width + chipPad * 2, W - pad * 2);
       if (x + tw > W - pad) {
         x = pad;
-        y += chipH + 6;
+        y += chipH + chipGap;
       }
       if (y > pad + playlistH) return;
       const active = i === currentIdx;
       ctx.fillStyle = active ? 'rgba(233, 69, 96, 0.95)' : 'rgba(45, 65, 112, 0.55)';
-      drawRoundedRect(ctx, x, y, tw, chipH, 6);
+      drawRoundedRect(ctx, x, y, tw, chipH, chipR);
       ctx.fill();
       ctx.strokeStyle = active ? 'rgba(255,255,255,0.35)' : 'rgba(255,255,255,0.12)';
-      ctx.lineWidth = 1;
+      ctx.lineWidth = Math.max(1, s);
       ctx.stroke();
       ctx.fillStyle = active ? '#fff' : 'rgba(230, 235, 245, 0.85)';
       ctx.fillText(label, x + chipPad, y + chipH / 2);
-      x += tw + 8;
+      x += tw + Math.round(8 * s);
     });
 
-    const blockTop = pad + playlistH + 24;
-    const blockH = H - blockTop - pad - 52;
+    const blockTop = pad + playlistH + Math.round(24 * s);
+    const blockH = H - blockTop - pad - Math.round(52 * s);
     const titleW = Math.round(W * 0.38);
-    const waveX = pad + titleW + 20;
+    const waveX = pad + titleW + Math.round(20 * s);
     const waveW = W - waveX - pad;
     const waveY = blockTop;
-    const waveH = Math.min(200, blockH - 40);
+    const waveH = Math.min(Math.round(200 * s), blockH - Math.round(40 * s));
 
     const plan = plans[currentIdx];
     if (plan) {
+      const titleMaxChars = Math.round(42 * s);
+      const titleEllipsis = Math.max(20, Math.round(40 * s));
       ctx.fillStyle = 'rgba(255,255,255,0.92)';
-      ctx.font = '700 26px "Space Mono", monospace';
-      const name = plan.title.length > 42 ? `${plan.title.slice(0, 40)}…` : plan.title;
-      wrapText(ctx, name, pad, blockTop + 24, titleW - 8, 30);
+      ctx.font = `700 ${Math.round(26 * s)}px "Space Mono", monospace`;
+      const rawName = plan.title;
+      const name =
+        rawName.length > titleMaxChars ? `${rawName.slice(0, titleEllipsis)}…` : rawName;
+      wrapText(ctx, name, pad, blockTop + Math.round(24 * s), titleW - Math.round(8 * s), Math.round(30 * s));
 
       ctx.fillStyle = 'rgba(200, 210, 230, 0.75)';
-      ctx.font = '14px "Space Mono", monospace';
-      ctx.fillText(`Full track ${fmtMinSec(plan.fullDurationSec)}`, pad, blockTop + 104);
-      ctx.fillText(`Timeline parts in folder: ${plan.partCount}`, pad, blockTop + 128);
-      ctx.fillText(`Demo segment ${currentIdx + 1} of ${totalPieces}`, pad, blockTop + 152);
+      ctx.font = `${Math.round(14 * s)}px "Space Mono", monospace`;
+      ctx.fillText(`Full track ${fmtMinSec(plan.fullDurationSec)}`, pad, blockTop + Math.round(104 * s));
+      ctx.fillText(`Timeline parts in folder: ${plan.partCount}`, pad, blockTop + Math.round(128 * s));
+      ctx.fillText(`Demo segment ${currentIdx + 1} of ${totalPieces}`, pad, blockTop + Math.round(152 * s));
 
       drawWaveform(ctx, plan.peaks, waveX, waveY, waveW, waveH, plan.localT(tSec));
     }
@@ -390,17 +400,20 @@
   function drawWaveform(ctx, peaks, x, y, w, h, progress01) {
     const n = peaks.length;
     if (n <= 0) return;
+    const s = VIDEO_UI_SCALE;
+    const wr = Math.max(6, Math.round(10 * s));
+    const vm = Math.max(2, Math.round(4 * s));
     ctx.fillStyle = 'rgba(22, 33, 62, 0.9)';
-    drawRoundedRect(ctx, x, y, w, h, 10);
+    drawRoundedRect(ctx, x, y, w, h, wr);
     ctx.fill();
     ctx.strokeStyle = 'rgba(78, 205, 196, 0.25)';
-    ctx.lineWidth = 1;
+    ctx.lineWidth = Math.max(1, s);
     ctx.stroke();
 
     const mid = y + h / 2;
     const amp = h * 0.42;
     ctx.strokeStyle = 'rgba(78, 205, 196, 0.85)';
-    ctx.lineWidth = 1.25;
+    ctx.lineWidth = Math.max(1, Math.round(1.25 * s));
     ctx.beginPath();
     for (let i = 0; i < n; i++) {
       const px = x + (i / (n - 1)) * w;
@@ -411,6 +424,7 @@
     ctx.stroke();
 
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+    ctx.lineWidth = Math.max(1, s);
     ctx.beginPath();
     for (let i = 0; i < n; i++) {
       const px = x + (i / (n - 1)) * w;
@@ -422,10 +436,10 @@
 
     const playX = x + progress01 * w;
     ctx.strokeStyle = 'rgba(233, 69, 96, 0.95)';
-    ctx.lineWidth = 2;
+    ctx.lineWidth = Math.max(2, Math.round(2 * s));
     ctx.beginPath();
-    ctx.moveTo(playX, y + 4);
-    ctx.lineTo(playX, y + h - 4);
+    ctx.moveTo(playX, y + vm);
+    ctx.lineTo(playX, y + h - vm);
     ctx.stroke();
   }
 

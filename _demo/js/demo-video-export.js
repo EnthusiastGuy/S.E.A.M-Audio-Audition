@@ -50,6 +50,59 @@
     return `${m}:${String(s).padStart(2, '0')}`;
   }
 
+  /** YouTube clickable chapters: first line must be 0:00; use M:SS or H:MM:SS. */
+  function formatYoutubeChapterTimestamp(sec) {
+    const s = Math.max(0, Math.floor(sec + 1e-6));
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const r = s % 60;
+    if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(r).padStart(2, '0')}`;
+    return `${m}:${String(r).padStart(2, '0')}`;
+  }
+
+  /** True if the folder name already starts with an index like "1. ", "12) ", "3.Song". */
+  function titleAlreadyHasLeadingIndex(name) {
+    const s = String(name || '').trim();
+    if (/^\d{1,4}[\.)]\s/.test(s)) return true;
+    if (/^\d{1,4}[\.)]\S/.test(s)) return true;
+    if (/^\d{1,4}\s*[-–—]\s/.test(s)) return true;
+    return false;
+  }
+
+  function playlistChipLabel(orderOneBased, rawTitle) {
+    const t = String(rawTitle || '').trim();
+    if (titleAlreadyHasLeadingIndex(t)) return t;
+    return `${orderOneBased}. ${t}`;
+  }
+
+  function buildYoutubeDescription(plans, totalDurationSec) {
+    const lines = [
+      'YouTube chapter links (paste into the video description). The first line should start at 0:00.',
+      '',
+    ];
+    for (let i = 0; i < plans.length; i++) {
+      const p = plans[i];
+      const ts = formatYoutubeChapterTimestamp(p.tStartSec);
+      lines.push(`${ts} ${p.title}`);
+    }
+    lines.push('');
+    if (isFinite(totalDurationSec) && totalDurationSec > 0) {
+      lines.push(`Total demo length: ${fmtMinSec(totalDurationSec)}`);
+    }
+    return lines.join('\n');
+  }
+
+  function triggerDownload(blob, filename) {
+    const a = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 8000);
+  }
+
   /* ── progress bar ───────────────────────────────────────── */
 
   function showProgress(pct, label) {
@@ -236,7 +289,7 @@
    * file:// or cross-origin without CORS). Only draw backgrounds from fetch→Blob→
    * ImageBitmap (same-origin http(s)), or use the gradient fallback.
    */
-  function drawFrame(ctx, tSec, plans, currentIdx, totalPieces, bgBitmap, titles) {
+  function drawFrame(ctx, tSec, plans, currentIdx, totalPieces, bgBitmap, rawTitles) {
     const W = CANVAS_W;
     const H = CANVAS_H;
     ctx.fillStyle = '#0d1117';
@@ -251,14 +304,16 @@
       const dx = (W - dw) / 2;
       const dy = (H - dh) / 2;
       ctx.save();
-      ctx.globalAlpha = 0.35;
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.globalAlpha = 0.62;
       ctx.drawImage(bgBitmap, dx, dy, dw, dh);
       ctx.restore();
     } else {
       drawFallbackVideoBackground(ctx, W, H);
     }
 
-    ctx.fillStyle = 'rgba(8, 12, 22, 0.72)';
+    ctx.fillStyle = 'rgba(8, 12, 22, 0.48)';
     ctx.fillRect(0, 0, W, H);
 
     const pad = 40;
@@ -270,8 +325,8 @@
     let y = pad + 8;
     const chipH = 28;
     const chipPad = 8;
-    titles.forEach((title, i) => {
-      const label = `${i + 1}. ${title}`;
+    rawTitles.forEach((rawTitle, i) => {
+      const label = playlistChipLabel(i + 1, rawTitle);
       const tw = Math.min(ctx.measureText(label).width + chipPad * 2, W - pad * 2);
       if (x + tw > W - pad) {
         x = pad;
@@ -383,15 +438,39 @@
   }
 
   /* ── background image (must not taint canvas for VideoFrame) ─ */
+  /* file:// blocks fetch() to local files; use embedded data URL from vendor/seam-video-bg-embed.js (npm run vendor:video-bg). */
+
+  async function bitmapFromDataUrl(dataUrl) {
+    if (!dataUrl || typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/')) return null;
+    try {
+      const res = await fetch(dataUrl);
+      const blob = await res.blob();
+      if (!blob || blob.size === 0) return null;
+      return await createImageBitmap(blob);
+    } catch (_) {
+      return null;
+    }
+  }
 
   async function loadExportSafeBackgroundBitmap() {
     if (typeof createImageBitmap !== 'function') return null;
+
+    const embedded =
+      typeof globalThis.SEAM_VIDEO_BG_DATA_URL === 'string'
+        ? globalThis.SEAM_VIDEO_BG_DATA_URL
+        : '';
+    const fromEmbed = await bitmapFromDataUrl(embedded);
+    if (fromEmbed) return fromEmbed;
+
     const url = vendorUrl('img/video_background.jpg');
     try {
       const res = await fetch(url);
       if (!res.ok) return null;
-      const blob = await res.blob();
-      if (!blob || blob.size === 0) return null;
+      const ct = (res.headers.get('content-type') || '').split(';')[0].trim();
+      const buf = await res.arrayBuffer();
+      if (!buf || buf.byteLength === 0) return null;
+      const mime = ct && ct !== 'application/octet-stream' ? ct : 'image/jpeg';
+      const blob = new Blob([buf], { type: mime });
       return await createImageBitmap(blob);
     } catch (_) {
       return null;
@@ -433,7 +512,7 @@
     return MAX_FPS;
   }
 
-  async function renderMp4Offline(mixedBuffer, plans, titles, bgBitmap) {
+  async function renderMp4Offline(mixedBuffer, plans, rawTitles, bgBitmap) {
     const duration = mixedBuffer.duration;
     const fps = chooseFps(duration);
     const totalVideoFrames = Math.ceil(duration * fps);
@@ -500,7 +579,7 @@
 
       const tSec = f / fps;
       const idx = currentPlanIndex(tSec, plans);
-      drawFrame(ctx, tSec, plans, idx, totalPieces, bgBitmap, titles);
+      drawFrame(ctx, tSec, plans, idx, totalPieces, bgBitmap, rawTitles);
 
       const vf = new VideoFrame(canvas, { timestamp: Math.round(tSec * 1e6) });
       videoEncoder.encode(vf, { keyFrame: f % keyInterval === 0 });
@@ -663,25 +742,32 @@
           return Math.min(1, Math.max(0, local / this.excerptLenSec));
         },
       }));
-      const titles = meta.map((m) => m.title);
+      const rawTitles = meta.map((m) => m.title);
 
       showProgress(4, 'Loading background image…');
       const bg = await loadExportSafeBackgroundBitmap();
 
       /* ---- full offline render ---- */
-      const mp4Blob = await renderMp4Offline(mixedBuffer, plans, titles, bg);
+      const mp4Blob = await renderMp4Offline(mixedBuffer, plans, rawTitles, bg);
 
-      /* ---- trigger download ---- */
+      /* ---- downloads: MP4 + YouTube description ---- */
       const baseName = sanitizeFileName(STATE.rootDir?.name || 'S.E.A.M_demo');
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(mp4Blob);
-      a.download = `${baseName}_demo.mp4`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+      triggerDownload(mp4Blob, `${baseName}_demo.mp4`);
 
-      if (hint) hint.textContent = 'Export complete! Run again for different random excerpts.';
+      const descText = buildYoutubeDescription(plans, mixedBuffer.duration);
+      const descBlob = new Blob([descText], { type: 'text/plain;charset=utf-8' });
+      requestAnimationFrame(() => {
+        triggerDownload(descBlob, `${baseName}_demo_description.txt`);
+      });
+
+      if (hint) {
+        hint.textContent =
+          'Export complete (MP4 + description.txt for YouTube chapters). ' +
+          (bg
+            ? ''
+            : 'No background image: add img/video_background.jpg and run npm run vendor:video-bg in _demo. ') +
+          'Run again for different random excerpts.';
+      }
     } catch (err) {
       console.error('[demo-video-export]', err);
       alert(err?.message || String(err));

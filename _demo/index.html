@@ -189,7 +189,7 @@
         title="Build a crossfaded MP4 montage of the current playlist"
       >Make video demo</button>
       <p class="tools-card-hint" id="demo-video-hint">
-        Renders a 720p MP4 montage (20–30s per song) with crossfades, background, playlist, and waveforms. Uses browser hardware encoding (WebCodecs). Works offline.
+        Renders a 720p MP4 plus a YouTube-style description.txt (clickable chapter timestamps). Background uses an embedded copy of the JPG (see npm run vendor:video-bg). Uses WebCodecs.
       </p>
     </div>
   </div>
@@ -571,6 +571,7 @@
 <script src="js/memory-panel.js"></script>
 <script src="js/app.js"></script>
 <script src="vendor/mp4-muxer.js"></script>
+<script src="vendor/seam-video-bg-embed.js"></script>
 <script src="js/demo-video-export.js"></script>
 </body>
 </html>

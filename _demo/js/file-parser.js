@@ -34,6 +34,20 @@ function parseFilename(fname) {
   return { songName: base.trim(), partNum: null, nexts: [], base, ext };
 }
 
+// ─── SONG FOLDER ORDER ───────────────────────────────────────
+/** Leading integer at start of folder name (e.g. "1. Title" → 1). */
+function leadingPrefixNumber(name) {
+  const m = String(name).match(/^\s*(\d+)/);
+  return m ? parseInt(m[1], 10) : null;
+}
+
+function compareSongFolderNames(a, b) {
+  const na = leadingPrefixNumber(a.name);
+  const nb = leadingPrefixNumber(b.name);
+  if (na != null && nb != null && na !== nb) return na - nb;
+  return a.name.localeCompare(b.name);
+}
+
 // ─── SCAN DIRECTORY ──────────────────────────────────────────
 async function scanFormat(formatHandle) {
   const songMap = new Map();
@@ -81,7 +95,7 @@ async function scanFormat(formatHandle) {
     });
   }
 
-  result.sort((a,b) => a.name.localeCompare(b.name));
+  result.sort(compareSongFolderNames);
   result.forEach((s,i) => { s.key = `${i}_${s.name}`; });
 
   return result;

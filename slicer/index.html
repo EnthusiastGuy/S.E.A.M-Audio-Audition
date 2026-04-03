@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>S.E.A.M Audio Audition — Slicer</title>
+    <link rel="stylesheet" href="./css/styles.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header class="slicer-header">
+        <div class="brand">
+          <div class="brand-title">S.E.A.M Audio Audition</div>
+          <div class="brand-subtitle">Slicer (local-only)</div>
+        </div>
+        <div class="status-pill" id="statusPill">Waiting for audio…</div>
+      </header>
+
+      <main class="slicer-main">
+        <section id="startScreen" class="screen">
+          <h1 class="screen-title">Upload a 24-bit WAV file</h1>
+          <p class="screen-subtitle">
+            Start by loading a 24-bit WAV. The slicer runs fully local in your browser and no audio is uploaded.
+          </p>
+
+          <div class="upload-card">
+            <label class="upload-dropzone" for="fileInput">
+              <div class="upload-dropzone-title">Choose 24-bit WAV</div>
+              <div class="upload-dropzone-sub">or drag-and-drop onto this box</div>
+              <div class="upload-dropzone-hint">No uploads to any server.</div>
+            </label>
+            <input id="fileInput" type="file" accept=".wav,audio/wav" />
+
+            <div class="upload-actions">
+              <button id="loadBtn" type="button" class="btn btn-primary" disabled>Load</button>
+            </div>
+          </div>
+
+        </section>
+
+        <section id="workspaceScreen" class="screen hidden">
+          <div class="workspace-shell">
+            <div class="workspace-menu">
+              <div class="workspace-menu-top">
+                <div class="menu-group">
+                  <button id="btnToolsMenu" class="btn btn-tertiary menu-btn" type="button">Tools</button>
+                  <div id="toolsDropdown" class="menu-dropdown hidden">
+                    <button id="toolSliceLoop" class="menu-item active" type="button">Slice and loop</button>
+                  </div>
+                </div>
+                <div class="file-meta">
+                  <div class="file-line"><span class="label">File:</span> <span id="fileName">—</span></div>
+                  <div class="file-line"><span class="label">Bit depth:</span> <span id="fileBitDepth">—</span></div>
+                  <div class="file-line"><span class="label">Duration:</span> <span id="fileDuration">—</span></div>
+                  <div class="file-line"><span class="label">Channels:</span> <span id="fileChannels">—</span></div>
+                  <div class="file-line"><span class="label">Sample rate:</span> <span id="fileSampleRate">—</span></div>
+                </div>
+              </div>
+            </div>
+
+            <div id="toolPanelSliceLoop" class="tool-panel">
+              <div class="tool-title">Slice and loop</div>
+              <div class="tool-subtitle">Set markers with buttons or by dragging directly on the timeline.</div>
+              <div class="markers-controls vertical">
+                <button id="setMarkerA" class="btn btn-marker" type="button">Set A</button>
+                <button id="setMarkerB" class="btn btn-marker" type="button">Set B</button>
+                <button id="setMarkerC" class="btn btn-marker" type="button">Set C</button>
+                <button id="setMarkerX" class="btn btn-marker" type="button">Set X</button>
+                <button id="setMarkerY" class="btn btn-marker" type="button">Set Y</button>
+                <div class="marker-planner" id="markerPlannerText">
+                  Click the timeline after selecting which marker to set.
+                </div>
+              </div>
+              <div class="markers-inputs vertical" id="markersInputs">
+                <!-- filled by JS -->
+              </div>
+              <div class="markers-warning" id="markersWarning" role="status" aria-live="polite"></div>
+              <div class="presets-panel">
+                <div class="presets-title">Marker presets</div>
+                <div class="presets-create-row">
+                  <input
+                    id="presetNameInput"
+                    class="preset-name-input"
+                    type="text"
+                    placeholder="Preset name"
+                  />
+                  <button id="savePresetBtn" class="btn btn-secondary" type="button">Save Current Markers</button>
+                </div>
+                <div id="presetList" class="preset-list"></div>
+              </div>
+              <div class="tool-actions">
+                <div class="btn-group">
+                  <button id="btnPlayOriginal" class="btn btn-secondary" type="button" disabled>Play Original</button>
+                  <button id="btnStop" class="btn btn-secondary" type="button" disabled>Stop</button>
+                </div>
+                <div class="btn-group">
+                  <button id="btnPlayIntro" class="btn btn-secondary" type="button" disabled>Play 1</button>
+                  <button id="btnPlayLoop" class="btn btn-secondary" type="button" disabled>Play 2</button>
+                  <button id="btnPlayOutro" class="btn btn-secondary" type="button" disabled>Play 3</button>
+                </div>
+                <div class="btn-group">
+                  <button id="btnRenderAll" class="btn btn-primary" type="button" disabled>Render Parts</button>
+                  <button id="btnExportAll" class="btn btn-primary" type="button" disabled>Export 1/2/3 (WAV)</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="timeline-pane">
+              <div class="timeline-wrap">
+                <div class="timeline-toolbar">
+                  <button id="btnZoomOut" class="btn btn-tertiary" type="button" title="Zoom out">Zoom -</button>
+                  <button id="btnZoomIn" class="btn btn-tertiary" type="button" title="Zoom in">Zoom +</button>
+                  <div class="timeline-hint">
+                    <span class="mono">Wheel</span> zoom (hold <span class="mono">Ctrl</span>), drag to pan, drag markers to adjust.
+                  </div>
+                </div>
+                <div id="timelineContainer" class="timeline-container">
+                  <canvas id="timelineCanvas" class="timeline-canvas"></canvas>
+                  <div id="timelineOverlayHint" class="timeline-overlay-hint">Upload a file to begin.</div>
+                </div>
+                <div class="render-summary" id="renderSummary">
+                  Render output names will be based on your uploaded file.
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="./js/utils.js"></script>
+    <script src="./js/wavExport.js"></script>
+    <script src="./js/audioLoader.js"></script>
+    <script src="./js/slicingEngine.js"></script>
+    <script src="./js/timeline.js"></script>
+    <script src="./js/main.js"></script>
+  </body>
+</html>
+

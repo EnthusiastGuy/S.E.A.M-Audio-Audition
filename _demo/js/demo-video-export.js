@@ -17,6 +17,133 @@
   let demoPreviewReflowListenersBound = false;
 
   const MP4_EXPORT_FONT_STORAGE_KEY = 'seam_mp4_export_font_css';
+  const MP4_EXPORT_FONT_SIZES_STORAGE_KEY = 'seam_mp4_export_font_size_tiers';
+
+  /** Per-zone export text scale: normal = 1; steps ±10% / ±15% cumulative from normal. */
+  const MP4_FONT_SIZE_TIER_MUL = {
+    smallest: 0.75,
+    smaller: 0.9,
+    normal: 1,
+    bigger: 1.1,
+    biggest: 1.25,
+  };
+
+  const MP4_FONT_SIZE_SELECT_IDS = {
+    playlist: 'select-mp4-fs-playlist',
+    audioTitle: 'select-mp4-fs-audio-title',
+    audioDetails: 'select-mp4-fs-audio-details',
+    seriesNumber: 'select-mp4-fs-series-number',
+    seriesTitle: 'select-mp4-fs-series-title',
+    seriesSubtitle: 'select-mp4-fs-series-subtitle',
+    watermark: 'select-mp4-fs-watermark',
+  };
+
+  function defaultMp4FontSizeTiersRecord() {
+    return {
+      playlist: 'normal',
+      audioTitle: 'normal',
+      audioDetails: 'normal',
+      seriesNumber: 'normal',
+      seriesTitle: 'normal',
+      seriesSubtitle: 'normal',
+      watermark: 'normal',
+    };
+  }
+
+  function mp4FontSizeTierToMul(tier) {
+    return MP4_FONT_SIZE_TIER_MUL[tier] ?? 1;
+  }
+
+  function parseMp4FontSizesStorageJson(str) {
+    let o;
+    try {
+      o = JSON.parse(str);
+    } catch {
+      return null;
+    }
+    if (!o || typeof o !== 'object') return null;
+    const base = defaultMp4FontSizeTiersRecord();
+    for (const k of Object.keys(MP4_FONT_SIZE_SELECT_IDS)) {
+      const v = o[k];
+      if (typeof v === 'string' && MP4_FONT_SIZE_TIER_MUL[v] != null) base[k] = v;
+    }
+    return base;
+  }
+
+  function mp4FontSizesStorageLoad() {
+    const raw = mp4FontStorageGet(MP4_EXPORT_FONT_SIZES_STORAGE_KEY);
+    return parseMp4FontSizesStorageJson(raw) || defaultMp4FontSizeTiersRecord();
+  }
+
+  function mp4FontSizesStorageSave(rec) {
+    try {
+      localStorage.setItem(MP4_EXPORT_FONT_SIZES_STORAGE_KEY, JSON.stringify(rec));
+    } catch {
+      /* private mode / blocked */
+    }
+  }
+
+  function readMp4FontSizeTiersFromUi() {
+    const rec = defaultMp4FontSizeTiersRecord();
+    for (const key of Object.keys(MP4_FONT_SIZE_SELECT_IDS)) {
+      const el = document.getElementById(MP4_FONT_SIZE_SELECT_IDS[key]);
+      const v = el && el.value;
+      if (v && MP4_FONT_SIZE_TIER_MUL[v] != null) rec[key] = v;
+    }
+    return rec;
+  }
+
+  function mp4FontSizeTiersToMuls(rec) {
+    return {
+      playlist: mp4FontSizeTierToMul(rec.playlist),
+      audioTitle: mp4FontSizeTierToMul(rec.audioTitle),
+      audioDetails: mp4FontSizeTierToMul(rec.audioDetails),
+      seriesNumber: mp4FontSizeTierToMul(rec.seriesNumber),
+      seriesTitle: mp4FontSizeTierToMul(rec.seriesTitle),
+      seriesSubtitle: mp4FontSizeTierToMul(rec.seriesSubtitle),
+      watermark: mp4FontSizeTierToMul(rec.watermark),
+    };
+  }
+
+  function readMp4FontSizeMultipliersFromUi() {
+    return mp4FontSizeTiersToMuls(readMp4FontSizeTiersFromUi());
+  }
+
+  function fillMp4FontSizeTierSelect(el) {
+    if (!el || el.dataset.seamMp4FsFilled) return;
+    el.dataset.seamMp4FsFilled = '1';
+    const tiers = [
+      ['smallest', 'Smallest (−25%)'],
+      ['smaller', 'Smaller (−10%)'],
+      ['normal', 'Normal'],
+      ['bigger', 'Bigger (+10%)'],
+      ['biggest', 'Biggest (+25%)'],
+    ];
+    for (const [value, label] of tiers) {
+      const opt = document.createElement('option');
+      opt.value = value;
+      opt.textContent = label;
+      el.appendChild(opt);
+    }
+  }
+
+  function initMp4ExportFontSizeControls() {
+    const saved = mp4FontSizesStorageLoad();
+    for (const key of Object.keys(MP4_FONT_SIZE_SELECT_IDS)) {
+      const el = document.getElementById(MP4_FONT_SIZE_SELECT_IDS[key]);
+      if (!el) continue;
+      fillMp4FontSizeTierSelect(el);
+      const v = saved[key];
+      if (v && MP4_FONT_SIZE_TIER_MUL[v] != null) el.value = v;
+      if (!el.dataset.seamMp4FsListen) {
+        el.dataset.seamMp4FsListen = '1';
+        el.addEventListener('change', () => {
+          mp4FontSizesStorageSave(readMp4FontSizeTiersFromUi());
+          scheduleDemoPreviewRender();
+        });
+      }
+    }
+  }
 
   /** Bundled OFL faces (see css/mp4-export-fonts.css); `value` must match @font-face font-family. */
   const MP4_EXPORT_FONTS = [
@@ -384,8 +511,9 @@
     return yy;
   }
 
-  function drawSeriesNumberBadge(ctx, x, y, w, h, seriesNum, s, fontScale, fontFace) {
+  function drawSeriesNumberBadge(ctx, x, y, w, h, seriesNum, s, fontScale, fontFace, seriesNumberSizeMul = 1) {
     const fs = Math.max(0.5, fontScale);
+    const snm = Math.max(0.35, seriesNumberSizeMul);
     const stack = mp4VideoFontStack(fontFace);
     const r = Math.max(8, Math.round(10 * s * fs));
     ctx.save();
@@ -405,7 +533,7 @@
     ctx.stroke();
 
     ctx.fillStyle = '#f4f7ff';
-    ctx.font = `800 ${Math.max(24, Math.round(36 * s * fs))}px ${stack}`;
+    ctx.font = `800 ${Math.max(24, Math.round(36 * s * fs * snm))}px ${stack}`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(String(seriesNum), x + w / 2, y + h / 2);
@@ -604,14 +732,15 @@
    * grow the reserved band (and nudge the main block down) when extra rows are needed.
    * @returns {{ lastChipTopY: number, chipH: number }}
    */
-  function measurePlaylistChipLayout(ctx, rawTitles, W, pad, s, stack) {
-    ctx.font = `600 ${Math.round(15 * s)}px ${stack}`;
+  function measurePlaylistChipLayout(ctx, rawTitles, W, pad, s, stack, playlistMul = 1) {
+    const pm = Math.max(0.35, playlistMul);
+    ctx.font = `600 ${Math.round(15 * s * pm)}px ${stack}`;
     let x = pad;
-    let y = pad + Math.round(8 * s);
-    const chipH = Math.round(28 * s);
-    const chipPad = Math.round(8 * s);
-    const chipGap = Math.round(6 * s);
-    const chipXGap = Math.round(8 * s);
+    let y = pad + Math.round(8 * s * pm);
+    const chipH = Math.round(28 * s * pm);
+    const chipPad = Math.round(8 * s * pm);
+    const chipGap = Math.round(6 * s * pm);
+    const chipXGap = Math.round(8 * s * pm);
     rawTitles.forEach((rawTitle, i) => {
       const label = playlistChipLabel(i + 1, rawTitle);
       const tw = Math.min(ctx.measureText(label).width + chipPad * 2, W - pad * 2);
@@ -627,8 +756,9 @@
   /**
    * @param {object} timeline introHoldSec, introTransSec, musicDurSec, outroFadeSec, outroBlackSec
    * @param {{ text: string, year: number|null }} cornerCredit bottom-right label; year appended when non-null
+   * @param {object} [fontSizeMuls] per-zone multipliers (1 = default); from readMp4FontSizeMultipliersFromUi()
    */
-  function drawFrame(ctx, tVideo, plans, currentIdx, totalPieces, bgBitmap, rawTitles, packMeta, cornerCredit, timeline, fontFace, packStatsLine) {
+  function drawFrame(ctx, tVideo, plans, currentIdx, totalPieces, bgBitmap, rawTitles, packMeta, cornerCredit, timeline, fontFace, packStatsLine, fontSizeMuls) {
     const W = CANVAS_W;
     const H = CANVAS_H;
     const stack = mp4VideoFontStack(fontFace);
@@ -664,14 +794,23 @@
     ctx.fillRect(0, 0, W, H);
 
     const s = VIDEO_UI_SCALE;
+    const fsm = fontSizeMuls || mp4FontSizeTiersToMuls(defaultMp4FontSizeTiersRecord());
+    const pl = Math.max(0.35, fsm.playlist);
+    const at = Math.max(0.35, fsm.audioTitle);
+    const ad = Math.max(0.35, fsm.audioDetails);
+    const sn = Math.max(0.35, fsm.seriesNumber);
+    const st = Math.max(0.35, fsm.seriesTitle);
+    const ss = Math.max(0.35, fsm.seriesSubtitle);
+    const wm = Math.max(0.35, fsm.watermark);
+
     const pad = Math.round(40 * s);
     const basePlaylistH = Math.round(H * 0.14);
     const maxPlaylistH = Math.round(H * 0.4);
-    const chipH = Math.round(28 * s);
-    const chipPad = Math.round(8 * s);
-    const chipGap = Math.round(6 * s);
-    const chipXGap = Math.round(8 * s);
-    const { lastChipTopY } = measurePlaylistChipLayout(ctx, rawTitles, W, pad, s, stack);
+    const chipH = Math.round(28 * s * pl);
+    const chipPad = Math.round(8 * s * pl);
+    const chipGap = Math.round(6 * s * pl);
+    const chipXGap = Math.round(8 * s * pl);
+    const { lastChipTopY } = measurePlaylistChipLayout(ctx, rawTitles, W, pad, s, stack, pl);
     const minHForChipTops = lastChipTopY - pad;
     let playlistH = Math.max(basePlaylistH, Math.min(minHForChipTops, maxPlaylistH));
     const gapBase = Math.round(24 * s);
@@ -690,12 +829,12 @@
 
     ctx.save();
     ctx.globalAlpha = mainUiAlpha;
-    ctx.font = `600 ${Math.round(15 * s)}px ${stack}`;
+    ctx.font = `600 ${Math.round(15 * s * pl)}px ${stack}`;
     ctx.textBaseline = 'middle';
 
     let x = pad;
-    let y = pad + Math.round(8 * s);
-    const chipR = Math.max(4, Math.round(6 * s));
+    let y = pad + Math.round(8 * s * pl);
+    const chipR = Math.max(4, Math.round(6 * s * pl));
     rawTitles.forEach((rawTitle, i) => {
       const label = playlistChipLabel(i + 1, rawTitle);
       const tw = Math.min(ctx.measureText(label).width + chipPad * 2, W - pad * 2);
@@ -740,26 +879,26 @@
     if (plan) {
       const rawName = plan.title;
       ctx.fillStyle = 'rgba(255,255,255,0.94)';
-      ctx.font = `700 ${Math.round(32 * s)}px ${stack}`;
-      const titleLineH = Math.round(38 * s);
+      ctx.font = `700 ${Math.round(32 * s * at)}px ${stack}`;
+      const titleLineH = Math.round(38 * s * at);
       const titleTop = blockTop + Math.round(18 * s);
       const afterTitle = wrapTextReturnBottom(ctx, rawName, titleX, titleTop, titleMaxW, titleLineH);
 
       ctx.fillStyle = 'rgba(200, 210, 230, 0.78)';
-      ctx.font = `400 ${Math.round(14 * s)}px ${stack}`;
+      ctx.font = `400 ${Math.round(14 * s * ad)}px ${stack}`;
       ctx.textBaseline = 'top';
-      let metaY = afterTitle + Math.round(14 * s);
+      let metaY = afterTitle + Math.round(14 * s * ad);
       ctx.fillText(`Full track ${fmtMinSec(plan.fullDurationSec)}`, titleX, metaY);
-      metaY += Math.round(24 * s);
+      metaY += Math.round(24 * s * ad);
       ctx.fillText(`Timeline parts in folder: ${plan.partCount}`, titleX, metaY);
-      metaY += Math.round(24 * s);
+      metaY += Math.round(24 * s * ad);
       ctx.fillText(`Demo segment ${currentIdx + 1} of ${totalPieces}`, titleX, metaY);
 
       drawWaveform(ctx, plan.peaks, waveX, waveY, waveW, waveH, plan.localT(tMix));
     }
     ctx.restore();
 
-    const creditReserve = Math.round(38 * s);
+    const creditReserve = Math.round(38 * s * Math.max(1, wm));
     const footerTop = H - footerBand;
     const finalFootY0 = footerTop + Math.round(12 * s);
     const finalBadgeW = Math.round(132 * SERIES_BADGE_WIDTH_MULT * s);
@@ -774,10 +913,10 @@
     const introBadgeX = (W - introBadgeW) / 2;
     const introBadgeY = Math.round(H * 0.3);
     const introTitleY0 = seriesNum ? introBadgeY + introBadgeH + Math.round(22 * s) : Math.round(H * 0.38);
-    const introPackFont = Math.round(56 * s);
-    const introPackLineH = Math.round(64 * s);
-    const finalPackFont = Math.round(39 * s);
-    const finalPackLineH = Math.round(47 * s);
+    const introPackFont = Math.round(56 * s * st);
+    const introPackLineH = Math.round(64 * s * st);
+    const finalPackFont = Math.round(39 * s * st);
+    const finalPackLineH = Math.round(47 * s * st);
 
     const badgeW = seriesNum ? lerp(introBadgeW, finalBadgeW, layoutBlend) : 0;
     const badgeH = seriesNum ? lerp(introBadgeH, finalBadgeH, layoutBlend) : 0;
@@ -789,7 +928,7 @@
     const titleTopLerp = lerp(introTitleY0, finalTitleTop, layoutBlend);
 
     if (seriesNum) {
-      drawSeriesNumberBadge(ctx, badgeX, badgeY, badgeW, badgeH, seriesNum, s, badgeFontScale, fontFace);
+      drawSeriesNumberBadge(ctx, badgeX, badgeY, badgeW, badgeH, seriesNum, s, badgeFontScale, fontFace, sn);
     }
 
     if (packLine) {
@@ -807,10 +946,10 @@
       ctx.clip();
       const afterPackTitle = wrapTextCentered(ctx, packLine, W / 2, titleTopLerp, W - pad * 4, packLineH);
       if (packStatsLine) {
-        const subTop = afterPackTitle + Math.round(12 * s);
-        ctx.font = `400 ${Math.round(17 * s)}px ${stack}`;
+        const subTop = afterPackTitle + Math.round(12 * s * ss);
+        ctx.font = `400 ${Math.round(17 * s * ss)}px ${stack}`;
         ctx.fillStyle = 'rgba(168, 186, 214, 0.72)';
-        const subLineH = Math.round(22 * s);
+        const subLineH = Math.round(22 * s * ss);
         wrapTextCentered(ctx, packStatsLine, W / 2, subTop, W - pad * 4, subLineH);
       }
       ctx.restore();
@@ -818,7 +957,7 @@
 
     ctx.save();
     ctx.globalAlpha = mainUiAlpha;
-    ctx.font = `400 ${Math.round(11 * s)}px ${stack}`;
+    ctx.font = `400 ${Math.round(11 * s * wm)}px ${stack}`;
     ctx.fillStyle = 'rgba(255, 255, 255, 0.26)';
     ctx.textAlign = 'right';
     ctx.textBaseline = 'alphabetic';
@@ -827,7 +966,7 @@
     if (cornerCredit && cornerCredit.year != null) creditParts.push(String(cornerCredit.year));
     const creditLine = creditParts.join(' ');
     if (creditLine) {
-      ctx.fillText(creditLine, W - pad, H - Math.round(14 * s));
+      ctx.fillText(creditLine, W - pad, H - Math.round(14 * s * wm));
     }
     ctx.textAlign = 'left';
     ctx.restore();
@@ -1043,6 +1182,7 @@
       timeline,
       fontFace,
       packStatsLine,
+      readMp4FontSizeMultipliersFromUi(),
     );
     const ctx2 = canvas.getContext('2d');
     if (!ctx2) return;
@@ -1298,7 +1438,7 @@
     return g;
   }
 
-  async function renderMp4Offline(mixedBuffer, plans, rawTitles, bgBitmap, introHoldSec, fontFace, packStatsLine, cornerCredit) {
+  async function renderMp4Offline(mixedBuffer, plans, rawTitles, bgBitmap, introHoldSec, fontFace, packStatsLine, cornerCredit, fontSizeMuls) {
     const musicDurSec = mixedBuffer.duration;
     const totalVideoSec = introHoldSec + musicDurSec + OUTRO_BLACK_SEC;
     const fps = chooseFps(totalVideoSec);
@@ -1378,7 +1518,7 @@
       const tVideo = f / fps;
       const tMix = Math.min(Math.max(tVideo - introHoldSec, 0), musicDurSec);
       const idx = currentPlanIndex(tMix, plans);
-      drawFrame(ctx, tVideo, plans, idx, totalPieces, bgBitmap, rawTitles, packMeta, cornerCredit, timeline, fontFace, packStatsLine);
+      drawFrame(ctx, tVideo, plans, idx, totalPieces, bgBitmap, rawTitles, packMeta, cornerCredit, timeline, fontFace, packStatsLine, fontSizeMuls);
 
       const vf = new VideoFrame(canvas, { timestamp: Math.round(tVideo * 1e6) });
       videoEncoder.encode(vf, { keyFrame: f % keyInterval === 0 });
@@ -1577,7 +1717,18 @@
       const cornerCredit = readMp4CornerCreditFromUi();
 
       /* ---- full offline render ---- */
-      const mp4Blob = await renderMp4Offline(mixedBuffer, plans, rawTitles, bg, introHoldSec, fontFace, packStatsLine, cornerCredit);
+      const fontSizeMuls = readMp4FontSizeMultipliersFromUi();
+      const mp4Blob = await renderMp4Offline(
+        mixedBuffer,
+        plans,
+        rawTitles,
+        bg,
+        introHoldSec,
+        fontFace,
+        packStatsLine,
+        cornerCredit,
+        fontSizeMuls,
+      );
 
       /* ---- downloads: MP4 + YouTube description ---- */
       const baseName = sanitizeFileName(STATE.rootDir?.name || 'S.E.A.M_demo');
@@ -1741,6 +1892,7 @@
       warmMp4ExportFontPreviews();
     }
 
+    initMp4ExportFontSizeControls();
     bindDemoVideoPreview();
   }
 

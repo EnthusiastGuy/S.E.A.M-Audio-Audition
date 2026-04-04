@@ -198,11 +198,44 @@
           <div class="tools-demo-video-tooltip-lead">About MP4 export</div>
           <p>Renders a <strong>1080p MP4</strong> with embedded chapter markers (Nero <code>chpl</code>; VLC and many players) plus a YouTube-style <strong>description.txt</strong>.</p>
           <p><strong>Fonts</strong> are bundled under the SIL Open Font License. <strong>Background</strong>: choose an image to bypass the embedded JPEG and browser cache.</p>
-          <p>Uses <strong>WebCodecs</strong> (Chrome/Edge). Use <strong>Preview</strong> to see a sample frame while adjusting font, background, and corner credit.</p>
+          <p>Uses <strong>WebCodecs</strong> (Chrome/Edge). Use <strong>Preview</strong> to see a sample frame while adjusting font, text sizes, background, and corner credit.</p>
         </div>
       </div>
       <label class="tools-demo-video-font-label" for="select-demo-video-font">Fonts</label>
       <select id="select-demo-video-font" class="tools-demo-video-font-select" title="Typeface for titles and labels in the exported video" aria-label="Demo video font"></select>
+      <details class="tools-demo-video-font-sizes">
+        <summary class="tools-demo-video-font-sizes-summary">Export text sizes</summary>
+        <div class="tools-demo-video-font-sizes-body">
+          <div class="tools-demo-video-fs-row">
+            <label class="tools-demo-video-fs-label" for="select-mp4-fs-playlist">Playlist</label>
+            <select id="select-mp4-fs-playlist" class="tools-demo-video-fs-select" aria-label="Playlist chip text size in export"></select>
+          </div>
+          <div class="tools-demo-video-fs-row">
+            <label class="tools-demo-video-fs-label" for="select-mp4-fs-audio-title">Audio title</label>
+            <select id="select-mp4-fs-audio-title" class="tools-demo-video-fs-select" aria-label="Current track title size in export"></select>
+          </div>
+          <div class="tools-demo-video-fs-row">
+            <label class="tools-demo-video-fs-label" for="select-mp4-fs-audio-details">Audio details</label>
+            <select id="select-mp4-fs-audio-details" class="tools-demo-video-fs-select" aria-label="Track meta lines under title in export"></select>
+          </div>
+          <div class="tools-demo-video-fs-row">
+            <label class="tools-demo-video-fs-label" for="select-mp4-fs-series-number">Series number</label>
+            <select id="select-mp4-fs-series-number" class="tools-demo-video-fs-select" aria-label="Series badge number size in export"></select>
+          </div>
+          <div class="tools-demo-video-fs-row">
+            <label class="tools-demo-video-fs-label" for="select-mp4-fs-series-title">Series title</label>
+            <select id="select-mp4-fs-series-title" class="tools-demo-video-fs-select" aria-label="Pack title under series badge in export"></select>
+          </div>
+          <div class="tools-demo-video-fs-row">
+            <label class="tools-demo-video-fs-label" for="select-mp4-fs-series-subtitle">Series subtitle</label>
+            <select id="select-mp4-fs-series-subtitle" class="tools-demo-video-fs-select" aria-label="Pack stats line under title in export"></select>
+          </div>
+          <div class="tools-demo-video-fs-row">
+            <label class="tools-demo-video-fs-label" for="select-mp4-fs-watermark">Watermark</label>
+            <select id="select-mp4-fs-watermark" class="tools-demo-video-fs-select" aria-label="Bottom-right corner credit size in export"></select>
+          </div>
+        </div>
+      </details>
       <label class="tools-demo-video-font-label" for="input-demo-video-corner-credit">Corner credit</label>
       <input
         type="text"

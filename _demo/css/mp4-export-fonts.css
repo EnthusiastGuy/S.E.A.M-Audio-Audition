@@ -321,3 +321,243 @@
   src: url('../fonts/export/ubuntu.woff2') format('woff2');
 }
 
+@font-face {
+  font-family: 'SEAM-Export-Caveat';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/export/caveat.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'SEAM-Export-Dancing-Script';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/export/dancing-script.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'SEAM-Export-Pacifico';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/export/pacifico.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'SEAM-Export-Shadows-Into-Light';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/export/shadows-into-light.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'SEAM-Export-Indie-Flower';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/export/indie-flower.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'SEAM-Export-Kalam';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/export/kalam.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'SEAM-Export-Permanent-Marker';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/export/permanent-marker.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'SEAM-Export-Architects-Daughter';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/export/architects-daughter.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'SEAM-Export-Satisfy';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/export/satisfy.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'SEAM-Export-Great-Vibes';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/export/great-vibes.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'SEAM-Export-Sacramento';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/export/sacramento.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'SEAM-Export-Give-You-Glory';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/export/give-you-glory.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'SEAM-Export-Comic-Neue';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/export/comic-neue.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'SEAM-Export-Bangers';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/export/bangers.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'SEAM-Export-Chewy';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/export/chewy.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'SEAM-Export-Freckle-Face';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/export/freckle-face.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'SEAM-Export-Bowlby-One';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/export/bowlby-one.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'SEAM-Export-Luckiest-Guy';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/export/luckiest-guy.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'SEAM-Export-Butterfly-Kids';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/export/butterfly-kids.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'SEAM-Export-Irish-Grover';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/export/irish-grover.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'SEAM-Export-Silkscreen';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/export/silkscreen.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'SEAM-Export-Pixelify-Sans';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/export/pixelify-sans.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'SEAM-Export-DotGothic16';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/export/dotgothic16.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'SEAM-Export-Creepster';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/export/creepster.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'SEAM-Export-Monoton';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/export/monoton.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'SEAM-Export-Bungee-Shade';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/export/bungee-shade.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'SEAM-Export-Rubik-Dirt';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/export/rubik-dirt.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'SEAM-Export-Rubik-Bubbles';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/export/rubik-bubbles.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'SEAM-Export-Ewert';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/export/ewert.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'SEAM-Export-Nosifer';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/export/nosifer.woff2') format('woff2');
+}
+

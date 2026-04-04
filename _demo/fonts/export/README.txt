@@ -7,7 +7,7 @@ bundling and redistribution. See https://scripts.sil.org/OFL
 
 Regenerate after adding/changing the list in:
   _demo/scripts/download-mp4-export-fonts.js
-(40 Latin WOFF2 subsets as of the current script.)
+(70 Latin WOFF2 subsets as of the current script.)
 
 Command (from _demo):
   npm run vendor:mp4-fonts

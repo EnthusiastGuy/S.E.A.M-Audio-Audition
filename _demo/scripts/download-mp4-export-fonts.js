@@ -52,6 +52,40 @@ const fonts = [
   { id: 'maven-pro', file: 'maven-pro-latin-400-normal.woff2', family: 'SEAM-Export-Maven-Pro', label: 'Maven Pro' },
   { id: 'quantico', file: 'quantico-latin-400-normal.woff2', family: 'SEAM-Export-Quantico', label: 'Quantico' },
   { id: 'ubuntu', file: 'ubuntu-latin-400-normal.woff2', family: 'SEAM-Export-Ubuntu', label: 'Ubuntu' },
+  /* Handwriting / script (OFL) */
+  { id: 'caveat', file: 'caveat-latin-400-normal.woff2', family: 'SEAM-Export-Caveat', label: 'Caveat' },
+  { id: 'dancing-script', file: 'dancing-script-latin-400-normal.woff2', family: 'SEAM-Export-Dancing-Script', label: 'Dancing Script' },
+  { id: 'pacifico', file: 'pacifico-latin-400-normal.woff2', family: 'SEAM-Export-Pacifico', label: 'Pacifico' },
+  { id: 'shadows-into-light', file: 'shadows-into-light-latin-400-normal.woff2', family: 'SEAM-Export-Shadows-Into-Light', label: 'Shadows Into Light' },
+  { id: 'indie-flower', file: 'indie-flower-latin-400-normal.woff2', family: 'SEAM-Export-Indie-Flower', label: 'Indie Flower' },
+  { id: 'kalam', file: 'kalam-latin-400-normal.woff2', family: 'SEAM-Export-Kalam', label: 'Kalam' },
+  { id: 'permanent-marker', file: 'permanent-marker-latin-400-normal.woff2', family: 'SEAM-Export-Permanent-Marker', label: 'Permanent Marker' },
+  { id: 'architects-daughter', file: 'architects-daughter-latin-400-normal.woff2', family: 'SEAM-Export-Architects-Daughter', label: 'Architects Daughter' },
+  { id: 'satisfy', file: 'satisfy-latin-400-normal.woff2', family: 'SEAM-Export-Satisfy', label: 'Satisfy' },
+  { id: 'great-vibes', file: 'great-vibes-latin-400-normal.woff2', family: 'SEAM-Export-Great-Vibes', label: 'Great Vibes' },
+  { id: 'sacramento', file: 'sacramento-latin-400-normal.woff2', family: 'SEAM-Export-Sacramento', label: 'Sacramento' },
+  { id: 'give-you-glory', file: 'give-you-glory-latin-400-normal.woff2', family: 'SEAM-Export-Give-You-Glory', label: 'Give You Glory' },
+  /* Comic / cartoon */
+  { id: 'comic-neue', file: 'comic-neue-latin-400-normal.woff2', family: 'SEAM-Export-Comic-Neue', label: 'Comic Neue' },
+  { id: 'bangers', file: 'bangers-latin-400-normal.woff2', family: 'SEAM-Export-Bangers', label: 'Bangers' },
+  { id: 'chewy', file: 'chewy-latin-400-normal.woff2', family: 'SEAM-Export-Chewy', label: 'Chewy' },
+  { id: 'freckle-face', file: 'freckle-face-latin-400-normal.woff2', family: 'SEAM-Export-Freckle-Face', label: 'Freckle Face' },
+  { id: 'bowlby-one', file: 'bowlby-one-latin-400-normal.woff2', family: 'SEAM-Export-Bowlby-One', label: 'Bowlby One' },
+  { id: 'luckiest-guy', file: 'luckiest-guy-latin-400-normal.woff2', family: 'SEAM-Export-Luckiest-Guy', label: 'Luckiest Guy' },
+  { id: 'butterfly-kids', file: 'butterfly-kids-latin-400-normal.woff2', family: 'SEAM-Export-Butterfly-Kids', label: 'Butterfly Kids' },
+  { id: 'irish-grover', file: 'irish-grover-latin-400-normal.woff2', family: 'SEAM-Export-Irish-Grover', label: 'Irish Grover' },
+  /* Pixel / monospace CRT */
+  { id: 'silkscreen', file: 'silkscreen-latin-400-normal.woff2', family: 'SEAM-Export-Silkscreen', label: 'Silkscreen' },
+  { id: 'pixelify-sans', file: 'pixelify-sans-latin-400-normal.woff2', family: 'SEAM-Export-Pixelify-Sans', label: 'Pixelify Sans' },
+  { id: 'dotgothic16', file: 'dotgothic16-latin-400-normal.woff2', family: 'SEAM-Export-DotGothic16', label: 'DotGothic16' },
+  /* Funky / horror / display */
+  { id: 'creepster', file: 'creepster-latin-400-normal.woff2', family: 'SEAM-Export-Creepster', label: 'Creepster' },
+  { id: 'monoton', file: 'monoton-latin-400-normal.woff2', family: 'SEAM-Export-Monoton', label: 'Monoton' },
+  { id: 'bungee-shade', file: 'bungee-shade-latin-400-normal.woff2', family: 'SEAM-Export-Bungee-Shade', label: 'Bungee Shade' },
+  { id: 'rubik-dirt', file: 'rubik-dirt-latin-400-normal.woff2', family: 'SEAM-Export-Rubik-Dirt', label: 'Rubik Dirt' },
+  { id: 'rubik-bubbles', file: 'rubik-bubbles-latin-400-normal.woff2', family: 'SEAM-Export-Rubik-Bubbles', label: 'Rubik Bubbles' },
+  { id: 'ewert', file: 'ewert-latin-400-normal.woff2', family: 'SEAM-Export-Ewert', label: 'Ewert' },
+  { id: 'nosifer', file: 'nosifer-latin-400-normal.woff2', family: 'SEAM-Export-Nosifer', label: 'Nosifer' },
 ];
 
 function download(url) {

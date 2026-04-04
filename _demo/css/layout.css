@@ -51,22 +51,29 @@
 #main-app {
   display: none; /* shown after a folder is opened (see app.js) */
   flex-direction: row;
-  align-items: flex-start; /* keep knob column top-aligned with playlist card */
+  align-items: stretch; /* sidebar column fills height so inner scroll works */
   gap: 20px;
   padding: 20px 24px;
   max-width: none;
   height: calc(100vh - 70px - var(--footer-h));
   overflow: hidden;
+  min-height: 0;
 }
 
-/* Sidebar: only .main-content scrolls; knobs stay fixed in the column */
+/* Sidebar: scroll inside this column when knobs + MP4 card exceed viewport */
 .sidebar-controls {
   display: flex;
   flex-direction: column;
   gap: 20px;
   width: 148px;
   flex-shrink: 0;
-  height: fit-content;
+  min-height: 0;
+  max-height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 6px;
+  box-sizing: content-box;
 }
 
 /* Main scrollable content */

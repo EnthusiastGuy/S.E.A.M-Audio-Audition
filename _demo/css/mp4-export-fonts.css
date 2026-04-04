@@ -161,3 +161,163 @@
   src: url('../fonts/export/space-mono.woff2') format('woff2');
 }
 
+@font-face {
+  font-family: 'SEAM-Export-Inter';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/export/inter.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'SEAM-Export-Poppins';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/export/poppins.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'SEAM-Export-Nunito';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/export/nunito.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'SEAM-Export-Rubik';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/export/rubik.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'SEAM-Export-Work-Sans';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/export/work-sans.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'SEAM-Export-Playfair-Display';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/export/playfair-display.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'SEAM-Export-Lora';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/export/lora.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'SEAM-Export-Merriweather';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/export/merriweather.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'SEAM-Export-Source-Sans-3';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/export/source-sans-3.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'SEAM-Export-Bitter';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/export/bitter.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'SEAM-Export-Cabin';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/export/cabin.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'SEAM-Export-Bungee';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/export/bungee.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'SEAM-Export-Audiowide';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/export/audiowide.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'SEAM-Export-Share-Tech';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/export/share-tech.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'SEAM-Export-VT323';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/export/vt323.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'SEAM-Export-Press-Start-2P';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/export/press-start-2p.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'SEAM-Export-Syncopate';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/export/syncopate.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'SEAM-Export-Maven-Pro';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/export/maven-pro.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'SEAM-Export-Quantico';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/export/quantico.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'SEAM-Export-Ubuntu';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/export/ubuntu.woff2') format('woff2');
+}
+

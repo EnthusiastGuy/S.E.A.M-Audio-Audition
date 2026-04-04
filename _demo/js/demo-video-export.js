@@ -18,6 +18,7 @@
   const MP4_EXPORT_FONTS = [
     { value: 'SEAM-Export-Space-Mono', preview: 'Space Mono — technical mono (default)' },
     { value: 'SEAM-Export-JetBrains-Mono', preview: 'JetBrains Mono — code / UI' },
+    { value: 'SEAM-Export-Inter', preview: 'Inter — UI grotesk' },
     { value: 'SEAM-Export-Bebas-Neue', preview: 'Bebas Neue — tall poster' },
     { value: 'SEAM-Export-Oswald', preview: 'Oswald — condensed industrial' },
     { value: 'SEAM-Export-Barlow-Condensed', preview: 'Barlow Condensed — tight headlines' },
@@ -36,6 +37,25 @@
     { value: 'SEAM-Export-Montserrat', preview: 'Montserrat — geometric classic' },
     { value: 'SEAM-Export-Raleway', preview: 'Raleway — elegant thin stress' },
     { value: 'SEAM-Export-Libre-Franklin', preview: 'Libre Franklin — readable grotesk' },
+    { value: 'SEAM-Export-Poppins', preview: 'Poppins — geometric friendly' },
+    { value: 'SEAM-Export-Nunito', preview: 'Nunito — rounded sans' },
+    { value: 'SEAM-Export-Rubik', preview: 'Rubik — soft blocks' },
+    { value: 'SEAM-Export-Work-Sans', preview: 'Work Sans — workhorse UI' },
+    { value: 'SEAM-Export-Playfair-Display', preview: 'Playfair Display — editorial serif' },
+    { value: 'SEAM-Export-Lora', preview: 'Lora — book serif' },
+    { value: 'SEAM-Export-Merriweather', preview: 'Merriweather — sturdy serif' },
+    { value: 'SEAM-Export-Source-Sans-3', preview: 'Source Sans 3 — Adobe UI' },
+    { value: 'SEAM-Export-Bitter', preview: 'Bitter — slab readable' },
+    { value: 'SEAM-Export-Cabin', preview: 'Cabin — humanist sans' },
+    { value: 'SEAM-Export-Bungee', preview: 'Bungee — inline poster' },
+    { value: 'SEAM-Export-Audiowide', preview: 'Audiowide — wide future' },
+    { value: 'SEAM-Export-Share-Tech', preview: 'Share Tech — HUD mono' },
+    { value: 'SEAM-Export-VT323', preview: 'VT323 — terminal CRT' },
+    { value: 'SEAM-Export-Press-Start-2P', preview: 'Press Start 2P — 8-bit' },
+    { value: 'SEAM-Export-Syncopate', preview: 'Syncopate — spaced caps' },
+    { value: 'SEAM-Export-Maven-Pro', preview: 'Maven Pro — tech sans' },
+    { value: 'SEAM-Export-Quantico', preview: 'Quantico — military tech' },
+    { value: 'SEAM-Export-Ubuntu', preview: 'Ubuntu — distro humanist' },
   ];
 
   function mp4VideoFontFamilyQuoted(cssFamily) {
@@ -69,12 +89,14 @@
     const specs = [
       `400 11px ${q}`,
       `400 14px ${q}`,
+      `400 17px ${q}`,
       `600 15px ${q}`,
       `600 39px ${q}`,
       `600 56px ${q}`,
       `700 11px ${q}`,
       `700 32px ${q}`,
       `800 34px ${q}`,
+      `800 38px ${q}`,
     ];
     for (const s of specs) {
       try {
@@ -165,6 +187,35 @@
     const m = Math.floor(secs / 60);
     const s = Math.floor(secs % 60);
     return `${m}:${String(s).padStart(2, '0')}`;
+  }
+
+  /** Pack total duration for footer subtitle (hours when needed). */
+  function fmtPackTotalDuration(secs) {
+    if (!isFinite(secs) || secs < 0) secs = 0;
+    const h = Math.floor(secs / 3600);
+    const m = Math.floor((secs % 3600) / 60);
+    const sec = Math.floor(secs % 60);
+    if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
+    return `${m}:${String(sec).padStart(2, '0')}`;
+  }
+
+  /** Line for under pack title: compositions, parts, total time (current playlist order). */
+  function buildPackExportStatsLine() {
+    const fmt = FMT;
+    const order = STATE.order?.[fmt] || [];
+    const songs = STATE.songs?.[fmt] || [];
+    let partTotal = 0;
+    let durTotal = 0;
+    for (const idx of order) {
+      const song = songs[idx];
+      if (!song) continue;
+      partTotal += song.parts?.length || 0;
+      durTotal += Number(song.duration) || 0;
+    }
+    const n = order.length;
+    const cWord = n === 1 ? 'composition' : 'compositions';
+    const pWord = partTotal === 1 ? 'part' : 'parts';
+    return `${n} total audio ${cWord}, ${partTotal} total audio ${pWord}, ${fmtPackTotalDuration(durTotal)} total audio time`;
   }
 
   /** YouTube clickable chapters: first line must be 0:00; use M:SS or H:MM:SS. */
@@ -289,27 +340,28 @@
   function drawSeriesNumberBadge(ctx, x, y, w, h, seriesNum, s, fontScale, fontFace) {
     const fs = Math.max(0.5, fontScale);
     const stack = mp4VideoFontStack(fontFace);
-    const r = Math.max(6, Math.round(8 * s * fs));
+    const r = Math.max(8, Math.round(10 * s * fs));
     ctx.save();
-    const g = ctx.createLinearGradient(x, y, x + w, y + h);
-    g.addColorStop(0, 'rgba(233, 69, 96, 0.92)');
-    g.addColorStop(1, 'rgba(78, 205, 196, 0.55)');
-    ctx.fillStyle = g;
+    ctx.shadowColor = 'rgba(78, 205, 196, 0.35)';
+    ctx.shadowBlur = Math.round(14 * s * fs);
+    ctx.shadowOffsetY = Math.round(2 * s * fs);
+    ctx.fillStyle = 'rgba(16, 22, 38, 0.97)';
     drawRoundedRect(ctx, x, y, w, h, r);
     ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,0.28)';
-    ctx.lineWidth = Math.max(1, s * fs);
+    ctx.shadowColor = 'transparent';
+    ctx.shadowBlur = 0;
+    ctx.shadowOffsetY = 0;
+
+    ctx.strokeStyle = 'rgba(78, 205, 196, 0.92)';
+    ctx.lineWidth = Math.max(2, Math.round(2 * s * fs));
+    drawRoundedRect(ctx, x, y, w, h, r);
     ctx.stroke();
 
-    ctx.fillStyle = 'rgba(255,255,255,0.88)';
-    ctx.font = `700 ${Math.max(10, Math.round(11 * s * fs))}px ${stack}`;
+    ctx.fillStyle = '#f4f7ff';
+    ctx.font = `800 ${Math.max(24, Math.round(36 * s * fs))}px ${stack}`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('SERIES', x + w / 2, y + h * 0.32);
-
-    ctx.fillStyle = '#fff';
-    ctx.font = `800 ${Math.max(22, Math.round(34 * s * fs))}px ${stack}`;
-    ctx.fillText(String(seriesNum), x + w / 2, y + h * 0.62);
+    ctx.fillText(String(seriesNum), x + w / 2, y + h / 2);
     ctx.textAlign = 'left';
     ctx.restore();
   }
@@ -503,7 +555,7 @@
   /**
    * @param {object} timeline introHoldSec, introTransSec, musicDurSec, outroFadeSec, outroBlackSec
    */
-  function drawFrame(ctx, tVideo, plans, currentIdx, totalPieces, bgBitmap, rawTitles, packMeta, exportYear, timeline, fontFace) {
+  function drawFrame(ctx, tVideo, plans, currentIdx, totalPieces, bgBitmap, rawTitles, packMeta, exportYear, timeline, fontFace, packStatsLine) {
     const W = CANVAS_W;
     const H = CANVAS_H;
     const stack = mp4VideoFontStack(fontFace);
@@ -584,8 +636,9 @@
 
     const seriesNum = packMeta && packMeta.seriesNum;
     const packLine = (packMeta && (packMeta.packTitle || packMeta.raw)) || '';
+    const footerStatsExtra = packLine && packStatsLine ? 52 : 0;
     const footerBand = Math.round(
-      (seriesNum && packLine ? 268 : packLine ? 212 : seriesNum ? 132 : 68) * s,
+      ((seriesNum && packLine ? 268 : packLine ? 212 : seriesNum ? 132 : 68) + footerStatsExtra) * s,
     );
     const blockTop = pad + playlistH + Math.round(24 * s);
     const blockH = H - blockTop - pad - footerBand;
@@ -670,7 +723,14 @@
         Math.max(0, H - creditReserve - titleTopLerp - Math.round(4 * s)),
       );
       ctx.clip();
-      wrapTextCentered(ctx, packLine, W / 2, titleTopLerp, W - pad * 4, packLineH);
+      const afterPackTitle = wrapTextCentered(ctx, packLine, W / 2, titleTopLerp, W - pad * 4, packLineH);
+      if (packStatsLine) {
+        const subTop = afterPackTitle + Math.round(12 * s);
+        ctx.font = `400 ${Math.round(17 * s)}px ${stack}`;
+        ctx.fillStyle = 'rgba(168, 186, 214, 0.72)';
+        const subLineH = Math.round(22 * s);
+        wrapTextCentered(ctx, packStatsLine, W / 2, subTop, W - pad * 4, subLineH);
+      }
       ctx.restore();
     }
 
@@ -998,7 +1058,7 @@
     return g;
   }
 
-  async function renderMp4Offline(mixedBuffer, plans, rawTitles, bgBitmap, introHoldSec, fontFace) {
+  async function renderMp4Offline(mixedBuffer, plans, rawTitles, bgBitmap, introHoldSec, fontFace, packStatsLine) {
     const musicDurSec = mixedBuffer.duration;
     const totalVideoSec = introHoldSec + musicDurSec + OUTRO_BLACK_SEC;
     const fps = chooseFps(totalVideoSec);
@@ -1079,7 +1139,7 @@
       const tVideo = f / fps;
       const tMix = Math.min(Math.max(tVideo - introHoldSec, 0), musicDurSec);
       const idx = currentPlanIndex(tMix, plans);
-      drawFrame(ctx, tVideo, plans, idx, totalPieces, bgBitmap, rawTitles, packMeta, exportYear, timeline, fontFace);
+      drawFrame(ctx, tVideo, plans, idx, totalPieces, bgBitmap, rawTitles, packMeta, exportYear, timeline, fontFace, packStatsLine);
 
       const vf = new VideoFrame(canvas, { timestamp: Math.round(tVideo * 1e6) });
       videoEncoder.encode(vf, { keyFrame: f % keyInterval === 0 });
@@ -1274,9 +1334,10 @@
       }
       await ensureMp4ExportFontLoaded(fontFace);
       const bg = await loadExportSafeBackgroundBitmap();
+      const packStatsLine = buildPackExportStatsLine();
 
       /* ---- full offline render ---- */
-      const mp4Blob = await renderMp4Offline(mixedBuffer, plans, rawTitles, bg, introHoldSec, fontFace);
+      const mp4Blob = await renderMp4Offline(mixedBuffer, plans, rawTitles, bg, introHoldSec, fontFace, packStatsLine);
 
       /* ---- downloads: MP4 + YouTube description ---- */
       const baseName = sanitizeFileName(STATE.rootDir?.name || 'S.E.A.M_demo');

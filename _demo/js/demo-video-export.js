@@ -600,6 +600,31 @@
    * ImageBitmap (same-origin http(s)), or use the gradient fallback.
    */
   /**
+   * Playlist chips wrap by width; fixed playlist height used to clip rows. Measure first so we can
+   * grow the reserved band (and nudge the main block down) when extra rows are needed.
+   * @returns {{ lastChipTopY: number, chipH: number }}
+   */
+  function measurePlaylistChipLayout(ctx, rawTitles, W, pad, s, stack) {
+    ctx.font = `600 ${Math.round(15 * s)}px ${stack}`;
+    let x = pad;
+    let y = pad + Math.round(8 * s);
+    const chipH = Math.round(28 * s);
+    const chipPad = Math.round(8 * s);
+    const chipGap = Math.round(6 * s);
+    const chipXGap = Math.round(8 * s);
+    rawTitles.forEach((rawTitle, i) => {
+      const label = playlistChipLabel(i + 1, rawTitle);
+      const tw = Math.min(ctx.measureText(label).width + chipPad * 2, W - pad * 2);
+      if (x + tw > W - pad) {
+        x = pad;
+        y += chipH + chipGap;
+      }
+      x += tw + chipXGap;
+    });
+    return { lastChipTopY: y, chipH };
+  }
+
+  /**
    * @param {object} timeline introHoldSec, introTransSec, musicDurSec, outroFadeSec, outroBlackSec
    * @param {{ text: string, year: number|null }} cornerCredit bottom-right label; year appended when non-null
    */
@@ -640,7 +665,19 @@
 
     const s = VIDEO_UI_SCALE;
     const pad = Math.round(40 * s);
-    const playlistH = Math.round(H * 0.14);
+    const basePlaylistH = Math.round(H * 0.14);
+    const maxPlaylistH = Math.round(H * 0.4);
+    const chipH = Math.round(28 * s);
+    const chipPad = Math.round(8 * s);
+    const chipGap = Math.round(6 * s);
+    const chipXGap = Math.round(8 * s);
+    const { lastChipTopY } = measurePlaylistChipLayout(ctx, rawTitles, W, pad, s, stack);
+    const minHForChipTops = lastChipTopY - pad;
+    let playlistH = Math.max(basePlaylistH, Math.min(minHForChipTops, maxPlaylistH));
+    const gapBase = Math.round(24 * s);
+    const gapFloor = Math.round(14 * s);
+    const extraPlaylist = Math.max(0, playlistH - basePlaylistH);
+    const gapBelowPlaylist = Math.max(gapFloor, Math.round(gapBase - extraPlaylist * 0.22));
     const transEnd = introHoldSec + introTransSec;
     let layoutBlend = 1;
     if (tVideo < introHoldSec) layoutBlend = 0;
@@ -658,9 +695,6 @@
 
     let x = pad;
     let y = pad + Math.round(8 * s);
-    const chipH = Math.round(28 * s);
-    const chipPad = Math.round(8 * s);
-    const chipGap = Math.round(6 * s);
     const chipR = Math.max(4, Math.round(6 * s));
     rawTitles.forEach((rawTitle, i) => {
       const label = playlistChipLabel(i + 1, rawTitle);
@@ -679,7 +713,7 @@
       ctx.stroke();
       ctx.fillStyle = active ? '#fff' : 'rgba(230, 235, 245, 0.85)';
       ctx.fillText(label, x + chipPad, y + chipH / 2);
-      x += tw + Math.round(8 * s);
+      x += tw + chipXGap;
     });
 
     const seriesNum = packMeta && packMeta.seriesNum;
@@ -688,7 +722,7 @@
     const footerBand = Math.round(
       ((seriesNum && packLine ? 268 : packLine ? 212 : seriesNum ? 132 : 68) + footerStatsExtra) * s,
     );
-    const blockTop = pad + playlistH + Math.round(24 * s);
+    const blockTop = pad + playlistH + gapBelowPlaylist;
     const blockH = H - blockTop - pad - footerBand;
     const titleW = Math.round(W * 0.38);
     const waveX = pad + titleW + Math.round(20 * s);

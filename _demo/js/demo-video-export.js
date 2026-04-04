@@ -9,6 +9,9 @@
 (function initDemoVideoExport() {
   'use strict';
 
+  /** Image chosen in-page (File/Blob); wins over fetch/embed so exports always match what you picked. */
+  let demoVideoUserBackground = null;
+
   const FMT = 'wav';
   const CANVAS_W = 1920;
   const CANVAS_H = 1080;
@@ -661,7 +664,7 @@
   }
 
   /* ── background image (must not taint canvas for VideoFrame) ─ */
-  /* file:// blocks fetch() to local files; use embedded data URL from vendor/seam-video-bg-embed.js (npm run vendor:video-bg). */
+  /* 1) User-picked file (page UI) 2) fetched JPG 3) embedded data URL (file:// fallback). */
 
   async function bitmapFromDataUrl(dataUrl) {
     if (!dataUrl || typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/')) return null;
@@ -678,26 +681,39 @@
   async function loadExportSafeBackgroundBitmap() {
     if (typeof createImageBitmap !== 'function') return null;
 
+    if (demoVideoUserBackground && demoVideoUserBackground.size > 0) {
+      try {
+        const bmp = await createImageBitmap(demoVideoUserBackground);
+        if (bmp) return bmp;
+      } catch (e) {
+        console.warn('[demo-video-export] Could not decode user background image', e);
+      }
+    }
+
     const embedded =
       typeof globalThis.SEAM_VIDEO_BG_DATA_URL === 'string'
         ? globalThis.SEAM_VIDEO_BG_DATA_URL
         : '';
-    const fromEmbed = await bitmapFromDataUrl(embedded);
-    if (fromEmbed) return fromEmbed;
 
-    const url = vendorUrl('img/video_background.jpg');
+    const base = vendorUrl('img/video_background.jpg');
+    const busted = `${base}${base.includes('?') ? '&' : '?'}seam_bg=${Date.now()}`;
     try {
-      const res = await fetch(url);
-      if (!res.ok) return null;
-      const ct = (res.headers.get('content-type') || '').split(';')[0].trim();
-      const buf = await res.arrayBuffer();
-      if (!buf || buf.byteLength === 0) return null;
-      const mime = ct && ct !== 'application/octet-stream' ? ct : 'image/jpeg';
-      const blob = new Blob([buf], { type: mime });
-      return await createImageBitmap(blob);
+      const res = await fetch(busted, { cache: 'no-store' });
+      if (res.ok) {
+        const ct = (res.headers.get('content-type') || '').split(';')[0].trim();
+        const buf = await res.arrayBuffer();
+        if (buf && buf.byteLength > 0) {
+          const mime = ct && ct !== 'application/octet-stream' ? ct : 'image/jpeg';
+          const blob = new Blob([buf], { type: mime });
+          const bmp = await createImageBitmap(blob);
+          if (bmp) return bmp;
+        }
+      }
     } catch (_) {
-      return null;
+      /* fall through to embed */
     }
+
+    return bitmapFromDataUrl(embedded);
   }
 
   /* ── WebCodecs capability check ─────────────────────────── */
@@ -1131,11 +1147,7 @@
         excerpts.push(ex);
         meta.push({
           title: song.name,
-          // Prefer decoded composite length (accurate); song.duration can lag wrong metadata for main+parts before preload.
-          fullDurationSec:
-            composite && Number.isFinite(composite.duration) && composite.duration > 0
-              ? composite.duration
-              : song.duration || 0,
+          fullDurationSec: song.duration || composite.duration || 0,
           partCount: song.parts?.length ?? 0,
           excerptOffsetSec: pick.t0,
           excerptLenSec: pick.clipLen,
@@ -1187,7 +1199,7 @@
           'Export complete (MP4 with embedded chapters + description.txt for YouTube). ' +
           (bg
             ? ''
-            : 'No background image: add img/video_background.jpg and run npm run vendor:video-bg in _demo. ') +
+            : 'No background: use “Choose background image…” or add img/video_background.jpg / run npm run vendor:video-bg in _demo. ') +
           'Run again for different random excerpts.';
       }
     } catch (err) {
@@ -1202,11 +1214,48 @@
 
   /* ── bind button ────────────────────────────────────────── */
 
+  function refreshDemoVideoBgStatus() {
+    const statusEl = document.getElementById('demo-video-bg-status');
+    const resetBtn = document.getElementById('btn-demo-video-reset-bg');
+    if (!statusEl) return;
+    if (demoVideoUserBackground) {
+      const name =
+        demoVideoUserBackground instanceof File && demoVideoUserBackground.name
+          ? demoVideoUserBackground.name
+          : 'Custom image';
+      statusEl.textContent = `Using your file: ${name}`;
+      if (resetBtn) resetBtn.hidden = false;
+    } else {
+      statusEl.textContent = 'Using default (project JPG or embedded copy).';
+      if (resetBtn) resetBtn.hidden = true;
+    }
+  }
+
   function bind() {
     const btn = document.getElementById('btn-demo-video');
     if (!btn || btn.dataset.seamDemoBound) return;
     btn.dataset.seamDemoBound = '1';
     btn.addEventListener('click', () => void runExport());
+
+    const pickBtn = document.getElementById('btn-demo-video-pick-bg');
+    const resetBtn = document.getElementById('btn-demo-video-reset-bg');
+    const fileInput = document.getElementById('input-demo-video-bg');
+    if (pickBtn && fileInput) {
+      pickBtn.addEventListener('click', () => fileInput.click());
+      fileInput.addEventListener('change', () => {
+        const f = fileInput.files && fileInput.files[0];
+        if (f && f.size > 0) demoVideoUserBackground = f;
+        fileInput.value = '';
+        refreshDemoVideoBgStatus();
+      });
+    }
+    if (resetBtn) {
+      resetBtn.addEventListener('click', () => {
+        demoVideoUserBackground = null;
+        refreshDemoVideoBgStatus();
+      });
+    }
+    refreshDemoVideoBgStatus();
   }
 
   if (document.readyState === 'loading') {

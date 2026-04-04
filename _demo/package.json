@@ -2,12 +2,13 @@
   "name": "_demo",
   "version": "1.0.0",
   "private": true,
-  "description": "Optional: npm install + npm run vendor:* to rebuild vendor/*.js. Run vendor:video-bg after changing img/video_background.jpg (embeds JPEG for file:// export).",
+  "description": "Optional: npm install + npm run vendor:* to rebuild vendor/*.js. Run vendor:video-bg after changing img/video_background.jpg (embeds JPEG for file:// export). Run vendor:mp4-fonts to refresh bundled WOFF2 for MP4 export.",
   "scripts": {
     "vendor:vorbis": "esbuild node_modules/vorbis-encoder-js/index.js --bundle --format=iife --platform=browser --global-name=__vorbisEncoderJs --outfile=vendor/vorbis-encoder-js.js --alias:fs=./vendor/build-shims/node-fs.js --alias:path=./vendor/build-shims/node-path.js",
     "vendor:lame": "node -e \"require('fs').copyFileSync('node_modules/lamejs/lame.min.js','vendor/lame.min.js')\"",
     "vendor:mp4muxer": "node -e \"require('fs').copyFileSync('node_modules/mp4-muxer/build/mp4-muxer.js','vendor/mp4-muxer.js')\"",
-    "vendor:video-bg": "node scripts/embed-video-background.js"
+    "vendor:video-bg": "node scripts/embed-video-background.js",
+    "vendor:mp4-fonts": "node scripts/download-mp4-export-fonts.js"
   },
   "devDependencies": {
     "esbuild": "^0.24.0",

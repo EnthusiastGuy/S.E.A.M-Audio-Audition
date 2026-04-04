@@ -22,6 +22,7 @@
 <link rel="stylesheet" href="css/utilities.css" />
 <link rel="stylesheet" href="css/brick-playground.css" />
 <link rel="stylesheet" href="css/demo-video-export.css" />
+<link rel="stylesheet" href="css/mp4-export-fonts.css" />
 </head>
 <body>
 
@@ -180,14 +181,10 @@
         <div class="memory-estimate-line memory-estimate-sub" id="memory-estimate-cap"></div>
       </div>
     </div>
-    <div class="tools-card" role="region" aria-label="Tools">
-      <div class="knob-label">TOOLS</div>
-      <button
-        type="button"
-        class="tools-demo-video-btn"
-        id="btn-demo-video"
-        title="Build a crossfaded MP4 montage of the current playlist"
-      >Make video demo</button>
+    <div class="tools-card" role="region" aria-label="MP4 export">
+      <div class="knob-label">MP4 EXPORT</div>
+      <label class="tools-demo-video-font-label" for="select-demo-video-font">Fonts</label>
+      <select id="select-demo-video-font" class="tools-demo-video-font-select" title="Typeface for titles and labels in the exported video" aria-label="Demo video font"></select>
       <input
         type="file"
         id="input-demo-video-bg"
@@ -209,8 +206,14 @@
       >Use default background</button>
       <p class="tools-demo-video-bg-status" id="demo-video-bg-status" aria-live="polite"></p>
       <p class="tools-card-hint" id="demo-video-hint">
-        Renders a 1080p MP4 with embedded chapter markers (Nero chpl; VLC and many players) plus a YouTube-style description.txt. Pick a background above to force your latest image. Uses WebCodecs.
+        1080p MP4 with chapter markers (Nero chpl) and description.txt for YouTube. Bundled OFL fonts; pick a background to bypass embed/cache. Uses WebCodecs.
       </p>
+      <button
+        type="button"
+        class="tools-demo-video-btn"
+        id="btn-demo-video"
+        title="Build a crossfaded MP4 montage of the current playlist"
+      >Make</button>
     </div>
   </div>
 

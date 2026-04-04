@@ -1,4 +1,4 @@
-/* TOOLS card — demo video export (sidebar) */
+/* MP4 EXPORT card — demo video (sidebar) */
 .tools-card {
   width: 100%;
   order: 5;
@@ -12,8 +12,52 @@
   margin-bottom: 8px;
 }
 
+.tools-demo-video-font-label {
+  display: block;
+  margin-top: 2px;
+  margin-bottom: 4px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text3);
+}
+
+.tools-demo-video-font-select {
+  width: 100%;
+  margin-bottom: 4px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: rgba(13, 17, 23, 0.65);
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.25;
+  cursor: pointer;
+  appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, rgba(78, 205, 196, 0.65) 50%),
+    linear-gradient(135deg, rgba(78, 205, 196, 0.65) 50%, transparent 50%);
+  background-position: calc(100% - 14px) 50%, calc(100% - 9px) 50%;
+  background-size: 5px 5px;
+  background-repeat: no-repeat;
+}
+
+.tools-demo-video-font-select:focus {
+  outline: none;
+  border-color: rgba(78, 205, 196, 0.55);
+  box-shadow: 0 0 0 1px rgba(78, 205, 196, 0.25);
+}
+
+.tools-demo-video-font-select option {
+  font-size: 13px;
+  padding: 6px;
+  background: #0d1117;
+  color: #e6ebf5;
+}
+
 .tools-demo-video-btn {
   width: 100%;
+  margin-top: 12px;
   padding: 10px 8px;
   border-radius: var(--radius-sm);
   border: 1px solid rgba(78, 205, 196, 0.45);
@@ -55,7 +99,7 @@
 
 .tools-demo-video-bg-btn {
   width: 100%;
-  margin-top: 8px;
+  margin-top: 10px;
   padding: 7px 8px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border);

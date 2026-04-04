@@ -759,46 +759,7 @@
   color: #f8d269;
   background: rgba(255, 193, 7, 0.12);
 }
-/* Popover: same visual language as .setup-performance-note / .setup-performance-note-details */
-.memory-estimate-tooltip {
-  position: absolute;
-  left: 0;
-  top: calc(100% + 6px);
-  z-index: 12000;
-  width: min(268px, calc(100vw - 32px));
-  padding: 10px 12px 12px;
-  border: 1px solid rgba(255, 193, 7, 0.55);
-  border-radius: 10px;
-  /* ~95% opaque fill (card base + subtle amber wash) */
-  background:
-    linear-gradient(rgba(255, 193, 7, 0.1), rgba(255, 193, 7, 0.1)),
-    rgba(30, 42, 69, 0.95);
-  box-shadow: var(--shadow);
-  text-align: left;
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
-  transform: translateY(-4px);
-  transition:
-    opacity 0.2s ease,
-    visibility 0.2s ease,
-    transform 0.2s ease;
-}
-.memory-estimate-tooltip::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: -10px;
-  height: 10px;
-}
-.memory-estimate-popover-anchor:hover .memory-estimate-tooltip,
-.memory-estimate-popover-anchor:focus-within .memory-estimate-tooltip {
-  opacity: 1;
-  visibility: visible;
-  pointer-events: auto;
-  transform: translateY(0);
-}
+/* Tooltip shell / motion: sidebar-floating-tooltips.css (element moved to body) */
 .memory-estimate-tooltip-lead {
   margin: 0 0 8px;
   color: #f8d269;

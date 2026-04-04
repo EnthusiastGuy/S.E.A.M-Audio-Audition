@@ -51,46 +51,7 @@
   background: rgba(78, 205, 196, 0.12);
 }
 
-.tools-demo-video-tooltip {
-  position: absolute;
-  left: 0;
-  top: calc(100% + 6px);
-  z-index: 12000;
-  width: min(268px, calc(100vw - 32px));
-  padding: 10px 12px 12px;
-  border: 1px solid rgba(78, 205, 196, 0.45);
-  border-radius: 10px;
-  background:
-    linear-gradient(rgba(78, 205, 196, 0.08), rgba(78, 205, 196, 0.08)),
-    rgba(30, 42, 69, 0.96);
-  box-shadow: var(--shadow);
-  text-align: left;
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
-  transform: translateY(-4px);
-  transition:
-    opacity 0.2s ease,
-    visibility 0.2s ease,
-    transform 0.2s ease;
-}
-
-.tools-demo-video-tooltip::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: -10px;
-  height: 10px;
-}
-
-.tools-demo-video-popover-anchor:hover .tools-demo-video-tooltip,
-.tools-demo-video-popover-anchor:focus-within .tools-demo-video-tooltip {
-  opacity: 1;
-  visibility: visible;
-  pointer-events: auto;
-  transform: translateY(0);
-}
+/* Tooltip shell / motion: sidebar-floating-tooltips.css (element moved to body) */
 
 .tools-demo-video-tooltip-lead {
   margin: 0 0 8px;
@@ -159,7 +120,7 @@
 .demo-video-preview-dialog {
   position: absolute;
   pointer-events: auto;
-  width: min(420px, calc(100vw - 48px));
+  width: min(calc(1942px * 0.8), calc((100vw - 24px) * 0.8));
   max-width: calc(100vw - 24px);
   padding: 8px 10px 10px;
   border-radius: 12px;
@@ -256,6 +217,48 @@
   padding: 6px;
   background: #0d1117;
   color: #e6ebf5;
+}
+
+.tools-demo-video-credit-input {
+  width: 100%;
+  margin-bottom: 6px;
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: rgba(13, 17, 23, 0.65);
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.25;
+  box-sizing: border-box;
+}
+
+.tools-demo-video-credit-input:focus {
+  outline: none;
+  border-color: rgba(78, 205, 196, 0.55);
+  box-shadow: 0 0 0 1px rgba(78, 205, 196, 0.25);
+}
+
+.tools-demo-video-credit-year-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.tools-demo-video-credit-year-cb {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  accent-color: rgba(78, 205, 196, 0.85);
+  cursor: pointer;
+}
+
+.tools-demo-video-credit-year-label {
+  font-size: 11px;
+  color: var(--text2);
+  cursor: pointer;
+  user-select: none;
+  line-height: 1.2;
 }
 
 .tools-demo-video-btn {

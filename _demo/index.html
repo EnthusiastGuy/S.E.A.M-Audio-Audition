@@ -22,6 +22,7 @@
 <link rel="stylesheet" href="css/utilities.css" />
 <link rel="stylesheet" href="css/brick-playground.css" />
 <link rel="stylesheet" href="css/demo-video-export.css" />
+<link rel="stylesheet" href="css/sidebar-floating-tooltips.css" />
 <link rel="stylesheet" href="css/mp4-export-fonts.css" />
 </head>
 <body>
@@ -197,11 +198,32 @@
           <div class="tools-demo-video-tooltip-lead">About MP4 export</div>
           <p>Renders a <strong>1080p MP4</strong> with embedded chapter markers (Nero <code>chpl</code>; VLC and many players) plus a YouTube-style <strong>description.txt</strong>.</p>
           <p><strong>Fonts</strong> are bundled under the SIL Open Font License. <strong>Background</strong>: choose an image to bypass the embedded JPEG and browser cache.</p>
-          <p>Uses <strong>WebCodecs</strong> (Chrome/Edge). Use <strong>Preview</strong> to see a sample frame while adjusting font and background.</p>
+          <p>Uses <strong>WebCodecs</strong> (Chrome/Edge). Use <strong>Preview</strong> to see a sample frame while adjusting font, background, and corner credit.</p>
         </div>
       </div>
       <label class="tools-demo-video-font-label" for="select-demo-video-font">Fonts</label>
       <select id="select-demo-video-font" class="tools-demo-video-font-select" title="Typeface for titles and labels in the exported video" aria-label="Demo video font"></select>
+      <label class="tools-demo-video-font-label" for="input-demo-video-corner-credit">Corner credit</label>
+      <input
+        type="text"
+        id="input-demo-video-corner-credit"
+        class="tools-demo-video-credit-input"
+        value="EnthusiastGuy"
+        maxlength="120"
+        spellcheck="false"
+        autocomplete="off"
+        title="Bottom-right text on each exported frame"
+        aria-label="Corner credit text on exported video"
+      />
+      <div class="tools-demo-video-credit-year-row">
+        <input
+          type="checkbox"
+          id="checkbox-demo-video-credit-year"
+          class="tools-demo-video-credit-year-cb"
+          checked
+        />
+        <label class="tools-demo-video-credit-year-label" for="checkbox-demo-video-credit-year">Include year</label>
+      </div>
       <input
         type="file"
         id="input-demo-video-bg"
@@ -259,7 +281,7 @@
           aria-label="Close preview"
         >×</button>
       </div>
-      <canvas id="demo-video-preview-canvas" width="640" height="360" class="demo-video-preview-canvas"></canvas>
+      <canvas id="demo-video-preview-canvas" width="1920" height="1080" class="demo-video-preview-canvas"></canvas>
     </div>
   </div>
 </div>
@@ -633,6 +655,7 @@
 <script src="js/controls.js"></script>
 <script src="js/setup-viz.js"></script>
 <script src="js/memory-panel.js"></script>
+<script src="js/sidebar-floating-tooltips.js"></script>
 <script src="js/app.js"></script>
 <script src="vendor/mp4-muxer.js"></script>
 <script src="vendor/seam-video-bg-embed.js"></script>

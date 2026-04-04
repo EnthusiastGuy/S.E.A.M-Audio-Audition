@@ -137,6 +137,19 @@
   const AUDIO_CODEC_STR = 'mp4a.40.2';
   /** Scale UI from original 1280-wide layout so text/chips stay readable at 1080p. */
   const VIDEO_UI_SCALE = CANVAS_W / 1280;
+  /** Extra horizontal room for the series number pill (wide fonts / multi-digit labels). */
+  const SERIES_BADGE_WIDTH_MULT = 1.15;
+  const DEFAULT_MP4_CORNER_CREDIT = 'EnthusiastGuy';
+
+  /** @returns {{ text: string, year: number|null }} */
+  function readMp4CornerCreditFromUi() {
+    const input = document.getElementById('input-demo-video-corner-credit');
+    const yearCb = document.getElementById('checkbox-demo-video-credit-year');
+    const raw = typeof input?.value === 'string' ? input.value : '';
+    const text = raw.trim() || DEFAULT_MP4_CORNER_CREDIT;
+    const includeYear = yearCb ? !!yearCb.checked : true;
+    return { text, year: includeYear ? new Date().getFullYear() : null };
+  }
   /** Hold wallpaper + pack hero; music starts after this (2–3 s from export seed). */
   const INTRO_TRANS_SEC = 1.25;
   const OUTRO_FADE_SEC = 1;
@@ -558,8 +571,9 @@
    */
   /**
    * @param {object} timeline introHoldSec, introTransSec, musicDurSec, outroFadeSec, outroBlackSec
+   * @param {{ text: string, year: number|null }} cornerCredit bottom-right label; year appended when non-null
    */
-  function drawFrame(ctx, tVideo, plans, currentIdx, totalPieces, bgBitmap, rawTitles, packMeta, exportYear, timeline, fontFace, packStatsLine) {
+  function drawFrame(ctx, tVideo, plans, currentIdx, totalPieces, bgBitmap, rawTitles, packMeta, cornerCredit, timeline, fontFace, packStatsLine) {
     const W = CANVAS_W;
     const H = CANVAS_H;
     const stack = mp4VideoFontStack(fontFace);
@@ -684,14 +698,14 @@
     const creditReserve = Math.round(38 * s);
     const footerTop = H - footerBand;
     const finalFootY0 = footerTop + Math.round(12 * s);
-    const finalBadgeW = Math.round(132 * s);
+    const finalBadgeW = Math.round(132 * SERIES_BADGE_WIDTH_MULT * s);
     const finalBadgeH = Math.round(88 * s);
     const finalBadgeX = (W - finalBadgeW) / 2;
     const finalBadgeY = finalFootY0;
     let finalTitleTop = finalFootY0;
     if (seriesNum) finalTitleTop = finalBadgeY + finalBadgeH + Math.round(14 * s);
 
-    const introBadgeW = Math.round(158 * s);
+    const introBadgeW = Math.round(158 * SERIES_BADGE_WIDTH_MULT * s);
     const introBadgeH = Math.round(104 * s);
     const introBadgeX = (W - introBadgeW) / 2;
     const introBadgeY = Math.round(H * 0.3);
@@ -744,7 +758,13 @@
     ctx.fillStyle = 'rgba(255, 255, 255, 0.26)';
     ctx.textAlign = 'right';
     ctx.textBaseline = 'alphabetic';
-    ctx.fillText(`EnthusiastGuy ${exportYear}`, W - pad, H - Math.round(14 * s));
+    const creditParts = [];
+    if (cornerCredit && cornerCredit.text) creditParts.push(String(cornerCredit.text));
+    if (cornerCredit && cornerCredit.year != null) creditParts.push(String(cornerCredit.year));
+    const creditLine = creditParts.join(' ');
+    if (creditLine) {
+      ctx.fillText(creditLine, W - pad, H - Math.round(14 * s));
+    }
     ctx.textAlign = 'left';
     ctx.restore();
 
@@ -862,9 +882,29 @@
     if (!main || !pop || !dialog || pop.hidden) return;
     const r = main.getBoundingClientRect();
     const edge = 10;
-    const maxW = Math.min(420, Math.max(240, r.width - edge * 2));
+    const horizPad = 22;
+    const headBlock = 44;
+    const vertPad = 26;
+    const ar = CANVAS_H / CANVAS_W;
+    const previewUiScale = 0.8;
+    const targetW = (CANVAS_W + horizPad) * previewUiScale;
+    const vwCap = (window.innerWidth - 24) * previewUiScale;
+    let maxW = Math.min(
+      vwCap,
+      Math.max(240, r.width - edge * 2),
+      targetW,
+    );
+    maxW = Math.max(320, maxW);
+    let canvasDispW = maxW - horizPad;
+    let totalH = headBlock + vertPad + canvasDispW * ar;
+    const maxH = window.innerHeight - edge * 2;
+    if (totalH > maxH) {
+      const maxCanvasH = Math.max(120, maxH - headBlock - vertPad);
+      const maxCanvasW = maxCanvasH / ar;
+      maxW = Math.max(320, Math.min(maxW, maxCanvasW + horizPad));
+    }
     dialog.style.boxSizing = 'border-box';
-    dialog.style.width = `${maxW}px`;
+    dialog.style.width = `${Math.round(maxW)}px`;
     const rect = dialog.getBoundingClientRect();
     let left = r.left + (r.width - rect.width) / 2;
     let top = r.top + (r.height - rect.height) / 2;
@@ -935,7 +975,7 @@
       bg,
       rawTitles,
       packMeta,
-      new Date().getFullYear(),
+      readMp4CornerCreditFromUi(),
       timeline,
       fontFace,
       packStatsLine,
@@ -1194,14 +1234,13 @@
     return g;
   }
 
-  async function renderMp4Offline(mixedBuffer, plans, rawTitles, bgBitmap, introHoldSec, fontFace, packStatsLine) {
+  async function renderMp4Offline(mixedBuffer, plans, rawTitles, bgBitmap, introHoldSec, fontFace, packStatsLine, cornerCredit) {
     const musicDurSec = mixedBuffer.duration;
     const totalVideoSec = introHoldSec + musicDurSec + OUTRO_BLACK_SEC;
     const fps = chooseFps(totalVideoSec);
     const totalVideoFrames = Math.max(1, Math.ceil(totalVideoSec * fps));
     const totalPieces = plans.length;
     const packMeta = parsePackFolderName(STATE.rootDir?.name);
-    const exportYear = new Date().getFullYear();
 
     const timeline = {
       introHoldSec,
@@ -1275,7 +1314,7 @@
       const tVideo = f / fps;
       const tMix = Math.min(Math.max(tVideo - introHoldSec, 0), musicDurSec);
       const idx = currentPlanIndex(tMix, plans);
-      drawFrame(ctx, tVideo, plans, idx, totalPieces, bgBitmap, rawTitles, packMeta, exportYear, timeline, fontFace, packStatsLine);
+      drawFrame(ctx, tVideo, plans, idx, totalPieces, bgBitmap, rawTitles, packMeta, cornerCredit, timeline, fontFace, packStatsLine);
 
       const vf = new VideoFrame(canvas, { timestamp: Math.round(tVideo * 1e6) });
       videoEncoder.encode(vf, { keyFrame: f % keyInterval === 0 });
@@ -1471,9 +1510,10 @@
       await ensureMp4ExportFontLoaded(fontFace);
       const bg = await loadExportSafeBackgroundBitmap();
       const packStatsLine = buildPackExportStatsLine();
+      const cornerCredit = readMp4CornerCreditFromUi();
 
       /* ---- full offline render ---- */
-      const mp4Blob = await renderMp4Offline(mixedBuffer, plans, rawTitles, bg, introHoldSec, fontFace, packStatsLine);
+      const mp4Blob = await renderMp4Offline(mixedBuffer, plans, rawTitles, bg, introHoldSec, fontFace, packStatsLine, cornerCredit);
 
       /* ---- downloads: MP4 + YouTube description ---- */
       const baseName = sanitizeFileName(STATE.rootDir?.name || 'S.E.A.M_demo');
@@ -1571,6 +1611,17 @@
     if (fontSel && !fontSel.dataset.seamPreviewFontListen) {
       fontSel.dataset.seamPreviewFontListen = '1';
       fontSel.addEventListener('change', () => scheduleDemoPreviewRender());
+    }
+
+    const creditInput = document.getElementById('input-demo-video-corner-credit');
+    const creditYearCb = document.getElementById('checkbox-demo-video-credit-year');
+    if (creditInput && !creditInput.dataset.seamPreviewCreditListen) {
+      creditInput.dataset.seamPreviewCreditListen = '1';
+      creditInput.addEventListener('input', () => scheduleDemoPreviewRender());
+    }
+    if (creditYearCb && !creditYearCb.dataset.seamPreviewCreditListen) {
+      creditYearCb.dataset.seamPreviewCreditListen = '1';
+      creditYearCb.addEventListener('change', () => scheduleDemoPreviewRender());
     }
 
     if (!document.body.dataset.seamPreviewEsc) {

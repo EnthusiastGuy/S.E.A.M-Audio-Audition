@@ -1,0 +1,46 @@
+/* MEMORY + MP4 ℹ — moved to document.body by sidebar-floating-tooltips.js */
+
+#memory-estimate-tooltip.sidebar-floating-tooltip,
+#demo-video-tooltip.sidebar-floating-tooltip {
+  position: fixed;
+  z-index: 12500;
+  box-sizing: border-box;
+  width: min(560px, calc(100vw - 20px));
+  max-width: calc(100vw - 20px);
+  padding: 12px 14px 14px;
+  border-radius: 12px;
+  margin: 0;
+  text-align: left;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateY(-4px);
+  transition:
+    opacity 0.18s ease,
+    visibility 0.18s,
+    transform 0.18s ease;
+}
+
+#memory-estimate-tooltip.sidebar-floating-tooltip.is-visible,
+#demo-video-tooltip.sidebar-floating-tooltip.is-visible {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+#memory-estimate-tooltip.sidebar-floating-tooltip {
+  border: 1px solid rgba(255, 193, 7, 0.55);
+  background:
+    linear-gradient(rgba(255, 193, 7, 0.1), rgba(255, 193, 7, 0.1)),
+    rgba(30, 42, 69, 0.97);
+  box-shadow: var(--shadow);
+}
+
+#demo-video-tooltip.sidebar-floating-tooltip {
+  border: 1px solid rgba(78, 205, 196, 0.45);
+  background:
+    linear-gradient(rgba(78, 205, 196, 0.08), rgba(78, 205, 196, 0.08)),
+    rgba(30, 42, 69, 0.96);
+  box-shadow: var(--shadow);
+}

@@ -12,6 +12,10 @@
   /** Image chosen in-page (File/Blob); wins over fetch/embed so exports always match what you picked. */
   let demoVideoUserBackground = null;
 
+  let demoVideoPreviewOpen = false;
+  let demoPreviewRenderTimer = null;
+  let demoPreviewReflowListenersBound = false;
+
   const MP4_EXPORT_FONT_STORAGE_KEY = 'seam_mp4_export_font_css';
 
   /** Bundled OFL faces (see css/mp4-export-fonts.css); `value` must match @font-face font-family. */
@@ -812,6 +816,138 @@
     return idx;
   }
 
+  function getDemoPreviewTitles() {
+    const fmt = FMT;
+    const order = STATE.order?.[fmt] || [];
+    const songs = STATE.songs?.[fmt] || [];
+    if (!order.length) {
+      return ['Stellar Drift', 'Moon Unit', 'Analog Heart', 'Echo Chamber', 'Night Shift'];
+    }
+    const titles = order.slice(0, Math.min(6, order.length)).map(idx => songs[idx]?.name || `Song ${idx + 1}`);
+    while (titles.length < 3) titles.push(`Track ${titles.length + 1}`);
+    return titles;
+  }
+
+  function buildDemoPreviewMockPlans(rawTitles) {
+    const n = rawTitles.length;
+    const excerptLen = 22;
+    const fadeBetween = 2;
+    const peaks = new Float32Array(PEAK_BINS);
+    for (let i = 0; i < PEAK_BINS; i++) {
+      peaks[i] = 0.18 + 0.82 * Math.abs(Math.sin((i / PEAK_BINS) * Math.PI * 5) * Math.cos(i / 23));
+    }
+    let off = 0;
+    return rawTitles.map((title, i) => {
+      const tStartSec = off;
+      off += excerptLen - (i < n - 1 ? fadeBetween : 0);
+      return {
+        title,
+        tStartSec,
+        fullDurationSec: 240 + i * 35,
+        partCount: 4 + (i % 5),
+        excerptLenSec: excerptLen,
+        peaks,
+        localT(globalMixSec) {
+          const local = globalMixSec - tStartSec;
+          return Math.min(1, Math.max(0, local / excerptLen));
+        },
+      };
+    });
+  }
+
+  function positionDemoVideoPreviewPopover() {
+    const main = document.getElementById('main-content-area');
+    const pop = document.getElementById('demo-video-preview-popover');
+    const dialog = pop?.querySelector('.demo-video-preview-dialog');
+    if (!main || !pop || !dialog || pop.hidden) return;
+    const r = main.getBoundingClientRect();
+    const edge = 10;
+    const maxW = Math.min(420, Math.max(240, r.width - edge * 2));
+    dialog.style.boxSizing = 'border-box';
+    dialog.style.width = `${maxW}px`;
+    const rect = dialog.getBoundingClientRect();
+    let left = r.left + (r.width - rect.width) / 2;
+    let top = r.top + (r.height - rect.height) / 2;
+    left = Math.max(edge, Math.min(left, window.innerWidth - rect.width - edge));
+    top = Math.max(edge, Math.min(top, window.innerHeight - rect.height - edge));
+    dialog.style.left = `${Math.round(left)}px`;
+    dialog.style.top = `${Math.round(top)}px`;
+  }
+
+  function scheduleDemoPreviewRender() {
+    if (!demoVideoPreviewOpen) return;
+    clearTimeout(demoPreviewRenderTimer);
+    demoPreviewRenderTimer = setTimeout(() => {
+      void renderDemoVideoPreviewFrame();
+    }, 100);
+  }
+
+  async function renderDemoVideoPreviewFrame() {
+    const canvas = document.getElementById('demo-video-preview-canvas');
+    const pop = document.getElementById('demo-video-preview-popover');
+    if (!canvas || !pop || pop.hidden || !demoVideoPreviewOpen) return;
+    const fontSel = document.getElementById('select-demo-video-font');
+    let fontFace = fontSel && fontSel.value;
+    if (!fontFace || !MP4_EXPORT_FONTS.some(f => f.value === fontFace)) {
+      fontFace = 'SEAM-Export-Space-Mono';
+    }
+    try {
+      await ensureMp4ExportFontLoaded(fontFace);
+    } catch (_) {
+      /* ignore */
+    }
+    const bg = await loadExportSafeBackgroundBitmap();
+    const rawTitles = getDemoPreviewTitles();
+    const plans = buildDemoPreviewMockPlans(rawTitles);
+    let musicTail = 0;
+    for (const p of plans) musicTail = Math.max(musicTail, p.tStartSec + 45);
+    const musicDurSec = Math.max(120, musicTail + 24);
+    const introHoldSec = 2.5;
+    const timeline = {
+      introHoldSec,
+      introTransSec: INTRO_TRANS_SEC,
+      musicDurSec,
+      outroFadeSec: OUTRO_FADE_SEC,
+      outroBlackSec: OUTRO_BLACK_SEC,
+    };
+    const afterIntro = introHoldSec + INTRO_TRANS_SEC;
+    const tVideo = afterIntro + Math.min(52, musicDurSec * 0.3);
+    const tMix = tVideo - introHoldSec;
+    const currentIdx = currentPlanIndex(tMix, plans);
+    const offscreen = document.createElement('canvas');
+    offscreen.width = CANVAS_W;
+    offscreen.height = CANVAS_H;
+    const octx = offscreen.getContext('2d');
+    if (!octx) return;
+    const packMeta = parsePackFolderName(STATE.rootDir?.name);
+    let packStatsLine = '';
+    try {
+      packStatsLine = buildPackExportStatsLine();
+    } catch (_) {
+      packStatsLine = '';
+    }
+    drawFrame(
+      octx,
+      tVideo,
+      plans,
+      currentIdx,
+      plans.length,
+      bg,
+      rawTitles,
+      packMeta,
+      new Date().getFullYear(),
+      timeline,
+      fontFace,
+      packStatsLine,
+    );
+    const ctx2 = canvas.getContext('2d');
+    if (!ctx2) return;
+    ctx2.imageSmoothingEnabled = true;
+    ctx2.imageSmoothingQuality = 'high';
+    ctx2.drawImage(offscreen, 0, 0, canvas.width, canvas.height);
+    positionDemoVideoPreviewPopover();
+  }
+
   /* ── background image (must not taint canvas for VideoFrame) ─ */
   /* 1) User-picked file (page UI) 2) fetched JPG 3) embedded data URL (file:// fallback). */
 
@@ -1256,7 +1392,7 @@
 
   async function runExport() {
     const btn = document.getElementById('btn-demo-video');
-    const hint = document.getElementById('demo-video-hint');
+    const exportStatus = document.getElementById('demo-video-export-status');
     const order = STATE.order?.[FMT];
     if (!order || order.length === 0) {
       alert('Load a sample pack with at least one song first.');
@@ -1350,12 +1486,12 @@
         triggerDownload(descBlob, `${baseName}_demo_description.txt`);
       });
 
-      if (hint) {
-        hint.textContent =
-          'Export complete (MP4 with embedded chapters + description.txt for YouTube). ' +
+      if (exportStatus) {
+        exportStatus.textContent =
+          'Export complete (MP4 + description.txt). ' +
           (bg
             ? ''
-            : 'No background: use “Choose background image…” or add img/video_background.jpg / run npm run vendor:video-bg in _demo. ') +
+            : 'No background: pick an image or add img/video_background.jpg / run npm run vendor:video-bg. ') +
           'Run again for different random excerpts.';
       }
     } catch (err) {
@@ -1384,6 +1520,64 @@
     } else {
       statusEl.textContent = 'Using default (project JPG or embedded copy).';
       if (resetBtn) resetBtn.hidden = true;
+    }
+    scheduleDemoPreviewRender();
+  }
+
+  function bindDemoVideoPreview() {
+    const pop = document.getElementById('demo-video-preview-popover');
+    const btnOpen = document.getElementById('btn-demo-video-preview');
+    const btnClose = document.getElementById('btn-demo-video-preview-close');
+    const main = document.getElementById('main-content-area');
+    const sidebar = document.querySelector('.sidebar-controls');
+    const fontSel = document.getElementById('select-demo-video-font');
+
+    function setDemoVideoPreviewOpen(open) {
+      demoVideoPreviewOpen = open;
+      if (!pop) return;
+      if (open) {
+        pop.hidden = false;
+        pop.setAttribute('aria-hidden', 'false');
+        positionDemoVideoPreviewPopover();
+        void renderDemoVideoPreviewFrame();
+      } else {
+        pop.hidden = true;
+        pop.setAttribute('aria-hidden', 'true');
+        clearTimeout(demoPreviewRenderTimer);
+      }
+    }
+
+    if (btnOpen && pop && !btnOpen.dataset.seamPreviewBound) {
+      btnOpen.dataset.seamPreviewBound = '1';
+      btnOpen.addEventListener('click', () => {
+        setDemoVideoPreviewOpen(pop.hidden);
+      });
+    }
+    if (btnClose && pop && !btnClose.dataset.seamPreviewBound) {
+      btnClose.dataset.seamPreviewBound = '1';
+      btnClose.addEventListener('click', () => setDemoVideoPreviewOpen(false));
+    }
+
+    if (!demoPreviewReflowListenersBound) {
+      demoPreviewReflowListenersBound = true;
+      const onReflow = () => {
+        if (demoVideoPreviewOpen) positionDemoVideoPreviewPopover();
+      };
+      window.addEventListener('resize', onReflow);
+      main?.addEventListener('scroll', onReflow, { passive: true });
+      sidebar?.addEventListener('scroll', onReflow, { passive: true });
+    }
+
+    if (fontSel && !fontSel.dataset.seamPreviewFontListen) {
+      fontSel.dataset.seamPreviewFontListen = '1';
+      fontSel.addEventListener('change', () => scheduleDemoPreviewRender());
+    }
+
+    if (!document.body.dataset.seamPreviewEsc) {
+      document.body.dataset.seamPreviewEsc = '1';
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && demoVideoPreviewOpen) setDemoVideoPreviewOpen(false);
+      });
     }
   }
 
@@ -1431,6 +1625,8 @@
       });
       warmMp4ExportFontPreviews();
     }
+
+    bindDemoVideoPreview();
   }
 
   if (document.readyState === 'loading') {

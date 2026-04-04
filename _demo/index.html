@@ -182,7 +182,24 @@
       </div>
     </div>
     <div class="tools-card" role="region" aria-label="MP4 export">
-      <div class="knob-label">MP4 EXPORT</div>
+      <div class="tools-demo-video-popover-anchor">
+        <div class="tools-demo-video-panel-header">
+          <span class="knob-label">MP4 EXPORT</span>
+          <button
+            type="button"
+            class="tools-demo-video-info"
+            id="demo-video-info"
+            aria-label="About MP4 export"
+            aria-describedby="demo-video-tooltip"
+          >&#8505;</button>
+        </div>
+        <div class="tools-demo-video-tooltip" id="demo-video-tooltip" role="tooltip">
+          <div class="tools-demo-video-tooltip-lead">About MP4 export</div>
+          <p>Renders a <strong>1080p MP4</strong> with embedded chapter markers (Nero <code>chpl</code>; VLC and many players) plus a YouTube-style <strong>description.txt</strong>.</p>
+          <p><strong>Fonts</strong> are bundled under the SIL Open Font License. <strong>Background</strong>: choose an image to bypass the embedded JPEG and browser cache.</p>
+          <p>Uses <strong>WebCodecs</strong> (Chrome/Edge). Use <strong>Preview</strong> to see a sample frame while adjusting font and background.</p>
+        </div>
+      </div>
       <label class="tools-demo-video-font-label" for="select-demo-video-font">Fonts</label>
       <select id="select-demo-video-font" class="tools-demo-video-font-select" title="Typeface for titles and labels in the exported video" aria-label="Demo video font"></select>
       <input
@@ -205,9 +222,13 @@
         hidden
       >Use default background</button>
       <p class="tools-demo-video-bg-status" id="demo-video-bg-status" aria-live="polite"></p>
-      <p class="tools-card-hint" id="demo-video-hint">
-        1080p MP4 with chapter markers (Nero chpl) and description.txt for YouTube. Bundled OFL fonts; pick a background to bypass embed/cache. Uses WebCodecs.
-      </p>
+      <button
+        type="button"
+        class="tools-demo-video-preview-btn"
+        id="btn-demo-video-preview"
+        title="Show a sample frame (playlist + track + waveform) over the song list"
+      >Preview</button>
+      <p class="tools-demo-video-export-status" id="demo-video-export-status" aria-live="polite"></p>
       <button
         type="button"
         class="tools-demo-video-btn"
@@ -218,8 +239,28 @@
   </div>
 
   <!-- Main scrollable content -->
-  <div class="main-content">
+  <div class="main-content" id="main-content-area">
     <div id="tabs-content"></div>
+  </div>
+
+  <div
+    id="demo-video-preview-popover"
+    class="demo-video-preview-popover"
+    hidden
+    aria-hidden="true"
+  >
+    <div class="demo-video-preview-dialog" role="dialog" aria-modal="false" aria-labelledby="demo-video-preview-title">
+      <div class="demo-video-preview-head">
+        <span class="demo-video-preview-title" id="demo-video-preview-title">Preview frame</span>
+        <button
+          type="button"
+          class="demo-video-preview-close"
+          id="btn-demo-video-preview-close"
+          aria-label="Close preview"
+        >×</button>
+      </div>
+      <canvas id="demo-video-preview-canvas" width="640" height="360" class="demo-video-preview-canvas"></canvas>
+    </div>
   </div>
 </div>
 

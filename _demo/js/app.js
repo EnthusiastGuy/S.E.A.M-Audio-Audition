@@ -1181,7 +1181,7 @@ async function discoverSongs(rootHandle) {
           panY: Number.isFinite(Number(pg.panY)) ? Number(pg.panY) : 0,
           bricks: Array.isArray(pg.bricks) ? pg.bricks : [],
           combs,
-          downloadFormat: df === 'mp3' || df === 'ogg' ? df : 'wav',
+          downloadFormat: df === 'mp3' || df === 'ogg' || df === 'flac' ? df : 'wav',
           clusterAnnotations,
         };
       }

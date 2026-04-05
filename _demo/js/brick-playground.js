@@ -2153,6 +2153,9 @@ async function bpDownloadCluster(root) {
   } else if (fmt === 'ogg') {
     blob = await audioBufferToOggBlob(rendered);
     ext = 'ogg';
+  } else if (fmt === 'flac') {
+    blob = await audioBufferToFlacBlob(rendered);
+    ext = 'flac';
   } else {
     blob = audioBufferToWavBlob(rendered);
     ext = 'wav';
@@ -2167,7 +2170,7 @@ async function bpDownloadCluster(root) {
 }
 
 function cyclePlaygroundDownloadFormat() {
-  const order = ['wav', 'mp3', 'ogg'];
+  const order = ['wav', 'mp3', 'ogg', 'flac'];
   const cur = (STATE.playground.downloadFormat || 'wav').toLowerCase();
   const i = order.indexOf(cur);
   const next = order[(i + 1) % order.length];
@@ -3266,7 +3269,7 @@ function updateClusterUi() {
 
   const isPlaying = playingRoot === root;
   const dlFmt = (STATE.playground.downloadFormat || 'wav').toLowerCase();
-  const dlFmtLabel = dlFmt === 'mp3' || dlFmt === 'ogg' ? dlFmt.toUpperCase() : 'WAV';
+  const dlFmtLabel = dlFmt.toUpperCase();
 
   ui.innerHTML = `
     <div class="bp-cluster-toolbar">
@@ -3295,7 +3298,7 @@ function updateClusterUi() {
     <div class="bp-cluster-footer" style="top:${toolbarH + borderH + seekH + 10}px;">
       <div class="bp-cluster-footer-inner">
         <button type="button" class="bp-mini-btn bp-mini-btn--icon bp-dl" title="Download" aria-label="Download">${BP_DL_ICON}</button>
-        <button type="button" class="bp-mini-btn bp-dl-fmt" title="Cycle format: WAV → MP3 → OGG">${dlFmtLabel}</button>
+        <button type="button" class="bp-mini-btn bp-dl-fmt" title="Cycle format: WAV → MP3 → OGG → FLAC">${dlFmtLabel}</button>
       </div>
     </div>
   `;
@@ -3355,7 +3358,7 @@ function updateClusterUi() {
     fmtBtn.addEventListener('click', ev => {
       ev.stopPropagation();
       const next = cyclePlaygroundDownloadFormat();
-      fmtBtn.textContent = next === 'mp3' || next === 'ogg' ? next.toUpperCase() : 'WAV';
+      fmtBtn.textContent = next.toUpperCase();
       fmtBtn.title = `Next format: ${next.toUpperCase()} (click to cycle)`;
     });
   }

@@ -56,10 +56,15 @@ function ensurePlayerState(fmt, songIdx) {
         STATE.players[key].loopSettings = ss.loopSettings[key];
       }
       if (ss.downloadFormats && ss.downloadFormats[key]) {
-        STATE.players[key].downloadFormat = ss.downloadFormats[key];
+        STATE.players[key].downloadFormat = normalizeAudioExportFormat(ss.downloadFormats[key]);
       }
       if (ss.downloadFormats && ss.downloadFormats[`${key}__parts`]) {
-        STATE.players[key].partDownloadFormats = ss.downloadFormats[`${key}__parts`];
+        const raw = ss.downloadFormats[`${key}__parts`];
+        const cleaned = {};
+        for (const [pk, pv] of Object.entries(raw)) {
+          cleaned[pk] = normalizeAudioExportFormat(pv);
+        }
+        STATE.players[key].partDownloadFormats = cleaned;
       }
     }
   }
@@ -67,6 +72,13 @@ function ensurePlayerState(fmt, songIdx) {
 }
 
 const PREVIEW_MAX_SECONDS = 60 * 60;
+
+const EXPORT_FORMATS = ['wav', 'mp3', 'ogg', 'flac'];
+
+function normalizeAudioExportFormat(f) {
+  const x = String(f || 'wav').toLowerCase();
+  return EXPORT_FORMATS.includes(x) ? x : 'wav';
+}
 
 function markCompositionDirty(fmt, songIdx) {
   const ps = STATE.players[`${fmt}_${songIdx}`];
@@ -321,6 +333,175 @@ async function loadVorbisEncoder() {
   return mod;
 }
 
+function waitForFlacRuntimeReady(Flac) {
+  return new Promise((resolve, reject) => {
+    if (!Flac) {
+      reject(new Error('libflac runtime missing'));
+      return;
+    }
+    if (typeof Flac.isReady === 'function' && Flac.isReady()) {
+      resolve();
+      return;
+    }
+    const t = setTimeout(() => reject(new Error('libflac initialization timed out')), 120000);
+    const done = () => {
+      clearTimeout(t);
+      resolve();
+    };
+    Flac.onready = done;
+  });
+}
+
+let _flacWasmEmbedPromise = null;
+/** Injects Module.wasmBinary so libflac does not fetch .wasm (broken on file:// and some servers). */
+function loadLibFlacWasmEmbedScript() {
+  if (window.Module && window.Module.wasmBinary && window.Module.wasmBinary.byteLength > 0) {
+    return Promise.resolve();
+  }
+  if (!_flacWasmEmbedPromise) {
+    _flacWasmEmbedPromise = new Promise((resolve, reject) => {
+      const existing = document.querySelector('script[data-seam-libflac-wasm-embed="1"]');
+      if (existing) {
+        if (window.Module && window.Module.wasmBinary && window.Module.wasmBinary.byteLength > 0) {
+          resolve();
+        } else {
+          existing.addEventListener('load', () => resolve());
+          existing.addEventListener('error', () => reject(new Error('Failed to load FLAC wasm embed')));
+          queueMicrotask(() => {
+            if (window.Module && window.Module.wasmBinary && window.Module.wasmBinary.byteLength > 0) resolve();
+          });
+        }
+        return;
+      }
+      const s = document.createElement('script');
+      s.src = vendorUrl('vendor/libflac-wasm-embed.js');
+      s.async = true;
+      s.dataset.seamLibflacWasmEmbed = '1';
+      s.onload = () => resolve();
+      s.onerror = () => reject(new Error('Failed to load FLAC wasm embed'));
+      document.head.appendChild(s);
+    });
+  }
+  return _flacWasmEmbedPromise;
+}
+
+let _flacLibPromise = null;
+async function loadLibFlacScript() {
+  if (window.Flac && typeof window.Flac.isReady === 'function' && window.Flac.isReady()) {
+    return window.Flac;
+  }
+  if (!_flacLibPromise) {
+    _flacLibPromise = (async () => {
+      await loadLibFlacWasmEmbedScript();
+      window.FLAC_SCRIPT_LOCATION = new URL('vendor/', document.baseURI).href;
+      await new Promise((resolve, reject) => {
+        const settle = () => {
+          waitForFlacRuntimeReady(window.Flac)
+            .then(() => resolve())
+            .catch(reject);
+        };
+        const existing = document.querySelector('script[data-seam-libflac="1"]');
+        if (existing) {
+          if (window.Flac) queueMicrotask(settle);
+          else {
+            existing.addEventListener('load', settle);
+            existing.addEventListener('error', () => reject(new Error('Failed to load libflac')));
+          }
+          return;
+        }
+        const s = document.createElement('script');
+        s.src = vendorUrl('vendor/libflac.min.wasm.js');
+        s.async = true;
+        s.dataset.seamLibflac = '1';
+        s.onload = settle;
+        s.onerror = () => reject(new Error('Failed to load libflac'));
+        document.head.appendChild(s);
+      });
+      return window.Flac;
+    })();
+  }
+  const Flac = await _flacLibPromise;
+  if (!Flac) throw new Error('libflac unavailable');
+  return Flac;
+}
+
+async function loadFlacEncoderDeps() {
+  return loadLibFlacScript();
+}
+
+async function audioBufferToFlacBlob(audioBuffer) {
+  try {
+    const Flac = await loadFlacEncoderDeps();
+    const flacCfg = STATE.encoding?.flac || {};
+    const channels = resolveEncoderChannels(audioBuffer.numberOfChannels, flacCfg.channels);
+    const targetRate = flacCfg.sampleRateMode === 'source'
+      ? audioBuffer.sampleRate
+      : Number(flacCfg.sampleRateMode) || audioBuffer.sampleRate;
+    const workBuffer = await maybeResampleBuffer(audioBuffer, targetRate, channels);
+    const compression = [0, 1, 2, 3, 4, 5, 6, 7, 8].includes(Number(flacCfg.compressionLevel))
+      ? Number(flacCfg.compressionLevel)
+      : 5;
+
+    const sampleRate = workBuffer.sampleRate;
+    const frames = workBuffer.length;
+    if (frames < 1) return null;
+    const chData = [];
+    for (let c = 0; c < channels; c++) {
+      chData.push(workBuffer.getChannelData(c));
+    }
+
+    const chunks = [];
+    const encId = Flac.create_libflac_encoder(
+      sampleRate,
+      channels,
+      16,
+      compression,
+      frames,
+      false
+    );
+    if (!encId) {
+      throw new Error('FLAC encoder init failed');
+    }
+    const onWrite = (chunk) => {
+      if (chunk && chunk.length) chunks.push(new Uint8Array(chunk));
+    };
+    const initState = Flac.init_encoder_stream(encId, onWrite, null);
+    if (initState !== 0) {
+      Flac.FLAC__stream_encoder_delete(encId);
+      throw new Error(`FLAC encoder stream init failed (${initState})`);
+    }
+
+    const chunkFrames = 4096;
+    for (let i = 0; i < frames; i += chunkFrames) {
+      const n = Math.min(chunkFrames, frames - i);
+      const interleaved = new Int32Array(n * channels);
+      let o = 0;
+      for (let f = 0; f < n; f++) {
+        for (let c = 0; c < channels; c++) {
+          const s = Math.max(-1, Math.min(1, chData[c][i + f]));
+          interleaved[o++] = s < 0 ? Math.round(s * 0x8000) : Math.round(s * 0x7FFF);
+        }
+      }
+      if (!Flac.FLAC__stream_encoder_process_interleaved(encId, interleaved, n)) {
+        Flac.FLAC__stream_encoder_delete(encId);
+        throw new Error('FLAC encode failed');
+      }
+    }
+
+    if (!Flac.FLAC__stream_encoder_finish(encId)) {
+      Flac.FLAC__stream_encoder_delete(encId);
+      throw new Error('FLAC encode finalize failed');
+    }
+    Flac.FLAC__stream_encoder_delete(encId);
+    if (chunks.length === 0) return null;
+    return new Blob(chunks, { type: 'audio/flac' });
+  } catch (e) {
+    console.error('FLAC export failed', e);
+    alert('FLAC export failed in this browser. Please try WAV, MP3, or OGG.');
+    return null;
+  }
+}
+
 async function audioBufferToMp3Blob(audioBuffer) {
   try {
     const lame = await loadLameJs();
@@ -359,7 +540,7 @@ async function audioBufferToMp3Blob(audioBuffer) {
     return new Blob(mp3Chunks, { type: 'audio/mpeg' });
   } catch (e) {
     console.error('MP3 export failed', e);
-    alert('MP3 export failed. Please try again, or use WAV/OGG if the issue persists.');
+    alert('MP3 export failed. Please try again, or use WAV, OGG, or FLAC if the issue persists.');
     return null;
   }
 }
@@ -399,7 +580,7 @@ async function audioBufferToOggBlob(audioBuffer) {
     return encoder.finish('audio/ogg');
   } catch (e) {
     console.error('OGG export failed', e);
-    alert('OGG export failed in this browser. Please try WAV or MP3.');
+    alert('OGG export failed in this browser. Please try WAV, MP3, or FLAC.');
     return null;
   }
 }
@@ -411,11 +592,12 @@ async function downloadCompositionPreview(fmt, songIdx, requestedFormat) {
   const preview = await buildPreviewBuffer(fmt, songIdx);
   if (!preview) return;
 
-  const format = (requestedFormat || ps.downloadFormat || 'wav').toLowerCase();
+  const format = normalizeAudioExportFormat(requestedFormat || ps.downloadFormat || 'wav');
   const blob =
     format === 'wav' ? audioBufferToWavBlob(preview) :
     format === 'mp3' ? await audioBufferToMp3Blob(preview) :
     format === 'ogg' ? await audioBufferToOggBlob(preview) :
+    format === 'flac' ? await audioBufferToFlacBlob(preview) :
     null;
   if (!blob) return;
 
@@ -436,11 +618,12 @@ async function downloadPartPreview(fmt, songIdx, partIndex, requestedFormat) {
   const buf = ps.buffers[partIndex];
   if (!buf) return;
 
-  const format = (requestedFormat || ps.partDownloadFormats?.[String(partIndex)] || 'wav').toLowerCase();
+  const format = normalizeAudioExportFormat(requestedFormat || ps.partDownloadFormats?.[String(partIndex)] || 'wav');
   const blob =
     format === 'wav' ? audioBufferToWavBlob(buf) :
     format === 'mp3' ? await audioBufferToMp3Blob(buf) :
     format === 'ogg' ? await audioBufferToOggBlob(buf) :
+    format === 'flac' ? await audioBufferToFlacBlob(buf) :
     null;
   if (!blob) return;
 

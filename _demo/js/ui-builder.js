@@ -185,7 +185,7 @@ function makeDownloadControl(fmt, songIdx) {
 
   const dd = document.createElement('div');
   dd.className = 'download-format-dropdown hidden';
-  ['wav', 'mp3', 'ogg'].forEach((fmtOpt) => {
+  ['wav', 'mp3', 'ogg', 'flac'].forEach((fmtOpt) => {
     const opt = document.createElement('button');
     opt.className = 'download-format-option';
     opt.textContent = fmtOpt.toUpperCase();

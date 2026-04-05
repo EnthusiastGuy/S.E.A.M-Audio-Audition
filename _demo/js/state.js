@@ -37,6 +37,11 @@ const STATE = {
       sampleRateMode: 'source',
       channels: 'auto',
     },
+    flac: {
+      compressionLevel: 5,
+      sampleRateMode: 'source',
+      channels: 'auto',
+    },
   },
   players: {},
   /** Brick playground (per folder via session key): view mode, pan/zoom, brick positions. */
@@ -48,7 +53,7 @@ const STATE = {
     bricks: [],
     /** Optional per-song comb anchors `{ "wav_0": { x, y }, ... }` — also derivable from template bricks. */
     combs: {},
-    /** @type {'wav'|'mp3'|'ogg'} */
+    /** @type {'wav'|'mp3'|'ogg'|'flac'} */
     downloadFormat: 'wav',
     /** Optional per-cluster annotation map `{ "brickId|brickId": { title, description } }`. */
     clusterAnnotations: {},
@@ -141,6 +146,7 @@ function loadSession() {
     const parsed = JSON.parse(raw);
     const mp3Saved = parsed?.encoding?.mp3 || {};
     const oggSaved = parsed?.encoding?.ogg || {};
+    const flacSaved = parsed?.encoding?.flac || {};
     parsed.encoding = {
       mp3: {
         bitrateKbps: [96, 128, 160, 192, 224, 256, 320].includes(Number(mp3Saved.bitrateKbps))
@@ -162,6 +168,17 @@ function loadSession() {
           : 'source',
         channels: ['auto', 'mono', 'stereo'].includes(oggSaved.channels)
           ? oggSaved.channels
+          : 'auto',
+      },
+      flac: {
+        compressionLevel: [0, 1, 2, 3, 4, 5, 6, 7, 8].includes(Number(flacSaved.compressionLevel))
+          ? Number(flacSaved.compressionLevel)
+          : 5,
+        sampleRateMode: ['source', '44100', '48000'].includes(flacSaved.sampleRateMode)
+          ? flacSaved.sampleRateMode
+          : 'source',
+        channels: ['auto', 'mono', 'stereo'].includes(flacSaved.channels)
+          ? flacSaved.channels
           : 'auto',
       },
     };
@@ -191,7 +208,7 @@ function loadSession() {
         panY: Number.isFinite(Number(pg.panY)) ? Number(pg.panY) : 0,
         bricks: Array.isArray(pg.bricks) ? pg.bricks : [],
         combs,
-        downloadFormat: df === 'mp3' || df === 'ogg' ? df : 'wav',
+        downloadFormat: df === 'mp3' || df === 'ogg' || df === 'flac' ? df : 'wav',
         clusterAnnotations:
           pg.clusterAnnotations &&
           typeof pg.clusterAnnotations === 'object' &&

@@ -332,6 +332,11 @@ function getDefaultEncodingSettings() {
       sampleRateMode: 'source',
       channels: 'auto',
     },
+    flac: {
+      compressionLevel: 5,
+      sampleRateMode: 'source',
+      channels: 'auto',
+    },
   };
 }
 
@@ -350,6 +355,9 @@ function initEncodingSettings() {
   const oggQualityLabel = document.getElementById('setting-ogg-quality-label');
   const oggRate = document.getElementById('setting-ogg-samplerate');
   const oggChannels = document.getElementById('setting-ogg-channels');
+  const flacCompression = document.getElementById('setting-flac-compression');
+  const flacRate = document.getElementById('setting-flac-samplerate');
+  const flacChannels = document.getElementById('setting-flac-channels');
   const waveformMaxSec = document.getElementById('setting-waveform-max-sec');
   const seamPreviewMs = document.getElementById('setting-seam-preview-ms');
 
@@ -364,6 +372,12 @@ function initEncodingSettings() {
     oggQualityLabel.value = Number(oggQuality.value).toFixed(2);
     oggRate.value = enc.ogg?.sampleRateMode ?? defaults.ogg.sampleRateMode;
     oggChannels.value = enc.ogg?.channels ?? defaults.ogg.channels;
+    if (flacCompression) {
+      const lv = Number(enc.flac?.compressionLevel ?? defaults.flac.compressionLevel);
+      flacCompression.value = String([0, 1, 2, 3, 4, 5, 6, 7, 8].includes(lv) ? lv : 5);
+    }
+    if (flacRate) flacRate.value = enc.flac?.sampleRateMode ?? defaults.flac.sampleRateMode;
+    if (flacChannels) flacChannels.value = enc.flac?.channels ?? defaults.flac.channels;
     if (waveformMaxSec) {
       const wm = Number(STATE.waveformMaxPartDurationSec);
       waveformMaxSec.value = String(Number.isFinite(wm) ? wm : 20);
@@ -385,6 +399,14 @@ function initEncodingSettings() {
         quality: Math.max(0, Math.min(1, Number(oggQuality.value))),
         sampleRateMode: oggRate.value,
         channels: oggChannels.value,
+      },
+      flac: {
+        compressionLevel: (() => {
+          const n = Number(flacCompression && flacCompression.value);
+          return [0, 1, 2, 3, 4, 5, 6, 7, 8].includes(n) ? n : 5;
+        })(),
+        sampleRateMode: flacRate ? flacRate.value : 'source',
+        channels: flacChannels ? flacChannels.value : 'auto',
       },
     };
     oggQualityLabel.value = STATE.encoding.ogg.quality.toFixed(2);
@@ -426,9 +448,11 @@ function initEncodingSettings() {
     if (e.target === modal) closeModal();
   });
 
-  [mp3Bitrate, mp3Rate, mp3Channels, oggRate, oggChannels].forEach((el) => {
-    el.addEventListener('change', saveControlsToState);
-  });
+  [mp3Bitrate, mp3Rate, mp3Channels, oggRate, oggChannels, flacCompression, flacRate, flacChannels]
+    .filter(Boolean)
+    .forEach((el) => {
+      el.addEventListener('change', saveControlsToState);
+    });
   if (waveformMaxSec) {
     waveformMaxSec.addEventListener('change', saveControlsToState);
   }

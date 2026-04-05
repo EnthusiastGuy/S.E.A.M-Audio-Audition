@@ -581,13 +581,20 @@ async function loadPartBuffer(fmt, songIdx, partIndex) {
   if (!handle) return null;
 
   try {
-    const file    = await handle.getFile();
-    const arrBuf  = await file.arrayBuffer();
-    const decoded = await AC.decodeAudioData(arrBuf);
+    const file = await handle.getFile();
+    const arrBuf = await file.arrayBuffer();
+    const seamWav = globalThis.SEAM_WAV_PCM16;
+    let decoded =
+      seamWav && typeof seamWav.tryDecodePcm16WavToAudioBuffer === 'function'
+        ? seamWav.tryDecodePcm16WavToAudioBuffer(AC, arrBuf)
+        : null;
+    if (!decoded) {
+      decoded = await AC.decodeAudioData(arrBuf.slice(0));
+    }
     ps.buffers[partIndex] = decoded;
     ps.partDurations[partIndex] = decoded.duration;
     return decoded;
-  } catch(e) {
+  } catch (e) {
     console.warn('Could not decode', handle, e);
     ps.buffers[partIndex] = null;
     return null;

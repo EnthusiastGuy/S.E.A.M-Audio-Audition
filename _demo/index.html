@@ -204,7 +204,7 @@
       <label class="tools-demo-video-font-label" for="select-demo-video-font">Fonts</label>
       <select id="select-demo-video-font" class="tools-demo-video-font-select" title="Typeface for titles and labels in the exported video" aria-label="Demo video font"></select>
       <details class="tools-demo-video-font-sizes">
-        <summary class="tools-demo-video-font-sizes-summary">Export text sizes</summary>
+        <summary class="tools-demo-video-font-sizes-summary">Text sizes</summary>
         <div class="tools-demo-video-font-sizes-body">
           <div class="tools-demo-video-fs-row">
             <label class="tools-demo-video-fs-label" for="select-mp4-fs-playlist">Playlist</label>
@@ -491,6 +491,7 @@
       <li>Audio is read from folders you choose; <strong>nothing is uploaded</strong> to a server.</li>
       <li>Use a <strong>Chromium-based</strong> browser (Chrome, Edge, etc.) with the <strong>File System Access API</strong> so you can pick folders and reopen recent projects.</li>
       <li><strong>MP3 / OGG</strong> export uses encoder scripts bundled with this app (no network). WAV export is always local once buffers are loaded.</li>
+      <li>Segment <code>.wav</code> files should be <strong>PCM 16-bit</strong> (including <em>WAVE_FORMAT_EXTENSIBLE</em> with the standard PCM GUID). The app decodes those directly; other WAV variants (e.g. float or 24-bit) still use the browser decoder when supported.</li>
     </ul>
 
     <h3>Opening a project</h3>
@@ -676,6 +677,7 @@
 <script src="js/help-videos-embed.js"></script>
 <script src="js/help-videos.js"></script>
 <script src="js/version-badge.js"></script>
+<script src="js/wav-pcm16.js"></script>
 <script src="js/file-parser.js"></script>
 <script src="js/playback.js"></script>
 <script src="js/brick-playground.js"></script>

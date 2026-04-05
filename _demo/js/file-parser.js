@@ -105,12 +105,32 @@ async function scanFormat(formatHandle) {
 async function getFileDuration(fileHandle) {
   try {
     const file = await fileHandle.getFile();
-    const url  = URL.createObjectURL(file);
+    const name = String(file.name || '').toLowerCase();
+    const seamWav = globalThis.SEAM_WAV_PCM16;
+
+    if (seamWav && name.endsWith('.wav')) {
+      const tryProbe = async maxBytes => {
+        const n = Math.min(file.size, maxBytes);
+        if (n < 12) return null;
+        const buf = await file.slice(0, n).arrayBuffer();
+        return seamWav.wavPcm16DurationFromArrayBuffer(buf);
+      };
+
+      let d = await tryProbe(4 * 1024 * 1024);
+      if (d == null || !Number.isFinite(d) || d <= 0) {
+        if (file.size > 4 * 1024 * 1024 && file.size <= 64 * 1024 * 1024) {
+          d = await tryProbe(file.size);
+        }
+      }
+      if (d != null && Number.isFinite(d) && d > 0) return d;
+    }
+
+    const url = URL.createObjectURL(file);
     return await new Promise((res, rej) => {
       const a = new Audio();
       a.onloadedmetadata = () => { URL.revokeObjectURL(url); res(a.duration || 0); };
       a.onerror = () => { URL.revokeObjectURL(url); res(0); };
       a.src = url;
     });
-  } catch(e) { return 0; }
+  } catch (e) { return 0; }
 }

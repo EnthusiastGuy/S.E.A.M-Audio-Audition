@@ -279,7 +279,8 @@ steps = [
     ("3", "Audition & Export",
      "Play full songs or individual parts with looping.\n\n"
      "Drag bricks to build custom sequences.\n\n"
-     "Export your composition to WAV, MP3, or OGG.\n\n"
+     "Export audio to WAV, MP3, OGG, or FLAC.\n"
+     "Build MP4 demo videos with chapters.\n\n"
      "Session state auto-saves per project folder.",
      ACCENT_GREEN),
 ]
@@ -394,7 +395,7 @@ smart_features = [
      "Point to any folder and S.E.A.M parses filenames to detect parts, branch targets, loop points, and full mixes automatically. Supports the  Name N → A, B, C.wav  convention with zero configuration needed.",
      ACCENT2),
     ("⚙️", "Encoding Studio",
-     "Export to WAV (PCM 16-bit), MP3 (96–320 kbps via lamejs), or OGG Vorbis (quality 0–1.0). Per-format control over sample rate, channels, and bitrate. Libraries lazy-load only when needed.",
+     "Export to WAV (PCM 16-bit), MP3 (96–320 kbps via lamejs), OGG Vorbis (quality 0–1.0), and FLAC (lossless, level 0–8). Plus built-in 1080p MP4 demo video export with chapter markers.",
      GOLD),
 ]
 
@@ -422,48 +423,53 @@ add_accent_line(slide, Inches(0.8), Inches(0.85), Inches(2.0), GOLD)
 add_text_box(slide, Inches(0.8), Inches(1.1), Inches(11), Inches(0.7),
     "From Audition to Deliverable in One Click", font_size=34, color=WHITE, bold=True)
 
-# Three format columns
+# Audio format cards (2x2)
 formats = [
     ("WAV", "Lossless PCM", [
         "16-bit PCM encoding",
         "Source sample rate preserved",
         "Multi-channel support",
-        "Instant encoding — no library needed",
-        "Perfect for archival & production",
+        "Instant encoding — no external codec",
     ], ACCENT),
     ("MP3", "Universal Lossy", [
         "Bitrate: 96 – 320 kbps",
         "Sample rate: source, 44.1k, 48k Hz",
         "Channel modes: auto, mono, stereo",
         "Powered by lamejs (lazy-loaded)",
-        "Industry-standard compatibility",
     ], ACCENT3),
     ("OGG", "Open Lossy", [
         "Quality slider: 0.0 – 1.0",
         "Sample rate: source, 44.1k, 48k Hz",
         "Channel modes: auto, mono, stereo",
         "Vorbis encoder (lazy-loaded)",
-        "Open format, no licensing fees",
     ], ACCENT2),
+    ("FLAC", "Lossless Compressed", [
+        "Compression level: 0 – 8",
+        "Sample rate: source, 44.1k, 48k Hz",
+        "Channel modes: auto, mono, stereo",
+        "libflac WASM runtime (local/offline)",
+    ], ACCENT_GREEN),
 ]
 
 for i, (fmt, sub, features, color) in enumerate(formats):
-    x = Inches(0.5 + i * 4.1)
-    y = Inches(2.2)
-    card = add_shape(slide, x, y, Inches(3.8), Inches(4.6), fill_color=BG_CARD, border_color=DARK_GRAY, border_width=Pt(1))
-    add_shape(slide, x + Inches(0.05), y + Inches(0.05), Inches(3.7), Pt(4), fill_color=color, shape_type=MSO_SHAPE.RECTANGLE)
-    add_text_box(slide, x, y + Inches(0.3), Inches(3.8), Inches(0.6), fmt, font_size=32, color=color, bold=True, alignment=PP_ALIGN.CENTER)
-    add_text_box(slide, x, y + Inches(0.85), Inches(3.8), Inches(0.35), sub, font_size=13, color=MID_GRAY, alignment=PP_ALIGN.CENTER)
+    col = i % 2
+    row = i // 2
+    x = Inches(0.7 + col * 6.05)
+    y = Inches(2.0 + row * 2.35)
+    card = add_shape(slide, x, y, Inches(5.85), Inches(2.15), fill_color=BG_CARD, border_color=DARK_GRAY, border_width=Pt(1))
+    add_shape(slide, x + Inches(0.05), y + Inches(0.05), Inches(5.75), Pt(4), fill_color=color, shape_type=MSO_SHAPE.RECTANGLE)
+    add_text_box(slide, x + Inches(0.2), y + Inches(0.22), Inches(1.4), Inches(0.45), fmt, font_size=26, color=color, bold=True)
+    add_text_box(slide, x + Inches(1.7), y + Inches(0.28), Inches(3.9), Inches(0.35), sub, font_size=12, color=MID_GRAY)
     
     for j, feat in enumerate(features):
-        fy = y + Inches(1.5 + j * 0.55)
+        fy = y + Inches(0.7 + j * 0.35)
         add_text_box(slide, x + Inches(0.3), fy, Inches(0.3), Inches(0.3), "✓", font_size=13, color=color, bold=True)
-        add_text_box(slide, x + Inches(0.6), fy, Inches(3.0), Inches(0.45), feat, font_size=12, color=LIGHT_GRAY)
+        add_text_box(slide, x + Inches(0.6), fy, Inches(5.0), Inches(0.32), feat, font_size=11, color=LIGHT_GRAY)
 
 # Bottom note
 add_shape(slide, Inches(0.8), Inches(7.0), Inches(11.5), Inches(0.4), fill_color=BG_CARD, border_color=DARK_GRAY, border_width=Pt(1))
 add_text_box(slide, Inches(1.0), Inches(7.02), Inches(11), Inches(0.35),
-    "Export full compositions (up to 60 min) or individual parts  •  Per-part format memory  •  Settings persist across sessions",
+    "Export full compositions (up to 60 min) or individual parts  •  4 audio formats + MP4 demo video  •  Per-part format memory",
     font_size=11, color=MID_GRAY, alignment=PP_ALIGN.CENTER)
 
 # ════════════════════════════════════════════════════════════════
@@ -538,7 +544,9 @@ rows = [
     ("Loop-Point Detection", "✓", "Manual", "Manual", "✗"),
     ("Visual Brick Composition", "✓", "✗", "✗", "✗"),
     ("Seam Preview Mode", "✓", "✗", "✗", "✗"),
-    ("Multi-Format Export", "✓", "✓", "✓", "✓"),
+    ("FLAC Lossless Export", "✓", "✗", "✗", "✗"),
+    ("MP4 Demo Video Export", "✓", "✗", "✗", "✗"),
+    ("Multi-Format Audio Export", "✓", "✓", "✓", "✓"),
     ("Session Persistence", "✓", "✓", "✓", "✗"),
     ("100% Local / No Upload", "✓", "✓", "✓", "✓"),
     ("Free & Open Source", "✓", "Freemium", "Freemium", "✓"),
@@ -605,9 +613,9 @@ tech_items = [
     ("Web Audio API", "Professional audio engine with OfflineAudioContext for seamless stitching, master gain/analyser chain, and gapless pre-scheduled playback.", ACCENT),
     ("File System Access API", "Chromium's modern API for read-only local folder access. No uploads, no servers. IndexedDB stores directory handles for instant project reopening.", ACCENT2),
     ("Canvas 2D Rendering", "All knobs, waveforms, spectrum visualizers, particle systems, and brick playground rendered on HTML5 Canvas with pixel-ratio scaling for Retina displays.", ACCENT3),
-    ("Lazy-Load Architecture", "Vendor codecs (lamejs for MP3, vorbis-encoder for OGG) load on-demand only when first needed. Zero upfront cost for playback-only sessions.", GOLD),
+    ("Export Pipeline Stack", "On-demand codecs: lamejs (MP3), Vorbis encoder (OGG), libflac WASM (FLAC). MP4 demo export uses WebCodecs + mp4-muxer with chapter metadata injection.", GOLD),
     ("SVG Data URI Caching", "Waveform renders are cached as SVG data URIs per width. ResizeObserver triggers responsive redraws. Column cap at 24,000 for performance.", ACCENT_GREEN),
-    ("Session Persistence", "LocalStorage (per folder) saves all state: crossfade, speed, loops, sequences, encoding prefs, playground positions. IndexedDB for recent project handles.", ACCENT),
+    ("Session Persistence", "LocalStorage (per folder) saves crossfade, speed, loops, sequences, format prefs (including FLAC), encoding, and playground layout. IndexedDB stores recent project handles.", ACCENT),
 ]
 
 for i, (title, desc, color) in enumerate(tech_items):
@@ -665,7 +673,51 @@ for i, (badge, title, desc, color) in enumerate(differentiators):
     add_text_box(slide, Inches(2.0), y + Inches(0.45), Inches(10), Inches(0.4), desc, font_size=12, color=LIGHT_GRAY)
 
 # ════════════════════════════════════════════════════════════════
-# SLIDE 14 — CLOSING / CTA
+# SLIDE 14 — MP4 DEMO VIDEO EXPORT
+# ════════════════════════════════════════════════════════════════
+slide = prs.slides.add_slide(prs.slide_layouts[6])
+set_slide_bg(slide, BG_DARK)
+
+add_text_box(slide, Inches(0.8), Inches(0.4), Inches(6), Inches(0.6),
+    "SHOWCASE TOOLING", font_size=14, color=ACCENT2, bold=True)
+add_accent_line(slide, Inches(0.8), Inches(0.85), Inches(2.4), ACCENT2)
+
+add_text_box(slide, Inches(0.8), Inches(1.1), Inches(11), Inches(0.7),
+    "Built-In 1080p MP4 Demo Video Export", font_size=34, color=WHITE, bold=True)
+
+video_items = [
+    ("🎬", "Offline Render Pipeline",
+     "Canvas frames + WebCodecs VideoEncoder (H.264) and AudioEncoder (AAC) are muxed locally into MP4. No upload, no cloud render queue.",
+     ACCENT2),
+    ("🏷", "Chapters + Description",
+     "Injects Nero chapter markers into MP4 and generates a YouTube-style description.txt with track timeline markers for posting and review.",
+     ACCENT_GREEN),
+    ("🎨", "Branding Controls",
+     "Choose bundled OFL fonts, per-zone text size tiers, corner credit (optional year), and custom image/video backgrounds with crossfaded loops.",
+     ACCENT3),
+    ("🧠", "Smart Visual Adaptation",
+     "Preview mode and Auto palette derive contrast-safe UI colors from background images or live video frames, while preserving a fixed Basic theme option.",
+     GOLD),
+]
+
+for i, (icon, title, desc, color) in enumerate(video_items):
+    col = i % 2
+    row = i // 2
+    x = Inches(0.5 + col * 6.3)
+    y = Inches(2.0 + row * 2.4)
+    card = add_shape(slide, x, y, Inches(6.0), Inches(2.15), fill_color=BG_CARD, border_color=DARK_GRAY, border_width=Pt(1))
+    add_shape(slide, x + Inches(0.05), y + Inches(0.05), Inches(5.9), Pt(3), fill_color=color, shape_type=MSO_SHAPE.RECTANGLE)
+    add_text_box(slide, x + Inches(0.25), y + Inches(0.25), Inches(0.5), Inches(0.45), icon, font_size=24, alignment=PP_ALIGN.CENTER)
+    add_text_box(slide, x + Inches(0.85), y + Inches(0.22), Inches(4.9), Inches(0.35), title, font_size=16, color=color, bold=True)
+    add_text_box(slide, x + Inches(0.25), y + Inches(0.72), Inches(5.5), Inches(1.25), desc, font_size=11, color=LIGHT_GRAY)
+
+add_shape(slide, Inches(0.8), Inches(6.95), Inches(11.5), Inches(0.4), fill_color=BG_CARD, border_color=DARK_GRAY, border_width=Pt(1))
+add_text_box(slide, Inches(1.0), Inches(6.98), Inches(11.0), Inches(0.35),
+    "Default output profile: 1920×1080, up to 24 FPS, H.264 video + AAC audio, with embedded chapter metadata.",
+    font_size=11, color=MID_GRAY, alignment=PP_ALIGN.CENTER)
+
+# ════════════════════════════════════════════════════════════════
+# SLIDE 15 — CLOSING / CTA
 # ════════════════════════════════════════════════════════════════
 slide = prs.slides.add_slide(prs.slide_layouts[6])
 set_slide_bg(slide, BG_DARK)
@@ -686,7 +738,7 @@ add_accent_line(slide, Inches(5.0), Inches(3.4), Inches(3.333), ACCENT)
 stats = [
     ("0", "Dependencies", ACCENT),
     ("< 1s", "Load Time", ACCENT2),
-    ("3", "Export Formats", ACCENT3),
+    ("4 + MP4", "Export Formats", ACCENT3),
     ("100%", "Privacy", ACCENT_GREEN),
     ("∞", "Creativity", GOLD),
 ]

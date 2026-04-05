@@ -198,9 +198,20 @@
           <div class="tools-demo-video-tooltip-lead">About MP4 export</div>
           <p>Renders a <strong>1080p MP4</strong> with embedded chapter markers (Nero <code>chpl</code>; VLC and many players) plus a YouTube-style <strong>description.txt</strong>.</p>
           <p><strong>Fonts</strong> are bundled under the SIL Open Font License. <strong>Background</strong>: pick an image (static) or one or more videos (looped animated background with crossfades).</p>
+          <p><strong>UI colors</strong>: <em>Auto</em> derives playlist, waveform, playhead, and series-badge colors from the background image or current video frame (contrast-safe). <em>Basic</em> keeps the original fixed palette.</p>
           <p>Uses <strong>WebCodecs</strong> (Chrome/Edge). Use <strong>Preview</strong> to see a sample frame while adjusting font, text sizes, background, and corner credit.</p>
         </div>
       </div>
+      <label class="tools-demo-video-font-label" for="select-demo-video-ui-palette">UI colors</label>
+      <select
+        id="select-demo-video-ui-palette"
+        class="tools-demo-video-font-select"
+        title="Playlist chips, waveform, playhead, and series badge: fixed Basic theme or Auto from background"
+        aria-label="Demo video UI color palette"
+      >
+        <option value="auto" selected>Auto (from background)</option>
+        <option value="basic">Basic (fixed theme)</option>
+      </select>
       <label class="tools-demo-video-font-label" for="select-demo-video-font">Fonts</label>
       <select id="select-demo-video-font" class="tools-demo-video-font-select" title="Typeface for titles and labels in the exported video" aria-label="Demo video font"></select>
       <details class="tools-demo-video-font-sizes">

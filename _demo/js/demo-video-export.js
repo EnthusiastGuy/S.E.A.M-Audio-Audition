@@ -25,6 +25,33 @@
 
   const MP4_EXPORT_FONT_STORAGE_KEY = 'seam_mp4_export_font_css';
   const MP4_EXPORT_FONT_SIZES_STORAGE_KEY = 'seam_mp4_export_font_size_tiers';
+  const MP4_EXPORT_UI_PALETTE_STORAGE_KEY = 'seam_mp4_export_ui_palette';
+
+  /** Fixed “Basic” theme for playlist chips, waveform, playhead, series badge. */
+  const DEMO_VIDEO_PALETTE_BASIC = {
+    chipInactiveFill: 'rgba(45, 65, 112, 0.55)',
+    chipInactiveStroke: 'rgba(255,255,255,0.12)',
+    chipInactiveText: 'rgba(230, 235, 245, 0.85)',
+    chipActiveFill: 'rgba(233, 69, 96, 0.95)',
+    chipActiveStroke: 'rgba(255,255,255,0.35)',
+    chipActiveText: '#fff',
+    wfPanelFill: 'rgba(22, 33, 62, 0.9)',
+    wfBorderDim: 'rgba(78, 205, 196, 0.25)',
+    wfWaveBright: 'rgba(78, 205, 196, 0.85)',
+    wfWaveMirror: 'rgba(255, 255, 255, 0.08)',
+    wfPlayhead: 'rgba(233, 69, 96, 0.95)',
+    seriesShadow: 'rgba(78, 205, 196, 0.35)',
+    seriesFill: 'rgba(16, 22, 38, 0.97)',
+    seriesStroke: 'rgba(78, 205, 196, 0.92)',
+    seriesText: '#f4f7ff',
+  };
+
+  /** Preview-only: frozen Auto palette for static backgrounds until file/reset changes. */
+  const demoVideoPreviewAutoPaletteCache = { palette: null };
+
+  function invalidateDemoVideoPreviewAutoPalette() {
+    demoVideoPreviewAutoPaletteCache.palette = null;
+  }
 
   /** Per-zone export text scale: normal = 1; steps ±10% / ±15% cumulative from normal. */
   const MP4_FONT_SIZE_TIER_MUL = {
@@ -521,28 +548,278 @@
     return yy;
   }
 
-  function drawSeriesNumberBadge(ctx, x, y, w, h, seriesNum, s, fontScale, fontFace, seriesNumberSizeMul = 1) {
+  function readDemoVideoUiPaletteMode() {
+    const el = document.getElementById('select-demo-video-ui-palette');
+    const v = el && el.value;
+    return v === 'basic' ? 'basic' : 'auto';
+  }
+
+  function clamp255(x) {
+    return Math.max(0, Math.min(255, Math.round(x)));
+  }
+
+  function srgbChannelToLinear(c) {
+    const x = c / 255;
+    return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4;
+  }
+
+  function relLum01(rgb) {
+    const r = srgbChannelToLinear(rgb[0]);
+    const g = srgbChannelToLinear(rgb[1]);
+    const b = srgbChannelToLinear(rgb[2]);
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  }
+
+  function rgbToHsl(r, g, b) {
+    r /= 255;
+    g /= 255;
+    b /= 255;
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    let h = 0;
+    let s = 0;
+    const l = (max + min) / 2;
+    if (max !== min) {
+      const d = max - min;
+      s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+      switch (max) {
+        case r:
+          h = (g - b) / d + (g < b ? 6 : 0);
+          break;
+        case g:
+          h = (b - r) / d + 2;
+          break;
+        default:
+          h = (r - g) / d + 4;
+      }
+      h /= 6;
+    }
+    return [h * 360, s * 100, l * 100];
+  }
+
+  function hslToRgb(h, s, l) {
+    h = ((((h % 360) + 360) % 360) / 360);
+    s = Math.max(0, Math.min(100, s)) / 100;
+    l = Math.max(0, Math.min(100, l)) / 100;
+    let r;
+    let g;
+    let b;
+    if (s === 0) {
+      r = g = b = l;
+    } else {
+      const hue2rgb = (p, q, t) => {
+        let tt = t;
+        if (tt < 0) tt += 1;
+        if (tt > 1) tt -= 1;
+        if (tt < 1 / 6) return p + (q - p) * 6 * tt;
+        if (tt < 1 / 2) return q;
+        if (tt < 2 / 3) return p + (q - p) * (2 / 3 - tt) * 6;
+        return p;
+      };
+      const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+      const p = 2 * l - q;
+      r = hue2rgb(p, q, h + 1 / 3);
+      g = hue2rgb(p, q, h);
+      b = hue2rgb(p, q, h - 1 / 3);
+    }
+    return [Math.round(r * 255), Math.round(g * 255), Math.round(b * 255)];
+  }
+
+  function rgbaStr(rgb, a) {
+    return `rgba(${clamp255(rgb[0])},${clamp255(rgb[1])},${clamp255(rgb[2])},${a})`;
+  }
+
+  /** Darken sRGB until white text meets ~4.5:1 on solid fill (quick iterative). */
+  function darkenForWhiteText(rgb, maxLum = 0.2) {
+    let r = rgb[0];
+    let g = rgb[1];
+    let b = rgb[2];
+    for (let i = 0; i < 28 && relLum01([r, g, b]) > maxLum; i++) {
+      r *= 0.87;
+      g *= 0.87;
+      b *= 0.87;
+    }
+    return [clamp255(r), clamp255(g), clamp255(b)];
+  }
+
+  function kMeansRgb(imageData, k, steps) {
+    const data = imageData.data;
+    const n = (data.length / 4) | 0;
+    const centroids = [];
+    for (let i = 0; i < k; i++) {
+      const o = (((((i + 0.5) / k) * n) | 0) * 4) % data.length;
+      centroids.push([data[o], data[o + 1], data[o + 2]]);
+    }
+    const sums = new Float64Array(k * 3);
+    const counts = new Int32Array(k);
+    const assign = new Int32Array(n);
+    for (let step = 0; step < steps; step++) {
+      sums.fill(0);
+      counts.fill(0);
+      for (let p = 0; p < n; p++) {
+        const o = p * 4;
+        const r = data[o];
+        const g = data[o + 1];
+        const b = data[o + 2];
+        let best = 0;
+        let bestD = 1e18;
+        for (let c = 0; c < k; c++) {
+          const cr = centroids[c][0];
+          const cg = centroids[c][1];
+          const cb = centroids[c][2];
+          const d = (r - cr) ** 2 + (g - cg) ** 2 + (b - cb) ** 2;
+          if (d < bestD) {
+            bestD = d;
+            best = c;
+          }
+        }
+        assign[p] = best;
+        sums[best * 3] += r;
+        sums[best * 3 + 1] += g;
+        sums[best * 3 + 2] += b;
+        counts[best]++;
+      }
+      for (let c = 0; c < k; c++) {
+        if (counts[c] < 1) continue;
+        centroids[c][0] = sums[c * 3] / counts[c];
+        centroids[c][1] = sums[c * 3 + 1] / counts[c];
+        centroids[c][2] = sums[c * 3 + 2] / counts[c];
+      }
+    }
+    counts.fill(0);
+    for (let p = 0; p < n; p++) counts[assign[p]]++;
+    return centroids.map((rgb, i) => ({
+      rgb: [clamp255(rgb[0]), clamp255(rgb[1]), clamp255(rgb[2])],
+      w: counts[i],
+    }));
+  }
+
+  function buildAutoUiPaletteFromImageData(imageData) {
+    const clusters = kMeansRgb(imageData, 6, 10).filter((c) => c.w > 0);
+    clusters.sort((a, b) => b.w - a.w);
+    if (clusters.length === 0) return { ...DEMO_VIDEO_PALETTE_BASIC };
+
+    const meta = clusters.map((c) => {
+      const hsl = rgbToHsl(c.rgb[0], c.rgb[1], c.rgb[2]);
+      return { ...c, hsl, L: relLum01(c.rgb) };
+    });
+
+    const chromaScore = (m) => {
+      const [, s, l] = m.hsl;
+      if (l < 6 || l > 97) return -1;
+      return s * Math.sqrt(m.w + 1);
+    };
+
+    let warmIdx = 0;
+    let best = -1;
+    for (let i = 0; i < meta.length; i++) {
+      const sc = chromaScore(meta[i]);
+      if (sc > best) {
+        best = sc;
+        warmIdx = i;
+      }
+    }
+
+    const warmM = meta[warmIdx];
+    let [h, s, l] = warmM.hsl;
+    s = Math.min(100, (s || 18) * 1.12 + 10);
+    l = Math.min(60, Math.max(36, l || 48));
+    let accentWarm = hslToRgb(h, s, l);
+    if ((warmM.hsl[1] || 0) < 14) {
+      accentWarm = hslToRgb(warmM.hsl[0], 58, 46);
+    }
+    accentWarm = darkenForWhiteText(accentWarm, 0.2);
+
+    const hWarm = warmM.hsl[0];
+    let accentCool = null;
+    for (const m of meta) {
+      if (m === warmM) continue;
+      let dh = Math.abs(m.hsl[0] - hWarm);
+      if (dh > 180) dh = 360 - dh;
+      if (dh > 26 && m.hsl[1] > 14) {
+        let [h2, s2, l2] = m.hsl;
+        s2 = Math.min(90, s2 + 12);
+        l2 = Math.min(56, Math.max(40, l2));
+        accentCool = hslToRgb(h2, s2, l2);
+        break;
+      }
+    }
+    if (!accentCool) {
+      accentCool = hslToRgb((hWarm + 172) % 360, Math.min(82, Math.max(48, s)), 50);
+    }
+
+    const darkest = meta.reduce((a, b) => (a.L <= b.L ? a : b));
+    const panelRgb = [
+      darkest.rgb[0] * 0.32 + 18 * 0.68,
+      darkest.rgb[1] * 0.32 + 24 * 0.68,
+      darkest.rgb[2] * 0.32 + 44 * 0.68,
+    ];
+    const chipInRgb = [
+      accentCool[0] * 0.45 + 32 * 0.55,
+      accentCool[1] * 0.45 + 42 * 0.55,
+      accentCool[2] * 0.45 + 74 * 0.55,
+    ];
+
+    return {
+      chipInactiveFill: rgbaStr(chipInRgb, 0.55),
+      chipInactiveStroke: 'rgba(255,255,255,0.14)',
+      chipInactiveText: 'rgba(236, 240, 250, 0.9)',
+      chipActiveFill: rgbaStr(accentWarm, 0.95),
+      chipActiveStroke: 'rgba(255,255,255,0.36)',
+      chipActiveText: '#fff',
+      wfPanelFill: rgbaStr(panelRgb, 0.9),
+      wfBorderDim: rgbaStr(accentCool, 0.28),
+      wfWaveBright: rgbaStr(accentCool, 0.86),
+      wfWaveMirror: 'rgba(255, 255, 255, 0.09)',
+      wfPlayhead: rgbaStr(accentWarm, 0.95),
+      seriesShadow: rgbaStr(accentCool, 0.36),
+      seriesFill: rgbaStr(panelRgb, 0.97),
+      seriesStroke: rgbaStr(accentCool, 0.9),
+      seriesText: '#f4f8ff',
+    };
+  }
+
+  function extractAutoPaletteFromSourceCanvas(sourceCanvas, sw, sh) {
+    const tw = 80;
+    const th = 45;
+    const c = document.createElement('canvas');
+    c.width = tw;
+    c.height = th;
+    const x = c.getContext('2d', { willReadFrequently: true });
+    if (!x) return { ...DEMO_VIDEO_PALETTE_BASIC };
+    x.drawImage(sourceCanvas, 0, 0, sw, sh, 0, 0, tw, th);
+    let id;
+    try {
+      id = x.getImageData(0, 0, tw, th);
+    } catch {
+      return { ...DEMO_VIDEO_PALETTE_BASIC };
+    }
+    return buildAutoUiPaletteFromImageData(id);
+  }
+
+  function drawSeriesNumberBadge(ctx, x, y, w, h, seriesNum, s, fontScale, fontFace, seriesNumberSizeMul = 1, pal = null) {
+    const theme = pal || DEMO_VIDEO_PALETTE_BASIC;
     const fs = Math.max(0.5, fontScale);
     const snm = Math.max(0.35, seriesNumberSizeMul);
     const stack = mp4VideoFontStack(fontFace);
     const r = Math.max(8, Math.round(10 * s * fs));
     ctx.save();
-    ctx.shadowColor = 'rgba(78, 205, 196, 0.35)';
+    ctx.shadowColor = theme.seriesShadow;
     ctx.shadowBlur = Math.round(14 * s * fs);
     ctx.shadowOffsetY = Math.round(2 * s * fs);
-    ctx.fillStyle = 'rgba(16, 22, 38, 0.97)';
+    ctx.fillStyle = theme.seriesFill;
     drawRoundedRect(ctx, x, y, w, h, r);
     ctx.fill();
     ctx.shadowColor = 'transparent';
     ctx.shadowBlur = 0;
     ctx.shadowOffsetY = 0;
 
-    ctx.strokeStyle = 'rgba(78, 205, 196, 0.92)';
+    ctx.strokeStyle = theme.seriesStroke;
     ctx.lineWidth = Math.max(2, Math.round(2 * s * fs));
     drawRoundedRect(ctx, x, y, w, h, r);
     ctx.stroke();
 
-    ctx.fillStyle = '#f4f7ff';
+    ctx.fillStyle = theme.seriesText;
     ctx.font = `800 ${Math.max(24, Math.round(36 * s * fs * snm))}px ${stack}`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
@@ -1005,6 +1282,8 @@
    * @param {{ text: string, year: number|null }} cornerCredit bottom-right label; year appended when non-null
    * @param {object} [fontSizeMuls] per-zone multipliers (1 = default); from readMp4FontSizeMultipliersFromUi()
    * @param {null|{ draw: function, dispose: function }} [videoBgAnimator] looping video background from createDemoVideoBgAnimator
+   * @param {'basic'|'auto'} [uiPaletteMode]
+   * @param {{ palette: object|null }} [autoPaletteCache] frozen Auto palette for static bg (not used when videoBgAnimator set)
    */
   async function drawFrame(
     ctx,
@@ -1021,6 +1300,8 @@
     packStatsLine,
     fontSizeMuls,
     videoBgAnimator,
+    uiPaletteMode,
+    autoPaletteCache,
   ) {
     const W = CANVAS_W;
     const H = CANVAS_H;
@@ -1053,6 +1334,20 @@
       ctx.restore();
     } else {
       drawFallbackVideoBackground(ctx, W, H);
+    }
+
+    const mode = uiPaletteMode === 'basic' ? 'basic' : 'auto';
+    let uiPal = DEMO_VIDEO_PALETTE_BASIC;
+    const cache = autoPaletteCache || { palette: null };
+    if (mode === 'auto') {
+      if (videoBgAnimator) {
+        uiPal = extractAutoPaletteFromSourceCanvas(ctx.canvas, W, H);
+      } else {
+        if (!cache.palette) {
+          cache.palette = extractAutoPaletteFromSourceCanvas(ctx.canvas, W, H);
+        }
+        uiPal = cache.palette;
+      }
     }
 
     ctx.fillStyle = 'rgba(8, 12, 22, 0.48)';
@@ -1109,13 +1404,13 @@
       }
       if (y > pad + playlistH) return;
       const active = i === currentIdx;
-      ctx.fillStyle = active ? 'rgba(233, 69, 96, 0.95)' : 'rgba(45, 65, 112, 0.55)';
+      ctx.fillStyle = active ? uiPal.chipActiveFill : uiPal.chipInactiveFill;
       drawRoundedRect(ctx, x, y, tw, chipH, chipR);
       ctx.fill();
-      ctx.strokeStyle = active ? 'rgba(255,255,255,0.35)' : 'rgba(255,255,255,0.12)';
+      ctx.strokeStyle = active ? uiPal.chipActiveStroke : uiPal.chipInactiveStroke;
       ctx.lineWidth = Math.max(1, s);
       ctx.stroke();
-      ctx.fillStyle = active ? '#fff' : 'rgba(230, 235, 245, 0.85)';
+      ctx.fillStyle = active ? uiPal.chipActiveText : uiPal.chipInactiveText;
       ctx.fillText(label, x + chipPad, y + chipH / 2);
       x += tw + chipXGap;
     });
@@ -1159,7 +1454,7 @@
       metaY += Math.round(24 * s * ad);
       ctx.fillText(`Demo segment ${currentIdx + 1} of ${totalPieces}`, titleX, metaY);
 
-      drawWaveform(ctx, plan.peaks, waveX, waveY, waveW, waveH, plan.localT(tMix));
+      drawWaveform(ctx, plan.peaks, waveX, waveY, waveW, waveH, plan.localT(tMix), uiPal);
     }
     ctx.restore();
 
@@ -1193,7 +1488,7 @@
     const titleTopLerp = lerp(introTitleY0, finalTitleTop, layoutBlend);
 
     if (seriesNum) {
-      drawSeriesNumberBadge(ctx, badgeX, badgeY, badgeW, badgeH, seriesNum, s, badgeFontScale, fontFace, sn);
+      drawSeriesNumberBadge(ctx, badgeX, badgeY, badgeW, badgeH, seriesNum, s, badgeFontScale, fontFace, sn, uiPal);
     }
 
     if (packLine) {
@@ -1250,22 +1545,23 @@
     }
   }
 
-  function drawWaveform(ctx, peaks, x, y, w, h, progress01) {
+  function drawWaveform(ctx, peaks, x, y, w, h, progress01, pal = null) {
+    const theme = pal || DEMO_VIDEO_PALETTE_BASIC;
     const n = peaks.length;
     if (n <= 0) return;
     const s = VIDEO_UI_SCALE;
     const wr = Math.max(6, Math.round(10 * s));
     const vm = Math.max(2, Math.round(4 * s));
-    ctx.fillStyle = 'rgba(22, 33, 62, 0.9)';
+    ctx.fillStyle = theme.wfPanelFill;
     drawRoundedRect(ctx, x, y, w, h, wr);
     ctx.fill();
-    ctx.strokeStyle = 'rgba(78, 205, 196, 0.25)';
+    ctx.strokeStyle = theme.wfBorderDim;
     ctx.lineWidth = Math.max(1, s);
     ctx.stroke();
 
     const mid = y + h / 2;
     const amp = h * 0.42;
-    ctx.strokeStyle = 'rgba(78, 205, 196, 0.85)';
+    ctx.strokeStyle = theme.wfWaveBright;
     ctx.lineWidth = Math.max(1, Math.round(1.25 * s));
     ctx.beginPath();
     for (let i = 0; i < n; i++) {
@@ -1276,7 +1572,7 @@
     }
     ctx.stroke();
 
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+    ctx.strokeStyle = theme.wfWaveMirror;
     ctx.lineWidth = Math.max(1, s);
     ctx.beginPath();
     for (let i = 0; i < n; i++) {
@@ -1288,7 +1584,7 @@
     ctx.stroke();
 
     const playX = x + progress01 * w;
-    ctx.strokeStyle = 'rgba(233, 69, 96, 0.95)';
+    ctx.strokeStyle = theme.wfPlayhead;
     ctx.lineWidth = Math.max(2, Math.round(2 * s));
     ctx.beginPath();
     ctx.moveTo(playX, y + vm);
@@ -1416,6 +1712,7 @@
     } catch (e) {
       console.warn('[demo-video-export] Preview background', e);
       disposeDemoVideoBgPreviewAnimator();
+      invalidateDemoVideoPreviewAutoPalette();
       bg = await loadExportSafeBackgroundBitmap();
     }
     const rawTitles = getDemoPreviewTitles();
@@ -1438,7 +1735,7 @@
     const offscreen = document.createElement('canvas');
     offscreen.width = CANVAS_W;
     offscreen.height = CANVAS_H;
-    const octx = offscreen.getContext('2d');
+    const octx = offscreen.getContext('2d', { willReadFrequently: readDemoVideoUiPaletteMode() === 'auto' });
     if (!octx) return;
     const packMeta = parsePackFolderName(STATE.rootDir?.name);
     let packStatsLine = '';
@@ -1462,6 +1759,8 @@
       packStatsLine,
       readMp4FontSizeMultipliersFromUi(),
       videoBgAnimator,
+      readDemoVideoUiPaletteMode(),
+      demoVideoPreviewAutoPaletteCache,
     );
     const ctx2 = canvas.getContext('2d');
     if (!ctx2) return;
@@ -1801,7 +2100,9 @@
     const canvas = document.createElement('canvas');
     canvas.width = CANVAS_W;
     canvas.height = CANVAS_H;
-    const ctx = canvas.getContext('2d', { willReadFrequently: false });
+    const uiPaletteMode = readDemoVideoUiPaletteMode();
+    const autoPalExportCache = { palette: null };
+    const ctx = canvas.getContext('2d', { willReadFrequently: uiPaletteMode === 'auto' });
     const keyInterval = Math.max(1, fps * 2);
     const renderStart = performance.now();
 
@@ -1826,6 +2127,8 @@
         packStatsLine,
         fontSizeMuls,
         videoBgAnimator,
+        uiPaletteMode,
+        autoPalExportCache,
       );
 
       const vf = new VideoFrame(canvas, { timestamp: Math.round(tVideo * 1e6) });
@@ -2186,6 +2489,7 @@
       pickBtn.addEventListener('click', () => fileInput.click());
       fileInput.addEventListener('change', () => {
         disposeDemoVideoBgPreviewAnimator();
+        invalidateDemoVideoPreviewAutoPalette();
         const list = fileInput.files ? Array.from(fileInput.files) : [];
         fileInput.value = '';
         if (list.length === 0) return;
@@ -2206,10 +2510,23 @@
       resetBtn.addEventListener('click', () => {
         demoVideoUserBackground = null;
         disposeDemoVideoBgPreviewAnimator();
+        invalidateDemoVideoPreviewAutoPalette();
         refreshDemoVideoBgStatus();
       });
     }
     refreshDemoVideoBgStatus();
+
+    const palSel = document.getElementById('select-demo-video-ui-palette');
+    if (palSel && !palSel.dataset.seamMp4PalInit) {
+      palSel.dataset.seamMp4PalInit = '1';
+      const savedPal = mp4FontStorageGet(MP4_EXPORT_UI_PALETTE_STORAGE_KEY);
+      if (savedPal === 'basic' || savedPal === 'auto') palSel.value = savedPal;
+      palSel.addEventListener('change', () => {
+        mp4FontStorageSet(MP4_EXPORT_UI_PALETTE_STORAGE_KEY, palSel.value);
+        invalidateDemoVideoPreviewAutoPalette();
+        scheduleDemoPreviewRender();
+      });
+    }
 
     const fontSel = document.getElementById('select-demo-video-font');
     if (fontSel && !fontSel.dataset.seamMp4FontsInit) {

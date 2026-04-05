@@ -768,7 +768,7 @@ for i, (text, color) in enumerate(cta_items):
     p.alignment = PP_ALIGN.CENTER
 
 add_text_box(slide, Inches(1.5), Inches(6.8), Inches(10), Inches(0.5),
-    "2026  ·  Enthusiast Guy  ·  Open Source  ·  MIT License", font_size=13, color=MID_GRAY, alignment=PP_ALIGN.CENTER)
+    "2026  ·  Enthusiast Guy  ·  Proprietary License, free to use", font_size=13, color=MID_GRAY, alignment=PP_ALIGN.CENTER)
 
 # Bottom decorative bars
 for i, c in enumerate([ACCENT2, ACCENT, ACCENT_GREEN, GOLD]):

@@ -109,7 +109,7 @@
   color: var(--text3);
 }
 
-/* Floating preview over playlist — pointer-events none except dialog */
+/* Floating preview over playlist — pointer-events none except dialog (below MP4 font picker panel). */
 .demo-video-preview-popover {
   position: fixed;
   inset: 0;
@@ -217,6 +217,160 @@
   padding: 6px;
   background: #0d1117;
   color: #e6ebf5;
+}
+
+/* ---- MP4 font: hidden native select (value source for export / preview) ---- */
+.tools-demo-video-font-select-native {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.tools-demo-video-font-picker {
+  position: relative;
+  margin-bottom: 4px;
+}
+
+.tools-demo-video-font-picker.is-open {
+  z-index: 90;
+}
+
+.tools-demo-video-font-picker-trigger {
+  width: 100%;
+  margin-bottom: 0;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: rgba(13, 17, 23, 0.65);
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.25;
+  cursor: pointer;
+  text-align: left;
+  appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, rgba(78, 205, 196, 0.65) 50%),
+    linear-gradient(135deg, rgba(78, 205, 196, 0.65) 50%, transparent 50%);
+  background-position: calc(100% - 14px) 50%, calc(100% - 9px) 50%;
+  background-size: 5px 5px;
+  background-repeat: no-repeat;
+  box-sizing: border-box;
+}
+
+.tools-demo-video-font-picker-trigger:hover {
+  border-color: rgba(78, 205, 196, 0.4);
+}
+
+.tools-demo-video-font-picker-trigger:focus {
+  outline: none;
+  border-color: rgba(78, 205, 196, 0.55);
+  box-shadow: 0 0 0 1px rgba(78, 205, 196, 0.25);
+}
+
+.tools-demo-video-font-picker-trigger-text {
+  display: block;
+  padding-right: 18px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Fixed layer: escapes sidebar overflow; stacks above preview popover (z-index 55) */
+.tools-demo-video-font-picker-panel {
+  position: fixed;
+  z-index: 90;
+  max-height: min(72vh, 560px);
+  padding: 10px 12px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(78, 205, 196, 0.45);
+  background: rgba(13, 17, 23, 0.97);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.06) inset,
+    0 14px 44px rgba(0, 0, 0, 0.55);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  box-sizing: border-box;
+}
+
+/* `display: flex` above must not defeat the HTML hidden attribute */
+.tools-demo-video-font-picker-panel[hidden] {
+  display: none !important;
+  pointer-events: none;
+  visibility: hidden;
+}
+
+.tools-demo-video-font-picker-panel:not([hidden]) {
+  visibility: visible;
+}
+
+.tools-demo-video-font-picker-hint {
+  margin: 0 0 6px;
+  font-family: 'Space Mono', monospace;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text3);
+  flex-shrink: 0;
+}
+
+.tools-demo-video-font-picker-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  padding-bottom: 4px;
+  scrollbar-width: thin;
+}
+
+.tools-demo-video-font-picker-cols {
+  column-width: 9.25rem;
+  column-gap: 12px;
+  column-fill: auto;
+  height: 400px;
+  width: max-content;
+  min-width: 100%;
+  box-sizing: border-box;
+}
+
+.tools-demo-video-font-picker-option {
+  break-inside: avoid;
+  display: block;
+  width: 100%;
+  margin: 0 0 3px;
+  padding: 6px 8px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.2;
+  text-align: left;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+
+.tools-demo-video-font-picker-option:hover {
+  background: rgba(78, 205, 196, 0.12);
+}
+
+.tools-demo-video-font-picker-option:focus {
+  outline: none;
+  background: rgba(78, 205, 196, 0.18);
+}
+
+.tools-demo-video-font-picker-option[aria-selected='true'] {
+  background: rgba(78, 205, 196, 0.22);
+  box-shadow: 0 0 0 1px rgba(78, 205, 196, 0.35);
 }
 
 .tools-demo-video-font-sizes {

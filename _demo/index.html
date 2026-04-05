@@ -212,8 +212,40 @@
         <option value="auto" selected>Auto (from background)</option>
         <option value="basic">Basic (fixed theme)</option>
       </select>
-      <label class="tools-demo-video-font-label" for="select-demo-video-font">Fonts</label>
-      <select id="select-demo-video-font" class="tools-demo-video-font-select" title="Typeface for titles and labels in the exported video" aria-label="Demo video font"></select>
+      <label class="tools-demo-video-font-label" for="btn-demo-video-font-picker">Fonts</label>
+      <div class="tools-demo-video-font-picker" id="demo-video-font-picker-root">
+        <select
+          id="select-demo-video-font"
+          class="tools-demo-video-font-select-native"
+          title="Typeface for titles and labels in the exported video"
+          aria-label="Demo video font"
+          aria-hidden="true"
+          tabindex="-1"
+        ></select>
+        <button
+          type="button"
+          id="btn-demo-video-font-picker"
+          class="tools-demo-video-font-picker-trigger"
+          aria-haspopup="listbox"
+          aria-expanded="false"
+          aria-controls="panel-demo-video-font"
+          title="Open font gallery (scroll sideways). When closed and focused, arrow keys change the font."
+        >
+          <span class="tools-demo-video-font-picker-trigger-text" id="demo-video-font-picker-label"></span>
+        </button>
+        <div
+          class="tools-demo-video-font-picker-panel"
+          id="panel-demo-video-font"
+          role="listbox"
+          aria-label="Bundled export fonts"
+          hidden
+        >
+          <p class="tools-demo-video-font-picker-hint">Wheel / trackpad scrolls sideways · drag scrollbar below</p>
+          <div class="tools-demo-video-font-picker-scroll" id="demo-video-font-picker-scroll">
+            <div class="tools-demo-video-font-picker-cols" id="demo-video-font-picker-cols"></div>
+          </div>
+        </div>
+      </div>
       <details class="tools-demo-video-font-sizes">
         <summary class="tools-demo-video-font-sizes-summary">Text sizes</summary>
         <div class="tools-demo-video-font-sizes-body">

@@ -2461,6 +2461,194 @@
     scheduleDemoPreviewRender();
   }
 
+  /** Custom multi-column font gallery; fixed position above preview (z-index in CSS). */
+  function initMp4ExportFontPicker(fontSel) {
+    const root = document.getElementById('demo-video-font-picker-root');
+    const btn = document.getElementById('btn-demo-video-font-picker');
+    const panel = document.getElementById('panel-demo-video-font');
+    const cols = document.getElementById('demo-video-font-picker-cols');
+    const labelSpan = document.getElementById('demo-video-font-picker-label');
+    if (!root || !btn || !panel || !cols || !labelSpan || root.dataset.seamMp4PickerInit) return;
+    root.dataset.seamMp4PickerInit = '1';
+
+    const scrollEl = document.getElementById('demo-video-font-picker-scroll');
+    panel.hidden = true;
+    panel.setAttribute('hidden', '');
+    root.classList.remove('is-open');
+    btn.setAttribute('aria-expanded', 'false');
+
+    function syncTrigger() {
+      const opt = fontSel.selectedOptions[0];
+      labelSpan.textContent = opt ? opt.textContent : 'Choose font…';
+      labelSpan.style.fontFamily = mp4VideoFontStack(fontSel.value);
+    }
+
+    function syncOptionsSelected() {
+      const v = fontSel.value;
+      for (const el of cols.querySelectorAll('.tools-demo-video-font-picker-option')) {
+        el.setAttribute('aria-selected', el.dataset.fontValue === v ? 'true' : 'false');
+      }
+    }
+
+    function positionPanel() {
+      if (panel.hidden) return;
+      const r = btn.getBoundingClientRect();
+      const margin = 10;
+      const minPanelW = 640;
+      const maxW = Math.min(1200, window.innerWidth - margin * 2);
+      let w = Math.max(minPanelW, maxW);
+      if (w > maxW) w = maxW;
+      let left = r.left;
+      if (left + w > window.innerWidth - margin) left = Math.max(margin, window.innerWidth - margin - w);
+      if (left < margin) left = margin;
+      let top = r.bottom + 6;
+      const estH = Math.min(window.innerHeight * 0.72, 560);
+      if (top + estH > window.innerHeight - margin) {
+        top = Math.max(margin, r.top - estH - 6);
+      }
+      panel.style.left = `${left}px`;
+      panel.style.top = `${top}px`;
+      panel.style.width = `${w}px`;
+    }
+
+    function closePicker() {
+      if (panel.hidden) return;
+      panel.hidden = true;
+      panel.setAttribute('hidden', '');
+      root.classList.remove('is-open');
+      btn.setAttribute('aria-expanded', 'false');
+    }
+
+    function openPicker() {
+      panel.hidden = false;
+      panel.removeAttribute('hidden');
+      root.classList.add('is-open');
+      btn.setAttribute('aria-expanded', 'true');
+      positionPanel();
+      syncOptionsSelected();
+    }
+
+    function togglePicker() {
+      if (panel.hidden) openPicker();
+      else closePicker();
+    }
+
+    cols.innerHTML = '';
+    for (const f of MP4_EXPORT_FONTS) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'tools-demo-video-font-picker-option';
+      b.setAttribute('role', 'option');
+      b.setAttribute('aria-selected', 'false');
+      b.dataset.fontValue = f.value;
+      b.textContent = f.preview;
+      b.style.fontFamily = mp4VideoFontStack(f.value);
+      b.addEventListener('click', () => {
+        if (fontSel.value !== f.value) {
+          fontSel.value = f.value;
+          fontSel.dispatchEvent(new Event('change', { bubbles: true }));
+        } else {
+          syncTrigger();
+          syncOptionsSelected();
+        }
+        closePicker();
+        btn.focus();
+      });
+      cols.appendChild(b);
+    }
+
+    syncTrigger();
+    fontSel.addEventListener('change', () => {
+      syncTrigger();
+      syncOptionsSelected();
+    });
+
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      togglePicker();
+    });
+
+    function stepMp4ExportFontByArrow(delta) {
+      const n = MP4_EXPORT_FONTS.length;
+      if (n === 0) return;
+      let i = MP4_EXPORT_FONTS.findIndex((f) => f.value === fontSel.value);
+      if (i < 0) i = 0;
+      i = ((i + delta) % n + n) % n;
+      const next = MP4_EXPORT_FONTS[i];
+      if (fontSel.value !== next.value) {
+        fontSel.value = next.value;
+        fontSel.dispatchEvent(new Event('change', { bubbles: true }));
+      } else {
+        syncTrigger();
+        syncOptionsSelected();
+      }
+    }
+
+    btn.addEventListener('keydown', (e) => {
+      if (!panel.hidden) return;
+      let delta = 0;
+      if (e.key === 'ArrowDown' || e.key === 'ArrowRight') delta = 1;
+      else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') delta = -1;
+      else return;
+      e.preventDefault();
+      stepMp4ExportFontByArrow(delta);
+    });
+
+    if (scrollEl && !scrollEl.dataset.seamMp4FontWheel) {
+      scrollEl.dataset.seamMp4FontWheel = '1';
+      scrollEl.addEventListener(
+        'wheel',
+        (e) => {
+          if (scrollEl.clientWidth >= scrollEl.scrollWidth) return;
+          const dy = e.deltaY;
+          const dx = e.deltaX;
+          if (Math.abs(dx) >= Math.abs(dy)) return;
+          e.preventDefault();
+          let delta = dy;
+          if (e.deltaMode === 1) delta *= 16;
+          else if (e.deltaMode === 2) delta *= scrollEl.clientHeight;
+          scrollEl.scrollLeft += delta;
+        },
+        { passive: false },
+      );
+    }
+
+    function isOutsideFontPicker(target) {
+      if (!target || !(target instanceof Node)) return true;
+      if (root.contains(target)) return false;
+      return true;
+    }
+
+    function onDocCloseFontPicker(e) {
+      if (panel.hidden) return;
+      if (!isOutsideFontPicker(e.target)) return;
+      closePicker();
+    }
+
+    if (!document.body.dataset.seamMp4FontPickerDoc) {
+      document.body.dataset.seamMp4FontPickerDoc = '1';
+      document.addEventListener('pointerdown', onDocCloseFontPicker, true);
+      document.addEventListener('mousedown', onDocCloseFontPicker, true);
+      window.addEventListener('resize', () => {
+        if (!panel.hidden) positionPanel();
+      });
+      const sidebar = document.querySelector('.sidebar-controls');
+      const main = document.getElementById('main-content-area');
+      const reflowPicker = () => {
+        if (!panel.hidden) positionPanel();
+      };
+      sidebar?.addEventListener('scroll', reflowPicker, { passive: true });
+      main?.addEventListener('scroll', reflowPicker, { passive: true });
+      document.addEventListener('keydown', (e) => {
+        if (e.key !== 'Escape' || panel.hidden) return;
+        closePicker();
+        e.preventDefault();
+      });
+    }
+
+    syncOptionsSelected();
+  }
+
   function bindDemoVideoPreview() {
     const pop = document.getElementById('demo-video-preview-popover');
     const btnOpen = document.getElementById('btn-demo-video-preview');
@@ -2597,6 +2785,7 @@
       fontSel.addEventListener('change', () => {
         mp4FontStorageSet(MP4_EXPORT_FONT_STORAGE_KEY, fontSel.value);
       });
+      initMp4ExportFontPicker(fontSel);
       warmMp4ExportFontPreviews();
     }
 

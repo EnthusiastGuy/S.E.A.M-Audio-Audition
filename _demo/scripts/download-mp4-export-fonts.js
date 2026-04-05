@@ -9,9 +9,10 @@ const https = require('https');
 const root = path.join(__dirname, '..');
 const outDir = path.join(root, 'fonts', 'export');
 const cssPath = path.join(root, 'css', 'mp4-export-fonts.css');
+const fontManifestPath = path.join(root, 'js', 'mp4-export-font-manifest.js');
 
-/** Latin 400 normal WOFF2 — verified Bunny paths */
-const fonts = [
+/** Latin 400 normal WOFF2 — verified Bunny paths (explicit families for edge-case names) */
+const baseFonts = [
   { id: 'bebas-neue', file: 'bebas-neue-latin-400-normal.woff2', family: 'SEAM-Export-Bebas-Neue', label: 'Bebas Neue' },
   { id: 'oswald', file: 'oswald-latin-400-normal.woff2', family: 'SEAM-Export-Oswald', label: 'Oswald' },
   { id: 'rajdhani', file: 'rajdhani-latin-400-normal.woff2', family: 'SEAM-Export-Rajdhani', label: 'Rajdhani' },
@@ -88,6 +89,92 @@ const fonts = [
   { id: 'nosifer', file: 'nosifer-latin-400-normal.woff2', family: 'SEAM-Export-Nosifer', label: 'Nosifer' },
 ];
 
+/** Extra OFL families on fonts.bunny.net (Latin 400 normal WOFF2); IDs batch-validated */
+const ADDITIONAL_FONT_IDS = `
+open-sans roboto lato noto-sans noto-serif noto-sans-mono fira-sans fira-code fira-mono
+ibm-plex-sans ibm-plex-mono ibm-plex-serif source-code-pro source-serif-4 oxygen
+vollkorn crimson-text crimson-pro eb-garamond libre-baskerville cinzel cormorant
+cormorant-garamond domine dosis archivo-black assistant be-vietnam-pro big-shoulders-display
+cairo catamaran chakra-petch chivo commissioner cuprum dm-serif-display epilogue figtree
+gabarito gentium-book-plus heebo hind hubballi inria-sans inter-tight istok-web josefin-sans
+josefin-slab jost jura kanit karla khand lexend lexend-deca mulish quicksand comfortaa
+plus-jakarta-sans arimo tinos pt-sans pt-serif oxygen-mono archivo fira-sans-condensed
+staatliches alfa-slab-one abril-fatface fjalla-one passion-one patua-one russo-one
+francois-one prompt sarabun mada tajawal el-messiri cairo-play scada signika signika-negative
+yanone-kaffeesatz zilla-slab zilla-slab-highlight asap asap-condensed encode-sans
+expletus-sans faustina gelasio newsreader literata petrona spectral spectral-sc amiri
+alegreya alegreya-sans alegreya-sans-sc overpass overpass-mono red-hat-display red-hat-text
+urbanist syne syne-mono syne-tactile spartan league-spartan michroma
+barlow barlow-semi-condensed roboto-mono roboto-flex roboto-slab roboto-serif roboto-condensed
+atkinson-hyperlegible public-sans kumbh-sans red-hat-mono spline-sans spline-sans-mono
+alumni-sans alumni-sans-inline-one big-shoulders-inline-display
+recursive readex-pro onest smooch-sans
+saira saira-condensed saira-extra-condensed saira-semi-condensed
+noto-sans-display noto-serif-display
+playpen-sans playpen-sans-deva
+instrument-sans instrument-serif
+reddit-sans reddit-sans-condensed reddit-mono
+fragment-mono inclusive-sans
+ysabeau ysabeau-office ysabeau-sc ysabeau-infant
+belanosima belgrano belleza bellota bellota-text
+cantarell cantata-one caprasimo carlito carme
+changa changa-one chivo-mono climate-crisis
+concert-one contrail-one corben courgette
+dela-gothic-one economica electrolize encode-sans-sc ephesis estonia euphoria-script
+exo faculty-glyphic familjen-grotesk farsan faster-one fauna-one federant federo
+fira-sans-extra-condensed foldit forum fraunces funnel-display funnel-sans fustat
+gemunu-libre genos geo geostar geostar-fill glegoo gluten gowun-batang gowun-dodum
+grandiflora-one grenze grenze-gotisch gruppo gudea hachi-maru-pop hahmlet hanken-grotesk
+hedvig-letters-sans hedvig-letters-serif hepta-slab holtwood-one-sc homenaje
+im-fell-double-pica im-fell-english inconsolata inika island-moments
+italiana italianno jaldi jaro jockey-one jua judson julee k2d kadwa kameron
+karantina kavivanar kavoon kenia kiwi-maru klee-one knewave kodchasan koulen kreon kristi
+krona-one krub kufam kulim-park lateef lekton lexend-exa lexend-giga lexend-mega
+lexend-peta lexend-tera lexend-zetta libre-bodoni libre-caslon-text life-savers lilita-one
+limelight linefont love-light love-ya-like-a-sister lugrasimo lumanosimo
+m-plus-1 m-plus-1-code m-plus-2 m-plus-rounded-1c madimi-one magra maitree mako mali
+mallanna mandali manjari mansalva manuale marcellus marcellus-sc markazi-text marko-one
+marmelad martel martel-sans mate mate-sc mea-culpa meddon medievalsharp metrophobic
+micro-5 milonga mina miniver miriam-libre mitr modak molengo mona-sans monofett montaga
+montez montserrat-alternates montserrat-subrayada moul moulpali mr-dafoe mukta mukta-mahee
+mukta-malar mukta-vaani murecho museomoderno
+`
+  .trim()
+  .split(/\s+/)
+  .filter(Boolean);
+
+const ACRONYM_PARTS = {
+  ibm: 'IBM',
+  pt: 'PT',
+  dm: 'DM',
+};
+
+function fontEntryFromBunnyId(id) {
+  const parts = id.split('-').map((p) => {
+    if (/^\d+$/.test(p)) return p;
+    const lower = p.toLowerCase();
+    if (ACRONYM_PARTS[lower]) return ACRONYM_PARTS[lower];
+    return p.charAt(0).toUpperCase() + p.slice(1).toLowerCase();
+  });
+  const family = 'SEAM-Export-' + parts.join('-');
+  const label = parts.join(' ');
+  return {
+    id,
+    file: `${id}-latin-400-normal.woff2`,
+    family,
+    label,
+  };
+}
+
+const seenIds = new Set(baseFonts.map((f) => f.id));
+const extraFonts = [];
+for (const id of ADDITIONAL_FONT_IDS) {
+  if (seenIds.has(id)) continue;
+  seenIds.add(id);
+  extraFonts.push(fontEntryFromBunnyId(id));
+}
+const fonts = [...baseFonts, ...extraFonts];
+
 function download(url) {
   return new Promise((resolve, reject) => {
     https
@@ -139,6 +226,13 @@ async function main() {
 
   fs.writeFileSync(cssPath, cssLines.join('\n') + '\n', 'utf8');
   console.log(`Wrote ${cssPath}`);
+
+  const manifest = fonts.map((f) => ({ value: f.family, preview: f.label }));
+  const manifestSrc =
+    '/* Auto-generated by npm run vendor:mp4-fonts — MP4 export font dropdown */\n' +
+    `window.__SEAM_MP4_EXPORT_FONTS__ = ${JSON.stringify(manifest, null, 2)};\n`;
+  fs.writeFileSync(fontManifestPath, manifestSrc, 'utf8');
+  console.log(`Wrote ${fontManifestPath}`);
 }
 
 main().catch((e) => {

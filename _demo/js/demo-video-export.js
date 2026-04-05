@@ -182,79 +182,19 @@
     }
   }
 
-  /** Bundled OFL faces (see css/mp4-export-fonts.css); `value` must match @font-face font-family. */
-  const MP4_EXPORT_FONTS = [
-    { value: 'SEAM-Export-Space-Mono', preview: 'Space Mono — technical mono (default)' },
-    { value: 'SEAM-Export-JetBrains-Mono', preview: 'JetBrains Mono — code / UI' },
-    { value: 'SEAM-Export-Inter', preview: 'Inter — UI grotesk' },
-    { value: 'SEAM-Export-Bebas-Neue', preview: 'Bebas Neue — tall poster' },
-    { value: 'SEAM-Export-Oswald', preview: 'Oswald — condensed industrial' },
-    { value: 'SEAM-Export-Barlow-Condensed', preview: 'Barlow Condensed — tight headlines' },
-    { value: 'SEAM-Export-Archivo-Narrow', preview: 'Archivo Narrow — narrow news' },
-    { value: 'SEAM-Export-Anton', preview: 'Anton — heavy impact' },
-    { value: 'SEAM-Export-Teko', preview: 'Teko — sporty tall' },
-    { value: 'SEAM-Export-Orbitron', preview: 'Orbitron — sci-fi geometric' },
-    { value: 'SEAM-Export-Rajdhani', preview: 'Rajdhani — tech squared' },
-    { value: 'SEAM-Export-Exo-2', preview: 'Exo 2 — modern display' },
-    { value: 'SEAM-Export-Righteous', preview: 'Righteous — retro bubble' },
-    { value: 'SEAM-Export-Fredoka', preview: 'Fredoka — soft rounded' },
-    { value: 'SEAM-Export-Sora', preview: 'Sora — clean geometric' },
-    { value: 'SEAM-Export-Outfit', preview: 'Outfit — minimal round' },
-    { value: 'SEAM-Export-DM-Sans', preview: 'DM Sans — neutral UI' },
-    { value: 'SEAM-Export-Manrope', preview: 'Manrope — friendly grotesk' },
-    { value: 'SEAM-Export-Montserrat', preview: 'Montserrat — geometric classic' },
-    { value: 'SEAM-Export-Raleway', preview: 'Raleway — elegant thin stress' },
-    { value: 'SEAM-Export-Libre-Franklin', preview: 'Libre Franklin — readable grotesk' },
-    { value: 'SEAM-Export-Poppins', preview: 'Poppins — geometric friendly' },
-    { value: 'SEAM-Export-Nunito', preview: 'Nunito — rounded sans' },
-    { value: 'SEAM-Export-Rubik', preview: 'Rubik — soft blocks' },
-    { value: 'SEAM-Export-Work-Sans', preview: 'Work Sans — workhorse UI' },
-    { value: 'SEAM-Export-Playfair-Display', preview: 'Playfair Display — editorial serif' },
-    { value: 'SEAM-Export-Lora', preview: 'Lora — book serif' },
-    { value: 'SEAM-Export-Merriweather', preview: 'Merriweather — sturdy serif' },
-    { value: 'SEAM-Export-Source-Sans-3', preview: 'Source Sans 3 — Adobe UI' },
-    { value: 'SEAM-Export-Bitter', preview: 'Bitter — slab readable' },
-    { value: 'SEAM-Export-Cabin', preview: 'Cabin — humanist sans' },
-    { value: 'SEAM-Export-Bungee', preview: 'Bungee — inline poster' },
-    { value: 'SEAM-Export-Audiowide', preview: 'Audiowide — wide future' },
-    { value: 'SEAM-Export-Share-Tech', preview: 'Share Tech — HUD mono' },
-    { value: 'SEAM-Export-VT323', preview: 'VT323 — terminal CRT' },
-    { value: 'SEAM-Export-Press-Start-2P', preview: 'Press Start 2P — 8-bit' },
-    { value: 'SEAM-Export-Syncopate', preview: 'Syncopate — spaced caps' },
-    { value: 'SEAM-Export-Maven-Pro', preview: 'Maven Pro — tech sans' },
-    { value: 'SEAM-Export-Quantico', preview: 'Quantico — military tech' },
-    { value: 'SEAM-Export-Ubuntu', preview: 'Ubuntu — distro humanist' },
-    { value: 'SEAM-Export-Caveat', preview: 'Caveat — quick handwriting' },
-    { value: 'SEAM-Export-Dancing-Script', preview: 'Dancing Script — flowing script' },
-    { value: 'SEAM-Export-Pacifico', preview: 'Pacifico — surf brush script' },
-    { value: 'SEAM-Export-Shadows-Into-Light', preview: 'Shadows Into Light — sketchy print' },
-    { value: 'SEAM-Export-Indie-Flower', preview: 'Indie Flower — marker doodle' },
-    { value: 'SEAM-Export-Kalam', preview: 'Kalam — school blackboard' },
-    { value: 'SEAM-Export-Permanent-Marker', preview: 'Permanent Marker — thick marker' },
-    { value: 'SEAM-Export-Architects-Daughter', preview: 'Architects Daughter — loose print' },
-    { value: 'SEAM-Export-Satisfy', preview: 'Satisfy — brush script' },
-    { value: 'SEAM-Export-Great-Vibes', preview: 'Great Vibes — formal script' },
-    { value: 'SEAM-Export-Sacramento', preview: 'Sacramento — thin script' },
-    { value: 'SEAM-Export-Give-You-Glory', preview: 'Give You Glory — airy script' },
-    { value: 'SEAM-Export-Comic-Neue', preview: 'Comic Neue — clean comic' },
-    { value: 'SEAM-Export-Bangers', preview: 'Bangers — comic poster caps' },
-    { value: 'SEAM-Export-Chewy', preview: 'Chewy — chunky cartoon' },
-    { value: 'SEAM-Export-Freckle-Face', preview: 'Freckle Face — playful rough' },
-    { value: 'SEAM-Export-Bowlby-One', preview: 'Bowlby One — heavy cartoon' },
-    { value: 'SEAM-Export-Luckiest-Guy', preview: 'Luckiest Guy — retro cartoon' },
-    { value: 'SEAM-Export-Butterfly-Kids', preview: 'Butterfly Kids — bouncy kids' },
-    { value: 'SEAM-Export-Irish-Grover', preview: 'Irish Grover — thick comic' },
-    { value: 'SEAM-Export-Silkscreen', preview: 'Silkscreen — small pixel UI' },
-    { value: 'SEAM-Export-Pixelify-Sans', preview: 'Pixelify Sans — bitmap sans' },
-    { value: 'SEAM-Export-DotGothic16', preview: 'DotGothic16 — Japanese pixel Gothic' },
-    { value: 'SEAM-Export-Creepster', preview: 'Creepster — horror drips' },
-    { value: 'SEAM-Export-Monoton', preview: 'Monoton — striped display' },
-    { value: 'SEAM-Export-Bungee-Shade', preview: 'Bungee Shade — 3D inline' },
-    { value: 'SEAM-Export-Rubik-Dirt', preview: 'Rubik Dirt — grunge blocks' },
-    { value: 'SEAM-Export-Rubik-Bubbles', preview: 'Rubik Bubbles — round bubbles' },
-    { value: 'SEAM-Export-Ewert', preview: 'Ewert — woodcut circus' },
-    { value: 'SEAM-Export-Nosifer', preview: 'Nosifer — jagged horror' },
-  ];
+  /**
+   * Bundled OFL faces: generated list in js/mp4-export-font-manifest.js (npm run vendor:mp4-fonts).
+   * `value` must match @font-face font-family in css/mp4-export-fonts.css.
+   */
+  const MP4_EXPORT_FONTS =
+    typeof window !== 'undefined' &&
+    Array.isArray(window.__SEAM_MP4_EXPORT_FONTS__) &&
+    window.__SEAM_MP4_EXPORT_FONTS__.length > 0
+      ? window.__SEAM_MP4_EXPORT_FONTS__
+      : [
+          { value: 'SEAM-Export-Space-Mono', preview: 'Space Mono (fallback)' },
+          { value: 'SEAM-Export-Inter', preview: 'Inter (fallback)' },
+        ];
 
   function mp4VideoFontFamilyQuoted(cssFamily) {
     const safe = String(cssFamily || 'SEAM-Export-Space-Mono').replace(/'/g, '');

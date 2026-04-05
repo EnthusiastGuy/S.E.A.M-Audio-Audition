@@ -46,11 +46,14 @@
     seriesText: '#f4f7ff',
   };
 
+  const DEMO_VIDEO_PALETTE_KEYS = Object.keys(DEMO_VIDEO_PALETTE_BASIC);
+
   /** Preview-only: frozen Auto palette for static backgrounds until file/reset changes. */
-  const demoVideoPreviewAutoPaletteCache = { palette: null };
+  const demoVideoPreviewAutoPaletteCache = { palette: null, videoSmooth: null };
 
   function invalidateDemoVideoPreviewAutoPalette() {
     demoVideoPreviewAutoPaletteCache.palette = null;
+    demoVideoPreviewAutoPaletteCache.videoSmooth = null;
   }
 
   /** Per-zone export text scale: normal = 1; steps ±10% / ±15% cumulative from normal. */
@@ -347,6 +350,8 @@
   /** Crossfade when looping video background(s); capped per clip duration. */
   const BG_VIDEO_CROSSFADE_SEC = 1;
   const BG_VIDEO_BITMAP_ALPHA = 0.62;
+  /** Auto UI palette when following video: exponential blend toward measured colors (~1 s time constant). */
+  const VIDEO_PALETTE_INERTIA_TAU_SEC = 1;
   const OUTRO_BLACK_SEC = 1;
 
   /* ── tiny helpers ────────────────────────────────────────── */
@@ -627,6 +632,114 @@
 
   function rgbaStr(rgb, a) {
     return `rgba(${clamp255(rgb[0])},${clamp255(rgb[1])},${clamp255(rgb[2])},${a})`;
+  }
+
+  function parseCssColorToRgba(str) {
+    const s = String(str || '').trim();
+    if (s.startsWith('#')) {
+      let h = s.slice(1);
+      if (h.length === 3) {
+        return [
+          parseInt(h[0] + h[0], 16),
+          parseInt(h[1] + h[1], 16),
+          parseInt(h[2] + h[2], 16),
+          1,
+        ];
+      }
+      if (h.length === 6) {
+        return [
+          parseInt(h.slice(0, 2), 16),
+          parseInt(h.slice(2, 4), 16),
+          parseInt(h.slice(4, 6), 16),
+          1,
+        ];
+      }
+      if (h.length === 8) {
+        return [
+          parseInt(h.slice(0, 2), 16),
+          parseInt(h.slice(2, 4), 16),
+          parseInt(h.slice(4, 6), 16),
+          parseInt(h.slice(6, 8), 16) / 255,
+        ];
+      }
+    }
+    const m = s.match(/rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)(?:\s*,\s*([\d.]+))?\s*\)/i);
+    if (m) {
+      const al = m[4] != null ? parseFloat(m[4]) : 1;
+      return [+m[1], +m[2], +m[3], Number.isFinite(al) ? al : 1];
+    }
+    return [255, 255, 255, 1];
+  }
+
+  function paletteStringsToComponents(pal) {
+    const o = {};
+    for (const k of DEMO_VIDEO_PALETTE_KEYS) {
+      o[k] = parseCssColorToRgba(pal[k]);
+    }
+    return o;
+  }
+
+  function formatPaletteChannel(x) {
+    return clamp255(Math.round(x));
+  }
+
+  function paletteComponentsToStrings(comp) {
+    const o = {};
+    for (const k of DEMO_VIDEO_PALETTE_KEYS) {
+      const [r, g, b, a] = comp[k];
+      const rr = formatPaletteChannel(r);
+      const gg = formatPaletteChannel(g);
+      const bb = formatPaletteChannel(b);
+      const aa = Math.max(0, Math.min(1, a));
+      if (aa >= 0.998) o[k] = `rgb(${rr},${gg},${bb})`;
+      else o[k] = `rgba(${rr},${gg},${bb},${+aa.toFixed(3)})`;
+    }
+    return o;
+  }
+
+  function lerpPaletteComponents(from, to, t) {
+    const u = Math.max(0, Math.min(1, t));
+    const o = {};
+    for (const k of DEMO_VIDEO_PALETTE_KEYS) {
+      const a = from[k];
+      const b = to[k];
+      o[k] = [
+        a[0] + (b[0] - a[0]) * u,
+        a[1] + (b[1] - a[1]) * u,
+        a[2] + (b[2] - a[2]) * u,
+        a[3] + (b[3] - a[3]) * u,
+      ];
+    }
+    return o;
+  }
+
+  /**
+   * @param {{ palette: object|null, videoSmooth?: { smoothed: object|null, lastT: number|null } }} cache
+   */
+  function smoothVideoAutoPaletteInertia(cache, tVideo, targetPal) {
+    const tgtComp = paletteStringsToComponents(targetPal);
+    if (!cache.videoSmooth) {
+      cache.videoSmooth = { smoothed: null, lastT: null };
+    }
+    const vs = cache.videoSmooth;
+    let dt = 1 / 30;
+    if (vs.lastT != null) {
+      if (tVideo + 1e-4 < vs.lastT) {
+        vs.smoothed = null;
+        vs.lastT = null;
+      } else {
+        dt = Math.min(0.35, tVideo - vs.lastT);
+      }
+    }
+    if (vs.smoothed == null) {
+      vs.smoothed = tgtComp;
+      vs.lastT = tVideo;
+      return paletteComponentsToStrings(vs.smoothed);
+    }
+    const alpha = 1 - Math.exp(-dt / VIDEO_PALETTE_INERTIA_TAU_SEC);
+    vs.smoothed = lerpPaletteComponents(vs.smoothed, tgtComp, alpha);
+    vs.lastT = tVideo;
+    return paletteComponentsToStrings(vs.smoothed);
   }
 
   /** Darken sRGB until white text meets ~4.5:1 on solid fill (quick iterative). */
@@ -1338,11 +1451,13 @@
 
     const mode = uiPaletteMode === 'basic' ? 'basic' : 'auto';
     let uiPal = DEMO_VIDEO_PALETTE_BASIC;
-    const cache = autoPaletteCache || { palette: null };
+    const cache = autoPaletteCache || { palette: null, videoSmooth: null };
     if (mode === 'auto') {
       if (videoBgAnimator) {
-        uiPal = extractAutoPaletteFromSourceCanvas(ctx.canvas, W, H);
+        const measured = extractAutoPaletteFromSourceCanvas(ctx.canvas, W, H);
+        uiPal = smoothVideoAutoPaletteInertia(cache, tVideo, measured);
       } else {
+        cache.videoSmooth = null;
         if (!cache.palette) {
           cache.palette = extractAutoPaletteFromSourceCanvas(ctx.canvas, W, H);
         }
@@ -1607,9 +1722,7 @@
     if (!order.length) {
       return ['Stellar Drift', 'Moon Unit', 'Analog Heart', 'Echo Chamber', 'Night Shift'];
     }
-    const titles = order.slice(0, Math.min(6, order.length)).map(idx => songs[idx]?.name || `Song ${idx + 1}`);
-    while (titles.length < 3) titles.push(`Track ${titles.length + 1}`);
-    return titles;
+    return order.map((idx) => songs[idx]?.name || `Song ${idx + 1}`);
   }
 
   function buildDemoPreviewMockPlans(rawTitles) {

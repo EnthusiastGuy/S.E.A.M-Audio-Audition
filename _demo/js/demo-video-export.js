@@ -9,8 +9,15 @@
 (function initDemoVideoExport() {
   'use strict';
 
-  /** Image chosen in-page (File/Blob); wins over fetch/embed so exports always match what you picked. */
+  /**
+   * User background: default (null), static image, or one+ videos (looped crossfade).
+   * @type {null | { kind: 'image', file: Blob } | { kind: 'video', files: Blob[] }}
+   */
   let demoVideoUserBackground = null;
+
+  /** Lazily built for Preview when video background is selected; cleared on reset / change. */
+  let demoVideoBgPreviewAnimator = null;
+  let demoVideoBgPreviewAnimatorKey = '';
 
   let demoVideoPreviewOpen = false;
   let demoPreviewRenderTimer = null;
@@ -310,6 +317,9 @@
   /** Hold wallpaper + pack hero; music starts after this (2–3 s from export seed). */
   const INTRO_TRANS_SEC = 1.25;
   const OUTRO_FADE_SEC = 1;
+  /** Crossfade when looping video background(s); capped per clip duration. */
+  const BG_VIDEO_CROSSFADE_SEC = 1;
+  const BG_VIDEO_BITMAP_ALPHA = 0.62;
   const OUTRO_BLACK_SEC = 1;
 
   /* ── tiny helpers ────────────────────────────────────────── */
@@ -722,6 +732,243 @@
     ctx.fillRect(0, 0, W, H);
   }
 
+  function effectiveBgVideoCrossfadeSec(requested, durations) {
+    const n = durations.length;
+    if (n < 1) return requested;
+    const minD = Math.min(...durations);
+    if (!(minD > 0) || !Number.isFinite(minD)) return Math.min(requested, 0.5);
+    if (n === 1) {
+      return Math.min(requested, Math.max(0.12, minD * 0.35));
+    }
+    return Math.min(requested, Math.max(0.15, minD * 0.38));
+  }
+
+  /**
+   * Map wall-clock t to one clip or a crossfade pair (looping).
+   * @param {number[]} durations clip lengths in seconds
+   */
+  function sampleBgVideoTimeline(tAbs, durations, fade) {
+    const n = durations.length;
+    if (n < 1) return { blend: false, i: 0, t: 0 };
+    if (n === 1) {
+      const D = Math.max(1e-3, durations[0]);
+      const f = Math.min(fade, D * 0.48);
+      const L = D;
+      let u = tAbs % L;
+      if (u < 0) u += L;
+      if (u <= D - f - 1e-9) {
+        return { blend: false, i: 0, t: Math.min(u, D - 1e-4) };
+      }
+      const a = (u - (D - f)) / f;
+      return {
+        blend: true,
+        out: { i: 0, t: Math.min(u, D - 1e-4) },
+        inn: { i: 0, t: Math.min(Math.max(0, u - (D - f)), D - 1e-4) },
+        a: Math.min(1, Math.max(0, a)),
+      };
+    }
+    const sumD = durations.reduce((a, b) => a + b, 0);
+    const L = sumD - n * fade;
+    const loopLen = Math.max(1e-3, L);
+    let u = tAbs % loopLen;
+    if (u < 0) u += loopLen;
+
+    if (u < fade) {
+      const a = u / fade;
+      return {
+        blend: true,
+        out: {
+          i: n - 1,
+          t: Math.min(Math.max(0, durations[n - 1] - fade + u), durations[n - 1] - 1e-4),
+        },
+        inn: { i: 0, t: Math.min(Math.max(0, u), durations[0] - 1e-4) },
+        a: Math.min(1, Math.max(0, a)),
+      };
+    }
+    u -= fade;
+    for (let i = 0; i < n; i++) {
+      const soloLen = Math.max(0, durations[i] - 2 * fade);
+      if (u < soloLen) {
+        const localT = fade + u;
+        return { blend: false, i, t: Math.min(localT, durations[i] - 1e-4) };
+      }
+      u -= soloLen;
+      if (u < fade) {
+        const next = (i + 1) % n;
+        return {
+          blend: true,
+          out: { i, t: Math.min(Math.max(0, durations[i] - fade + u), durations[i] - 1e-4) },
+          inn: { i: next, t: Math.min(Math.max(0, u), durations[next] - 1e-4) },
+          a: Math.min(1, Math.max(0, u / fade)),
+        };
+      }
+      u -= fade;
+    }
+    return { blend: false, i: 0, t: 0 };
+  }
+
+  function seekVideoForExport(video, tSec) {
+    const d = video.duration;
+    if (!Number.isFinite(d) || d <= 0) return Promise.resolve();
+    const eps = 1 / 60;
+    const tt = Math.min(Math.max(0, tSec), Math.max(0, d - eps));
+    if (Math.abs((video.currentTime || 0) - tt) < 0.001) return Promise.resolve();
+    return new Promise((resolve) => {
+      const done = () => {
+        video.removeEventListener('seeked', done);
+        video.removeEventListener('error', onErr);
+        resolve();
+      };
+      const onErr = () => {
+        video.removeEventListener('seeked', done);
+        video.removeEventListener('error', onErr);
+        resolve();
+      };
+      video.addEventListener('seeked', done, { once: true });
+      video.addEventListener('error', onErr, { once: true });
+      try {
+        video.pause();
+        video.currentTime = tt;
+      } catch {
+        resolve();
+      }
+    });
+  }
+
+  function drawVideoCover(ctx, W, H, video, alpha) {
+    const iw = video.videoWidth;
+    const ih = video.videoHeight;
+    if (!iw || !ih) return;
+    const scale = Math.max(W / iw, H / ih);
+    const dw = iw * scale;
+    const dh = ih * scale;
+    const dx = (W - dw) / 2;
+    const dy = (H - dh) / 2;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.drawImage(video, dx, dy, dw, dh);
+    ctx.restore();
+  }
+
+  async function createDemoVideoBgAnimator(fileBlobs) {
+    const blobs = [...fileBlobs].filter(b => b && (b.size ?? 0) > 0);
+    if (blobs.length === 0) throw new Error('No video files to use as background.');
+    const entries = [];
+    for (const blob of blobs) {
+      const url = URL.createObjectURL(blob);
+      const video = document.createElement('video');
+      video.muted = true;
+      video.playsInline = true;
+      video.setAttribute('playsinline', '');
+      video.preload = 'auto';
+      video.src = url;
+      await new Promise((resolve, reject) => {
+        const to = setTimeout(() => {
+          reject(new Error('Video metadata load timed out'));
+        }, 120000);
+        const ok = () => {
+          clearTimeout(to);
+          resolve();
+        };
+        const bad = () => {
+          clearTimeout(to);
+          reject(new Error('Could not decode a background video file'));
+        };
+        if (video.readyState >= 1) {
+          clearTimeout(to);
+          resolve();
+        } else {
+          video.addEventListener('loadedmetadata', ok, { once: true });
+          video.addEventListener('error', bad, { once: true });
+        }
+      });
+      const duration =
+        Number.isFinite(video.duration) && video.duration > 0 ? video.duration : 0.25;
+      entries.push({ video, url, duration });
+    }
+    const durations = entries.map(e => e.duration);
+    const fade = effectiveBgVideoCrossfadeSec(BG_VIDEO_CROSSFADE_SEC, durations);
+
+    return {
+      entries,
+      durations,
+      fade,
+      async draw(ctx, W, H, tVideo) {
+        const sample = sampleBgVideoTimeline(tVideo, durations, fade);
+        ctx.save();
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        if (!sample.blend) {
+          const e = entries[sample.i];
+          await seekVideoForExport(e.video, sample.t);
+          drawVideoCover(ctx, W, H, e.video, BG_VIDEO_BITMAP_ALPHA);
+        } else if (sample.out.i === sample.inn.i) {
+          const e = entries[sample.out.i];
+          await seekVideoForExport(e.video, sample.out.t);
+          const snap = document.createElement('canvas');
+          snap.width = W;
+          snap.height = H;
+          const sctx = snap.getContext('2d');
+          if (sctx) {
+            sctx.imageSmoothingEnabled = true;
+            sctx.imageSmoothingQuality = 'high';
+            drawVideoCover(sctx, W, H, e.video, 1);
+          }
+          await seekVideoForExport(e.video, sample.inn.t);
+          if (sctx) {
+            ctx.globalAlpha = BG_VIDEO_BITMAP_ALPHA * (1 - sample.a);
+            ctx.drawImage(snap, 0, 0, W, H);
+          }
+          drawVideoCover(ctx, W, H, e.video, BG_VIDEO_BITMAP_ALPHA * sample.a);
+        } else {
+          const outE = entries[sample.out.i];
+          const innE = entries[sample.inn.i];
+          await seekVideoForExport(outE.video, sample.out.t);
+          drawVideoCover(ctx, W, H, outE.video, BG_VIDEO_BITMAP_ALPHA * (1 - sample.a));
+          await seekVideoForExport(innE.video, sample.inn.t);
+          drawVideoCover(ctx, W, H, innE.video, BG_VIDEO_BITMAP_ALPHA * sample.a);
+        }
+        ctx.restore();
+      },
+      dispose() {
+        for (const e of entries) {
+          try {
+            e.video.removeAttribute('src');
+            e.video.load();
+          } catch {
+            /* ignore */
+          }
+          URL.revokeObjectURL(e.url);
+        }
+      },
+    };
+  }
+
+  function disposeDemoVideoBgPreviewAnimator() {
+    demoVideoBgPreviewAnimator?.dispose();
+    demoVideoBgPreviewAnimator = null;
+    demoVideoBgPreviewAnimatorKey = '';
+  }
+
+  function demoVideoBgPreviewKeyFromState() {
+    if (!demoVideoUserBackground || demoVideoUserBackground.kind !== 'video') return '';
+    return demoVideoUserBackground.files
+      .map((f) => `${f.name || 'video'}:${f.size ?? 0}:${f.lastModified ?? 0}`)
+      .join('|');
+  }
+
+  async function getOrCreateDemoVideoBgPreviewAnimator() {
+    const key = demoVideoBgPreviewKeyFromState();
+    if (!key) return null;
+    if (demoVideoBgPreviewAnimatorKey === key && demoVideoBgPreviewAnimator) {
+      return demoVideoBgPreviewAnimator;
+    }
+    disposeDemoVideoBgPreviewAnimator();
+    demoVideoBgPreviewAnimatorKey = key;
+    demoVideoBgPreviewAnimator = await createDemoVideoBgAnimator(demoVideoUserBackground.files);
+    return demoVideoBgPreviewAnimator;
+  }
+
   /**
    * VideoFrame rejects canvases that drew from "tainted" sources (e.g. <img> from
    * file:// or cross-origin without CORS). Only draw backgrounds from fetch→Blob→
@@ -757,8 +1004,24 @@
    * @param {object} timeline introHoldSec, introTransSec, musicDurSec, outroFadeSec, outroBlackSec
    * @param {{ text: string, year: number|null }} cornerCredit bottom-right label; year appended when non-null
    * @param {object} [fontSizeMuls] per-zone multipliers (1 = default); from readMp4FontSizeMultipliersFromUi()
+   * @param {null|{ draw: function, dispose: function }} [videoBgAnimator] looping video background from createDemoVideoBgAnimator
    */
-  function drawFrame(ctx, tVideo, plans, currentIdx, totalPieces, bgBitmap, rawTitles, packMeta, cornerCredit, timeline, fontFace, packStatsLine, fontSizeMuls) {
+  async function drawFrame(
+    ctx,
+    tVideo,
+    plans,
+    currentIdx,
+    totalPieces,
+    bgBitmap,
+    rawTitles,
+    packMeta,
+    cornerCredit,
+    timeline,
+    fontFace,
+    packStatsLine,
+    fontSizeMuls,
+    videoBgAnimator,
+  ) {
     const W = CANVAS_W;
     const H = CANVAS_H;
     const stack = mp4VideoFontStack(fontFace);
@@ -772,7 +1035,9 @@
     ctx.fillStyle = '#0d1117';
     ctx.fillRect(0, 0, W, H);
 
-    if (bgBitmap) {
+    if (videoBgAnimator) {
+      await videoBgAnimator.draw(ctx, W, H, tVideo);
+    } else if (bgBitmap) {
       const iw = bgBitmap.width;
       const ih = bgBitmap.height;
       const scale = Math.max(W / iw, H / ih);
@@ -783,7 +1048,7 @@
       ctx.save();
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = 'high';
-      ctx.globalAlpha = 0.62;
+      ctx.globalAlpha = BG_VIDEO_BITMAP_ALPHA;
       ctx.drawImage(bgBitmap, dx, dy, dw, dh);
       ctx.restore();
     } else {
@@ -1139,7 +1404,20 @@
     } catch (_) {
       /* ignore */
     }
-    const bg = await loadExportSafeBackgroundBitmap();
+    let bg = null;
+    let videoBgAnimator = null;
+    try {
+      if (demoVideoUserBackground && demoVideoUserBackground.kind === 'video') {
+        videoBgAnimator = await getOrCreateDemoVideoBgPreviewAnimator();
+      } else {
+        disposeDemoVideoBgPreviewAnimator();
+        bg = await loadExportSafeBackgroundBitmap();
+      }
+    } catch (e) {
+      console.warn('[demo-video-export] Preview background', e);
+      disposeDemoVideoBgPreviewAnimator();
+      bg = await loadExportSafeBackgroundBitmap();
+    }
     const rawTitles = getDemoPreviewTitles();
     const plans = buildDemoPreviewMockPlans(rawTitles);
     let musicTail = 0;
@@ -1169,7 +1447,7 @@
     } catch (_) {
       packStatsLine = '';
     }
-    drawFrame(
+    await drawFrame(
       octx,
       tVideo,
       plans,
@@ -1183,6 +1461,7 @@
       fontFace,
       packStatsLine,
       readMp4FontSizeMultipliersFromUi(),
+      videoBgAnimator,
     );
     const ctx2 = canvas.getContext('2d');
     if (!ctx2) return;
@@ -1210,12 +1489,15 @@
   async function loadExportSafeBackgroundBitmap() {
     if (typeof createImageBitmap !== 'function') return null;
 
-    if (demoVideoUserBackground && demoVideoUserBackground.size > 0) {
-      try {
-        const bmp = await createImageBitmap(demoVideoUserBackground);
-        if (bmp) return bmp;
-      } catch (e) {
-        console.warn('[demo-video-export] Could not decode user background image', e);
+    if (demoVideoUserBackground && demoVideoUserBackground.kind === 'image') {
+      const f = demoVideoUserBackground.file;
+      if (f && f.size > 0) {
+        try {
+          const bmp = await createImageBitmap(f);
+          if (bmp) return bmp;
+        } catch (e) {
+          console.warn('[demo-video-export] Could not decode user background image', e);
+        }
       }
     }
 
@@ -1438,7 +1720,18 @@
     return g;
   }
 
-  async function renderMp4Offline(mixedBuffer, plans, rawTitles, bgBitmap, introHoldSec, fontFace, packStatsLine, cornerCredit, fontSizeMuls) {
+  async function renderMp4Offline(
+    mixedBuffer,
+    plans,
+    rawTitles,
+    bgBitmap,
+    videoBgAnimator,
+    introHoldSec,
+    fontFace,
+    packStatsLine,
+    cornerCredit,
+    fontSizeMuls,
+  ) {
     const musicDurSec = mixedBuffer.duration;
     const totalVideoSec = introHoldSec + musicDurSec + OUTRO_BLACK_SEC;
     const fps = chooseFps(totalVideoSec);
@@ -1518,7 +1811,22 @@
       const tVideo = f / fps;
       const tMix = Math.min(Math.max(tVideo - introHoldSec, 0), musicDurSec);
       const idx = currentPlanIndex(tMix, plans);
-      drawFrame(ctx, tVideo, plans, idx, totalPieces, bgBitmap, rawTitles, packMeta, cornerCredit, timeline, fontFace, packStatsLine, fontSizeMuls);
+      await drawFrame(
+        ctx,
+        tVideo,
+        plans,
+        idx,
+        totalPieces,
+        bgBitmap,
+        rawTitles,
+        packMeta,
+        cornerCredit,
+        timeline,
+        fontFace,
+        packStatsLine,
+        fontSizeMuls,
+        videoBgAnimator,
+      );
 
       const vf = new VideoFrame(canvas, { timestamp: Math.round(tVideo * 1e6) });
       videoEncoder.encode(vf, { keyFrame: f % keyInterval === 0 });
@@ -1646,6 +1954,7 @@
     showAppLoading('Preparing demo video…');
     showProgress(0, 'Checking browser capabilities…');
 
+    let videoBgAnimator = null;
     try {
       await checkWebCodecsSupport();
 
@@ -1712,7 +2021,11 @@
         fontFace = 'SEAM-Export-Space-Mono';
       }
       await ensureMp4ExportFontLoaded(fontFace);
-      const bg = await loadExportSafeBackgroundBitmap();
+      if (demoVideoUserBackground && demoVideoUserBackground.kind === 'video') {
+        showProgress(4, 'Loading background videos…');
+        videoBgAnimator = await createDemoVideoBgAnimator(demoVideoUserBackground.files);
+      }
+      const bg = videoBgAnimator ? null : await loadExportSafeBackgroundBitmap();
       const packStatsLine = buildPackExportStatsLine();
       const cornerCredit = readMp4CornerCreditFromUi();
 
@@ -1723,6 +2036,7 @@
         plans,
         rawTitles,
         bg,
+        videoBgAnimator,
         introHoldSec,
         fontFace,
         packStatsLine,
@@ -1742,17 +2056,19 @@
       });
 
       if (exportStatus) {
+        const hasBg = !!(bg || videoBgAnimator);
         exportStatus.textContent =
           'Export complete (MP4 + description.txt). ' +
-          (bg
+          (hasBg
             ? ''
-            : 'No background: pick an image or add img/video_background.jpg / run npm run vendor:video-bg. ') +
+            : 'No background: pick an image or videos, or add img/video_background.jpg / run npm run vendor:video-bg. ') +
           'Run again for different random excerpts.';
       }
     } catch (err) {
       console.error('[demo-video-export]', err);
       alert(err?.message || String(err));
     } finally {
+      videoBgAnimator?.dispose();
       hideProgress();
       hideAppLoading();
       btn.disabled = false;
@@ -1765,16 +2081,26 @@
     const statusEl = document.getElementById('demo-video-bg-status');
     const resetBtn = document.getElementById('btn-demo-video-reset-bg');
     if (!statusEl) return;
-    if (demoVideoUserBackground) {
-      const name =
-        demoVideoUserBackground instanceof File && demoVideoUserBackground.name
-          ? demoVideoUserBackground.name
-          : 'Custom image';
-      statusEl.textContent = `Using your file: ${name}`;
-      if (resetBtn) resetBtn.hidden = false;
-    } else {
+    if (!demoVideoUserBackground) {
+      disposeDemoVideoBgPreviewAnimator();
       statusEl.textContent = 'Using default (project JPG or embedded copy).';
       if (resetBtn) resetBtn.hidden = true;
+    } else if (demoVideoUserBackground.kind === 'image') {
+      disposeDemoVideoBgPreviewAnimator();
+      const f = demoVideoUserBackground.file;
+      const name = f instanceof File && f.name ? f.name : 'Custom image';
+      statusEl.textContent = `Using your image: ${name}`;
+      if (resetBtn) resetBtn.hidden = false;
+    } else {
+      const files = demoVideoUserBackground.files;
+      const n = files.length;
+      const head = files
+        .slice(0, 2)
+        .map((f) => (f instanceof File && f.name ? f.name : 'video'))
+        .join(', ');
+      const tail = n > 2 ? ` (+${n - 2} more)` : '';
+      statusEl.textContent = `Animated background: ${n} video clip${n === 1 ? '' : 's'} (${head}${tail}).`;
+      if (resetBtn) resetBtn.hidden = false;
     }
     scheduleDemoPreviewRender();
   }
@@ -1859,15 +2185,27 @@
     if (pickBtn && fileInput) {
       pickBtn.addEventListener('click', () => fileInput.click());
       fileInput.addEventListener('change', () => {
-        const f = fileInput.files && fileInput.files[0];
-        if (f && f.size > 0) demoVideoUserBackground = f;
+        disposeDemoVideoBgPreviewAnimator();
+        const list = fileInput.files ? Array.from(fileInput.files) : [];
         fileInput.value = '';
+        if (list.length === 0) return;
+        const videos = list.filter((f) => typeof f.type === 'string' && f.type.startsWith('video/'));
+        const images = list.filter((f) => typeof f.type === 'string' && f.type.startsWith('image/'));
+        if (videos.length > 0) {
+          demoVideoUserBackground = { kind: 'video', files: videos };
+        } else if (images.length > 0) {
+          demoVideoUserBackground = { kind: 'image', file: images[0] };
+        } else {
+          alert('Choose a JPEG, PNG, WebP, or one or more video files (MP4, WebM, MOV, etc.).');
+          return;
+        }
         refreshDemoVideoBgStatus();
       });
     }
     if (resetBtn) {
       resetBtn.addEventListener('click', () => {
         demoVideoUserBackground = null;
+        disposeDemoVideoBgPreviewAnimator();
         refreshDemoVideoBgStatus();
       });
     }

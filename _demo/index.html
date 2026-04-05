@@ -197,7 +197,7 @@
         <div class="tools-demo-video-tooltip" id="demo-video-tooltip" role="tooltip">
           <div class="tools-demo-video-tooltip-lead">About MP4 export</div>
           <p>Renders a <strong>1080p MP4</strong> with embedded chapter markers (Nero <code>chpl</code>; VLC and many players) plus a YouTube-style <strong>description.txt</strong>.</p>
-          <p><strong>Fonts</strong> are bundled under the SIL Open Font License. <strong>Background</strong>: choose an image to bypass the embedded JPEG and browser cache.</p>
+          <p><strong>Fonts</strong> are bundled under the SIL Open Font License. <strong>Background</strong>: pick an image (static) or one or more videos (looped animated background with crossfades).</p>
           <p>Uses <strong>WebCodecs</strong> (Chrome/Edge). Use <strong>Preview</strong> to see a sample frame while adjusting font, text sizes, background, and corner credit.</p>
         </div>
       </div>
@@ -261,15 +261,16 @@
         type="file"
         id="input-demo-video-bg"
         class="tools-demo-video-bg-input"
-        accept="image/jpeg,image/png,image/webp"
-        aria-label="Choose image for demo video background"
+        multiple
+        accept="image/jpeg,image/png,image/webp,video/mp4,video/webm,video/quicktime"
+        aria-label="Choose image or videos for demo video background"
       />
       <button
         type="button"
         class="tools-demo-video-bg-btn"
         id="btn-demo-video-pick-bg"
-        title="Use any JPEG/PNG/WebP from disk; bypasses cached or embedded background"
-      >Choose background image…</button>
+        title="JPEG/PNG/WebP for a still background, or one or more videos for a looping crossfaded motion background"
+      >Choose background image or videos…</button>
       <button
         type="button"
         class="tools-demo-video-bg-reset"

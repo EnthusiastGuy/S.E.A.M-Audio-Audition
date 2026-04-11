@@ -2,7 +2,7 @@
    S.E.A.M — Pack demo video export (MP4 via WebCodecs + mp4-muxer)
    Fully offline: frames rendered to canvas → VideoEncoder → muxer,
    audio → AudioEncoder → muxer, combined into MP4.
-   Post-pass: Nero-style chpl chapters in moov.udta (VLC, many players).
+   Post-pass: Nero-style chpl chapters + QuickTime meta/ilst desc in moov.udta.
    No WASM, no Workers, no fetch — works on file:// and http(s).
    ============================================================= */
 
@@ -409,8 +409,6 @@
   function buildYoutubeDescription(plans, totalDurationSec, introLeadInSec, musicDurSec) {
     const lead = Math.max(0, introLeadInSec || 0);
     const lines = [
-      'YouTube chapter links (paste into the video description). The first line should start at 0:00.',
-      '',
     ];
     lines.push(`${formatYoutubeChapterTimestamp(0)} Intro`);
     for (let i = 0; i < plans.length; i++) {
@@ -1533,44 +1531,56 @@
     ctx.font = `600 ${Math.round(15 * s * pl)}px ${stack}`;
     ctx.textBaseline = 'middle';
 
-    let x = pad;
-    let y = pad + topInset;
     const chipR = Math.max(4, Math.round(6 * s * pl));
     const ellText = DV.ELLIPSIS_CHIP_TEXT;
-    playlistItems.forEach((item) => {
-      let label;
-      let tw;
+    const innerW = W - 2 * pad;
+    function widthForPlaylistItem(item) {
       if (item.kind === 'ellipsis') {
-        label = ellText;
-        const w = ctx.measureText(label).width + chipPad * 2;
-        tw = Math.max(Math.round(34 * pl), Math.min(w, W - pad * 2));
-      } else {
-        label = playlistChipLabel(item.index + 1, rawTitles[item.index]);
-        tw = Math.min(ctx.measureText(label).width + chipPad * 2, W - pad * 2);
+        const w = ctx.measureText(ellText).width + chipPad * 2;
+        return Math.max(Math.round(34 * pl), Math.min(w, W - pad * 2));
       }
-      if (x + tw > W - pad) {
-        x = pad;
-        y += chipH + chipGap;
+      const lab = playlistChipLabel(item.index + 1, rawTitles[item.index]);
+      return Math.min(ctx.measureText(lab).width + chipPad * 2, W - pad * 2);
+    }
+    const { rows: justifiedPlaylistRows } = DV.computePlaylistJustifiedLayout(
+      playlistItems,
+      innerW,
+      pad,
+      chipXGap,
+      topInset,
+      chipH,
+      chipGap,
+      widthForPlaylistItem,
+    );
+    let rowY = pad + topInset;
+    for (const row of justifiedPlaylistRows) {
+      if (rowY > pad + playlistH) break;
+      for (let i = 0; i < row.items.length; i++) {
+        const item = row.items[i];
+        const tw = row.widths[i];
+        const x = row.xs[i];
+        let label;
+        if (item.kind === 'ellipsis') label = ellText;
+        else label = playlistChipLabel(item.index + 1, rawTitles[item.index]);
+        const active = item.kind === 'song' && item.index === currentIdx;
+        const isEllipsis = item.kind === 'ellipsis';
+        if (isEllipsis) ctx.save();
+        if (isEllipsis) ctx.globalAlpha *= 0.58;
+        ctx.fillStyle = active ? uiPal.chipActiveFill : uiPal.chipInactiveFill;
+        drawRoundedRect(ctx, x, rowY, tw, chipH, chipR);
+        ctx.fill();
+        ctx.strokeStyle = active ? uiPal.chipActiveStroke : uiPal.chipInactiveStroke;
+        ctx.lineWidth = Math.max(1, s);
+        ctx.stroke();
+        if (active) {
+          strokeActivePlaylistChipShine(ctx, x, rowY, tw, chipH, chipR, tVideo, Math.max(1, s * pl));
+        }
+        ctx.fillStyle = active ? uiPal.chipActiveText : uiPal.chipInactiveText;
+        ctx.fillText(label, x + chipPad, rowY + chipH / 2);
+        if (isEllipsis) ctx.restore();
       }
-      if (y > pad + playlistH) return;
-      const active = item.kind === 'song' && item.index === currentIdx;
-      const isEllipsis = item.kind === 'ellipsis';
-      if (isEllipsis) ctx.save();
-      if (isEllipsis) ctx.globalAlpha *= 0.58;
-      ctx.fillStyle = active ? uiPal.chipActiveFill : uiPal.chipInactiveFill;
-      drawRoundedRect(ctx, x, y, tw, chipH, chipR);
-      ctx.fill();
-      ctx.strokeStyle = active ? uiPal.chipActiveStroke : uiPal.chipInactiveStroke;
-      ctx.lineWidth = Math.max(1, s);
-      ctx.stroke();
-      if (active) {
-        strokeActivePlaylistChipShine(ctx, x, y, tw, chipH, chipR, tVideo, Math.max(1, s * pl));
-      }
-      ctx.fillStyle = active ? uiPal.chipActiveText : uiPal.chipInactiveText;
-      ctx.fillText(label, x + chipPad, y + chipH / 2);
-      if (isEllipsis) ctx.restore();
-      x += tw + chipXGap;
-    });
+      rowY += chipH + chipGap;
+    }
 
     const plan = plans[currentIdx];
     if (plan) {
@@ -2079,7 +2089,11 @@
    * then per chapter uint64 start (100ns), uint8 title len, UTF-8 title.
    * @param {{ startSec: number, title: string }[]} chapters
    */
-  function buildUdtaChplBox(chapters) {
+  /**
+   * @param {{ startSec: number, title: string }[]} chapters
+   * @param {Uint8Array|null} [metaIlstAtom] full `meta` box (QuickTime ilst.desc), from SEAM_MP4_DESCRIPTION_META
+   */
+  function buildUdtaChplBox(chapters, metaIlstAtom) {
     const enc = new TextEncoder();
     const body = [];
     body.push(0, 0, 0, 0);
@@ -2098,7 +2112,8 @@
     }
     const inner = new Uint8Array(body);
     const chplSize = 8 + inner.byteLength;
-    const udtaSize = 8 + chplSize;
+    const metaLen = metaIlstAtom && metaIlstAtom.byteLength ? metaIlstAtom.byteLength : 0;
+    const udtaSize = 8 + chplSize + metaLen;
     const out = new Uint8Array(udtaSize);
     mp4WriteU32BE(out, 0, udtaSize);
     out[4] = 0x75;
@@ -2111,20 +2126,27 @@
     out[14] = 0x70;
     out[15] = 0x6c;
     out.set(inner, 16);
+    if (metaLen) out.set(metaIlstAtom, 8 + chplSize);
     return out;
   }
 
   /**
-   * Append udta+chpl inside moov (before following top-level box), fix stco/co64.
+   * Append udta (chpl + optional QuickTime meta/ilst description) inside moov, fix stco/co64.
+   * @param {string} [descriptionText] embedded as moov.udta.meta.ilst.desc (file “Description” in many apps)
    */
-  function injectNeroChaptersIntoMp4(arrayBuffer, chapters) {
+  function injectNeroChaptersIntoMp4(arrayBuffer, chapters, descriptionText) {
     if (!chapters || chapters.length === 0) return arrayBuffer;
     const src = new Uint8Array(arrayBuffer);
     const moov = mp4FindTopLevelBox(src, 'moov');
     if (!moov) return arrayBuffer;
     const insertAt = moov.offset + moov.size;
     if (insertAt > src.length) return arrayBuffer;
-    const udta = buildUdtaChplBox(chapters);
+    const metaAtom =
+      globalThis.SEAM_MP4_DESCRIPTION_META &&
+      typeof globalThis.SEAM_MP4_DESCRIPTION_META.buildMetaIlstDescriptionAtom === 'function'
+        ? globalThis.SEAM_MP4_DESCRIPTION_META.buildMetaIlstDescriptionAtom(descriptionText)
+        : null;
+    const udta = buildUdtaChplBox(chapters, metaAtom);
     const delta = udta.byteLength;
     const out = new Uint8Array(src.length + delta);
     out.set(src.subarray(0, insertAt));
@@ -2369,7 +2391,17 @@
       })),
       { startSec: introHoldSec + musicDurSec, title: 'Closing' },
     ];
-    const mp4WithChapters = injectNeroChaptersIntoMp4(target.buffer, chapterList);
+    const embedDescription = buildYoutubeDescription(
+      plans,
+      totalVideoSec,
+      introHoldSec,
+      musicDurSec,
+    );
+    const mp4WithChapters = injectNeroChaptersIntoMp4(
+      target.buffer,
+      chapterList,
+      embedDescription,
+    );
 
     showProgress(100, 'Done!');
     return new Blob([mp4WithChapters], { type: 'video/mp4' });

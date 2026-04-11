@@ -13,6 +13,82 @@
   const ELLIPSIS_CHIP_TEXT = '···';
 
   /**
+   * Greedy line break using minimum chipXGap (same rules as pre-justify flow).
+   * @template T
+   * @param {T[]} items
+   * @param {number} innerW content width (W - 2*pad)
+   * @param {number} chipXGap minimum horizontal gap between chips
+   * @param {(item: T) => number} widthForItem
+   * @returns {T[][]}
+   */
+  function breakPlaylistIntoRows(items, innerW, chipXGap, widthForItem) {
+    const rows = [];
+    let row = [];
+    let cursor = 0;
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      const w = widthForItem(item);
+      if (row.length > 0 && cursor + chipXGap + w > innerW + 1e-6) {
+        rows.push(row);
+        row = [];
+        cursor = 0;
+      }
+      row.push(item);
+      cursor += row.length === 1 ? w : chipXGap + w;
+    }
+    if (row.length) rows.push(row);
+    return rows;
+  }
+
+  /**
+   * Space-between horizontally: first chip at `pad`, last ends at `pad + innerW`;
+   * one chip is centered; gaps between chips share leftover width equally.
+   * @param {number[]} widths
+   * @param {number} innerW
+   * @param {number} pad canvas left padding
+   * @returns {number[]} x of each chip’s left edge
+   */
+  function justifyRowXArray(widths, innerW, pad) {
+    const n = widths.length;
+    if (n === 0) return [];
+    if (n === 1) return [pad + (innerW - widths[0]) / 2];
+    const sumTw = widths.reduce((a, b) => a + b, 0);
+    const gap = (innerW - sumTw) / (n - 1);
+    const xs = [pad];
+    for (let i = 1; i < n; i++) {
+      xs.push(xs[i - 1] + widths[i - 1] + gap);
+    }
+    return xs;
+  }
+
+  /**
+   * @template T
+   * @param {T[]} items
+   * @param {number} innerW
+   * @param {number} pad
+   * @param {number} chipXGap
+   * @param {number} topInset
+   * @param {number} chipH
+   * @param {number} chipGap vertical gap between rows
+   * @param {(item: T) => number} widthForItem
+   * @returns {{ rows: { items: T[], widths: number[], xs: number[] }[], rowCount: number, lastChipTopY: number, bandHeightFromPad: number }}
+   */
+  function computePlaylistJustifiedLayout(items, innerW, pad, chipXGap, topInset, chipH, chipGap, widthForItem) {
+    const rowItems = breakPlaylistIntoRows(items, innerW, chipXGap, widthForItem);
+    const rows = rowItems.map((r) => {
+      const widths = r.map(widthForItem);
+      const xs = justifyRowXArray(widths, innerW, pad);
+      return { items: r, widths, xs };
+    });
+    const rowCount = items.length === 0 ? 1 : rows.length;
+    const lastChipTopY =
+      items.length === 0 ? pad + topInset : pad + topInset + (rowCount - 1) * (chipH + chipGap);
+    const bandHeightFromPad =
+      items.length === 0 ? topInset + chipH : lastChipTopY + chipH - pad;
+    return { rows, rowCount, lastChipTopY, bandHeightFromPad };
+  }
+
+  /**
    * @param {CanvasRenderingContext2D} ctx
    * @param {string[]} rawTitles
    * @param {number} W
@@ -27,25 +103,27 @@
     const pm = Math.max(0.35, playlistMul || 1);
     ctx.font = `600 ${Math.round(15 * s * pm)}px ${stack}`;
     const topInset = Math.round(8 * s * pm);
-    let x = pad;
-    let y = pad + topInset;
     const chipH = Math.round(28 * s * pm);
     const chipPad = Math.round(8 * s * pm);
     const chipGap = Math.round(6 * s * pm);
     const chipXGap = Math.round(8 * s * pm);
-    let rowCount = 1;
-    rawTitles.forEach((rawTitle, i) => {
-      const label = chipLabel(i + 1, rawTitle);
-      const tw = Math.min(ctx.measureText(label).width + chipPad * 2, W - pad * 2);
-      if (x + tw > W - pad) {
-        x = pad;
-        y += chipH + chipGap;
-        rowCount++;
-      }
-      x += tw + chipXGap;
-    });
-    const bandHeightFromPad = y + chipH - pad;
-    return { lastChipTopY: y, chipH, rowCount, bandHeightFromPad, topInset, chipGap, chipPad, chipXGap };
+    const innerW = W - 2 * pad;
+    const items = rawTitles.map((_, i) => ({ kind: 'song', index: i }));
+    function widthForItem(item) {
+      const label = chipLabel(item.index + 1, rawTitles[item.index]);
+      return Math.min(ctx.measureText(label).width + chipPad * 2, W - pad * 2);
+    }
+    const { rowCount, lastChipTopY, bandHeightFromPad } = computePlaylistJustifiedLayout(
+      items,
+      innerW,
+      pad,
+      chipXGap,
+      topInset,
+      chipH,
+      chipGap,
+      widthForItem,
+    );
+    return { lastChipTopY, chipH, rowCount, bandHeightFromPad, topInset, chipGap, chipPad, chipXGap };
   }
 
   /**
@@ -85,9 +163,7 @@
     const chipPad = Math.round(8 * s * pm);
     const chipGap = Math.round(6 * s * pm);
     const chipXGap = Math.round(8 * s * pm);
-    let x = pad;
-    let y = pad + topInset;
-    let rowCount = 1;
+    const innerW = W - 2 * pad;
 
     function widthForItem(item) {
       if (item.kind === 'ellipsis') {
@@ -98,18 +174,18 @@
       return Math.min(ctx.measureText(label).width + chipPad * 2, W - pad * 2);
     }
 
-    items.forEach((item) => {
-      const tw = widthForItem(item);
-      if (x + tw > W - pad) {
-        x = pad;
-        y += chipH + chipGap;
-        rowCount++;
-      }
-      x += tw + chipXGap;
-    });
-    const bandHeightFromPad = items.length === 0 ? topInset + chipH : y + chipH - pad;
+    const { rowCount, lastChipTopY, bandHeightFromPad } = computePlaylistJustifiedLayout(
+      items,
+      innerW,
+      pad,
+      chipXGap,
+      topInset,
+      chipH,
+      chipGap,
+      widthForItem,
+    );
     return {
-      lastChipTopY: items.length === 0 ? pad + topInset : y,
+      lastChipTopY: items.length === 0 ? pad + topInset : lastChipTopY,
       chipH,
       rowCount,
       bandHeightFromPad,
@@ -258,6 +334,7 @@
     MAX_PLAYLIST_ROWS,
     ELLIPSIS_CHIP_TEXT,
     resolvePlaylistChipStrip,
+    computePlaylistJustifiedLayout,
     playlistBandHeightCap,
     resolvePlaylistBandHeight,
     formatFlacSizeDetailLine,

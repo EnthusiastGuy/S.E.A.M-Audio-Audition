@@ -1053,6 +1053,63 @@
     ctx.closePath();
   }
 
+  /** Path length for the same geometry as `drawRoundedRect` (4 quarter-arcs + straights). */
+  function roundedRectPerimeterLen(w, h, r) {
+    const rad = Math.min(r, w / 2, h / 2);
+    return 2 * (w + h - 4 * rad) + 2 * Math.PI * rad;
+  }
+
+  /**
+   * Traveling “shiny” highlight on the active playlist chip border (preview + MP4 export).
+   * Short segment, soft falloff along the arc, faster orbit.
+   * @param {number} tAbs wall-clock seconds along the video timeline
+   * @param {number} uiScale stroke scale (~ playlist UI scale)
+   */
+  function strokeActivePlaylistChipShine(ctx, x, y, w, h, r, tAbs, uiScale) {
+    const perim = roundedRectPerimeterLen(w, h, r);
+    if (!(perim > 1)) return;
+    const u = Math.max(1, uiScale);
+    const dashLen = Math.max(11 * u, Math.min(perim * 0.12, 46 * u));
+    const speed = 68;
+    const off = ((tAbs * speed) % perim + perim) % perim;
+    const n = 9;
+    const sliceLen = dashLen / n;
+
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    for (let j = 0; j < n; j++) {
+      const t = (j + 0.5) / n;
+      const edge = Math.sin(t * Math.PI);
+      const edge2 = edge * edge;
+      if (edge2 < 0.002) continue;
+
+      const sliceStart = off + j * sliceLen;
+      const os = ((sliceStart % perim) + perim) % perim;
+
+      drawRoundedRect(ctx, x, y, w, h, r);
+      ctx.setLineDash([sliceLen, perim - sliceLen]);
+      ctx.lineDashOffset = -os;
+
+      ctx.shadowColor = `rgba(255, 255, 255, ${0.72 * edge2})`;
+      ctx.shadowBlur = Math.round(4.5 * u * edge2);
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 0;
+      ctx.lineWidth = Math.max(3.2, u * 2.05);
+      ctx.strokeStyle = `rgba(255, 255, 255, ${0.48 * edge2})`;
+      ctx.stroke();
+
+      ctx.shadowColor = 'transparent';
+      ctx.shadowBlur = 0;
+      ctx.lineWidth = Math.max(1.65, u * 1.08);
+      ctx.strokeStyle = `rgba(255, 255, 255, ${0.94 * edge2})`;
+      ctx.stroke();
+    }
+
+    ctx.restore();
+  }
+
   function drawFallbackVideoBackground(ctx, W, H) {
     const g = ctx.createLinearGradient(0, 0, W, H);
     g.addColorStop(0, '#1b2240');
@@ -1465,6 +1522,9 @@
       ctx.strokeStyle = active ? uiPal.chipActiveStroke : uiPal.chipInactiveStroke;
       ctx.lineWidth = Math.max(1, s);
       ctx.stroke();
+      if (active) {
+        strokeActivePlaylistChipShine(ctx, x, y, tw, chipH, chipR, tVideo, Math.max(1, s * pl));
+      }
       ctx.fillStyle = active ? uiPal.chipActiveText : uiPal.chipInactiveText;
       ctx.fillText(label, x + chipPad, y + chipH / 2);
       x += tw + chipXGap;

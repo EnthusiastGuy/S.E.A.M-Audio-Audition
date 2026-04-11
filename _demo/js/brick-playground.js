@@ -132,6 +132,8 @@ let pgRaf = 0;
 let pgTimelineStartAC = 0;
 let pgTimelineOffset = 0;
 let pgSortedBricks = [];
+/** Bricks that actually have buffers in play order; indices match `pgSegmentDur` / timeline segments. */
+let pgPlayBricks = [];
 let pgTotalDur = 0;
 /** Segment buffer durations in play order (normal + seam cluster playback). */
 let pgSegmentDur = null;
@@ -1558,7 +1560,9 @@ function stopPlaygroundPlayback() {
   pgTransportToken++;
   playingRoot = null;
   pgSegmentDur = null;
+  pgPlayBricks = [];
   pgLastSegFlashIdx = null;
+  bpClearBrickPlayheads();
   bpVisEnsureLoop();
   updateClusterUi();
 }
@@ -1792,11 +1796,14 @@ function scheduleClusterSeamPlay(sorted, clusterRoot) {
   }
   if (segments.length === 0) {
     playingRoot = null;
+    pgPlayBricks = [];
+    bpClearBrickPlayheads();
     updateClusterUi();
     return;
   }
 
   pgSortedBricks = sorted;
+  pgPlayBricks = segments.map(s => s.b);
   pgTotalDur = segments.reduce((s, x) => s + x.buf.duration, 0);
   const cumDurations = [];
   let acc = 0;
@@ -1831,11 +1838,14 @@ function scheduleClusterPlayFromOffset(sorted, offsetSec, loop, clusterRoot) {
   }
   if (segments.length === 0) {
     playingRoot = null;
+    pgPlayBricks = [];
+    bpClearBrickPlayheads();
     updateClusterUi();
     return;
   }
 
   pgSortedBricks = sorted;
+  pgPlayBricks = segments.map(s => s.b);
   pgTotalDur = segments.reduce((s, x) => s + x.buf.duration, 0);
   pgSegmentDur = segments.map(s => s.buf.duration);
   pgLastSegFlashIdx = null;
@@ -1938,11 +1948,60 @@ function playgroundSegmentIndexForTimelinePos(pos) {
   return pgSegmentDur.length - 1;
 }
 
+function bpClearBrickPlayheads() {
+  if (!bricksLayer) return;
+  for (const el of bricksLayer.querySelectorAll('.bp-brick-playhead')) {
+    el.remove();
+  }
+}
+
+/**
+ * Per-brick playhead: horizontal position = (time into segment / buffer duration) × brick width,
+ * so progress matches audio even when brick pixel width ≠ duration proportion.
+ */
+function bpUpdateBrickPlayheadForTimelinePos(pos) {
+  const bricks = pgPlayBricks;
+  const durs = pgSegmentDur;
+  if (!playingRoot || !bricks?.length || !durs?.length || bricks.length !== durs.length) {
+    bpClearBrickPlayheads();
+    return;
+  }
+  if (bricks.length < 2) {
+    bpClearBrickPlayheads();
+    return;
+  }
+  const segIdx = playgroundSegmentIndexForTimelinePos(pos);
+  if (segIdx < 0 || segIdx >= bricks.length) {
+    bpClearBrickPlayheads();
+    return;
+  }
+  let cum = 0;
+  for (let i = 0; i < segIdx; i++) cum += durs[i];
+  const dur = durs[segIdx];
+  const inner = Math.min(Math.max(0, pos - cum), Math.max(dur, 0));
+  const frac = dur > 1e-9 ? inner / dur : 0;
+
+  for (let i = 0; i < bricks.length; i++) {
+    const b = bricks[i];
+    if (!b?.el) continue;
+    const existing = b.el.querySelector('.bp-brick-playhead');
+    if (i !== segIdx) {
+      if (existing) existing.remove();
+      continue;
+    }
+    let ph = existing;
+    if (!ph) {
+      ph = document.createElement('div');
+      ph.className = 'bp-brick-playhead';
+      ph.setAttribute('aria-hidden', 'true');
+      b.el.appendChild(ph);
+    }
+    ph.style.left = `${frac * 100}%`;
+  }
+}
+
 function tickPlaygroundSeek() {
-  if (!playingRoot || !clusterUiEl) return;
-  const seekFill = clusterUiEl.querySelector('.bp-seek-fill');
-  const seekHandle = clusterUiEl.querySelector('.bp-seek-handle');
-  if (!seekFill || !seekHandle) return;
+  if (!playingRoot) return;
   const rate = Math.max(1e-6, Math.abs(playbackRateFromKnob()));
   let pos;
   if (pgSeamMode) {
@@ -1966,9 +2025,18 @@ function tickPlaygroundSeek() {
       pos = Math.min(raw, pgTotalDur);
     }
   }
-  const pct = pgTotalDur > 0 ? (pos / pgTotalDur) * 100 : 0;
-  seekFill.style.width = `${pct}%`;
-  seekHandle.style.left = `${pct}%`;
+
+  bpUpdateBrickPlayheadForTimelinePos(pos);
+
+  if (clusterUiEl) {
+    const seekFill = clusterUiEl.querySelector('.bp-seek-fill');
+    const seekHandle = clusterUiEl.querySelector('.bp-seek-handle');
+    if (seekFill && seekHandle) {
+      const pct = pgTotalDur > 0 ? (pos / pgTotalDur) * 100 : 0;
+      seekFill.style.width = `${pct}%`;
+      seekHandle.style.left = `${pct}%`;
+    }
+  }
 
   const segIdx = playgroundSegmentIndexForTimelinePos(pos);
   if (pgLastSegFlashIdx !== null && segIdx >= 0 && segIdx !== pgLastSegFlashIdx) {
@@ -3404,6 +3472,7 @@ function updateClusterUi() {
     const seekHandle = ui.querySelector('.bp-seek-handle');
     if (seekFill) seekFill.style.width = '0%';
     if (seekHandle) seekHandle.style.left = '0%';
+    if (!playingRoot) bpClearBrickPlayheads();
   } else {
     if (pgRaf) cancelAnimationFrame(pgRaf);
     pgRaf = 0;

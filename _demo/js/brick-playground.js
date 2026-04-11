@@ -3850,6 +3850,15 @@ function initBrickPlayground(mainContainer) {
       <span class="bp-hint">Comb spine: move templates · Template: click / drag 5px+ to copy · Free brick: drag to snap (hold 1s = ghost reorder) · seam marker = insert between · Ctrl-drag duplicate · Ctrl+Z / Ctrl+Y · scroll zoom · empty area pan</span>
     </div>
     <div class="bp-stage">
+      <div class="bp-viewport" tabindex="0">
+        <div class="bp-world">
+          <div class="bp-combs-layer"></div>
+          <canvas class="bp-vis-canvas" aria-hidden="true"></canvas>
+          <div class="bp-bricks-layer"></div>
+          <canvas class="bp-snow-canvas" aria-hidden="true"></canvas>
+          <div class="bp-hud-layer"></div>
+        </div>
+      </div>
       <aside class="bp-floating-tools" id="bp-floating-tools" aria-label="Playground tools">
         <button type="button" class="bp-tools-toggle" id="bp-tools-toggle" aria-expanded="true" aria-controls="bp-tools-panel">
           <span class="bp-tools-toggle-label">Tools</span>
@@ -3868,15 +3877,6 @@ function initBrickPlayground(mainContainer) {
           </div>
         </div>
       </aside>
-      <div class="bp-viewport" tabindex="0">
-        <div class="bp-world">
-          <div class="bp-combs-layer"></div>
-          <canvas class="bp-vis-canvas" aria-hidden="true"></canvas>
-          <div class="bp-bricks-layer"></div>
-          <canvas class="bp-snow-canvas" aria-hidden="true"></canvas>
-          <div class="bp-hud-layer"></div>
-        </div>
-      </div>
     </div>
   `;
   mainContainer.appendChild(wrap);
@@ -4050,6 +4050,19 @@ function applyPlaygroundVisibility(playground) {
     bpVisEnsureLoop();
     bpSnowResize();
     bpSnowEnsureLoop();
+    // After display:none → visible, layout/compositing can lag one frame; re-sync so the tools panel always paints.
+    requestAnimationFrame(() => {
+      if (!document.getElementById('brick-playground-root')?.classList.contains('active')) return;
+      const tools = document.getElementById('bp-floating-tools');
+      if (tools) void tools.getBoundingClientRect();
+      bpVisResize();
+      bpSnowResize();
+      requestAnimationFrame(() => {
+        if (!document.getElementById('brick-playground-root')?.classList.contains('active')) return;
+        bpVisResize();
+        bpSnowResize();
+      });
+    });
   } else if (!playground) {
     if (bpSnowRaf) {
       cancelAnimationFrame(bpSnowRaf);

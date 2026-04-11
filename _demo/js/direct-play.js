@@ -180,6 +180,247 @@ function beginSeamPreviewPlayback(fmt, songIdx, partIndex, listItem, ps, buf) {
   scheduleSeamHead(fmt, songIdx, partIndex, listItem, ps, buf, dur, edgeSec);
 }
 
+function cancelDirectChainPreScheduled(ps) {
+  if (ps._directChainNextNode) {
+    try {
+      ps._directChainNextNode.stop();
+    } catch (e) {}
+    try {
+      ps._directChainNextNode.disconnect();
+    } catch (e) {}
+    ps._directChainNextNode = null;
+  }
+  ps._directChainNextPartIndex = null;
+}
+
+/** Next list part index in DOM order, or null if none. */
+function getNextPartIndexInList(fmt, songIdx, partIndex) {
+  const key = `${fmt}_${songIdx}`;
+  const list = document.getElementById(`parts-list-${key}`);
+  if (!list) return null;
+  const wrappers = Array.from(list.querySelectorAll('.part-item-wrapper'));
+  const idx = wrappers.findIndex(w => parseInt(w.dataset.partIndex, 10) === partIndex);
+  if (idx < 0 || idx >= wrappers.length - 1) return null;
+  return parseInt(wrappers[idx + 1].dataset.partIndex, 10);
+}
+
+/**
+ * Pre-schedule the following part at segEndAC (same pattern as main timeline `preScheduleNext`).
+ * Caller must ensure the next buffer is already decoded.
+ */
+function preScheduleDirectChainNext(ps, fmt, songIdx, segEndAC, rate) {
+  cancelDirectChainPreScheduled(ps);
+  if (rate <= 0) return;
+  const nextPi = getNextPartIndexInList(fmt, songIdx, ps._directPartIndex);
+  if (nextPi == null) return;
+  const nextBuf = ps.buffers[nextPi];
+  if (!nextBuf) return;
+
+  const nextSrc = AC.createBufferSource();
+  nextSrc.buffer = nextBuf;
+  nextSrc.playbackRate.value = rate;
+  nextSrc.connect(ps.gainNode);
+  nextSrc.start(segEndAC, 0);
+  ps._directChainNextNode = nextSrc;
+  ps._directChainNextPartIndex = nextPi;
+}
+
+function resetPartItemWrapperChrome(key, partIndex, listItem) {
+  const partItem = listItem.querySelector('.part-item');
+  const playBtn = listItem.querySelector('.part-play-btn');
+  const loopBtn = listItem.querySelector('.part-play-loop-btn');
+  const seamBtn = listItem.querySelector('.part-play-seam-btn');
+  const stopBtn = listItem.querySelector('.part-stop-btn');
+  const miniStack = document.getElementById(`part-mini-stack-${key}-${partIndex}`);
+  if (playBtn) {
+    playBtn.innerHTML = DIRECT_PART_PLAY_ICON;
+    playBtn.title = 'Play this part';
+  }
+  if (loopBtn) {
+    loopBtn.innerHTML = DIRECT_PART_LOOP_IDLE_ICON;
+    loopBtn.title = 'Play looped';
+  }
+  if (seamBtn) {
+    seamBtn.innerHTML = DIRECT_PART_SEAM_IDLE_ICON;
+    seamBtn.title = 'Seam preview';
+  }
+  if (stopBtn) stopBtn.style.display = 'none';
+  if (miniStack) {
+    miniStack.classList.remove('visible');
+    miniStack.classList.remove('seam-ff-phase');
+  }
+  if (partItem) partItem.classList.remove('playing-part');
+}
+
+function applyPartItemWrapperPlayingChrome(key, partIndex, listItem) {
+  const partItem = listItem.querySelector('.part-item');
+  const stopBtn = listItem.querySelector('.part-stop-btn');
+  const miniStack = document.getElementById(`part-mini-stack-${key}-${partIndex}`);
+  if (stopBtn) stopBtn.style.display = '';
+  if (miniStack) miniStack.classList.add('visible');
+  if (partItem) partItem.classList.add('playing-part');
+}
+
+function tryPromoteDirectChainFromTick(fmt, songIdx, ps) {
+  if (ps._directPaused || ps._directLoop || ps._directSeamSkip) return;
+  if (!ps._directChainNextNode || ps._directSegEndAC == null) return;
+  if (AC.currentTime < ps._directSegEndAC - 0.005) return;
+
+  const key = `${fmt}_${songIdx}`;
+  const oldPi = ps._directPartIndex;
+  const oldWrapper = getPartListItemWrapper(fmt, songIdx, oldPi);
+  const nextPi = ps._directChainNextPartIndex;
+  const nextWrapper = nextPi != null ? getPartListItemWrapper(fmt, songIdx, nextPi) : null;
+
+  triggerPartMiniPreviewFlash(fmt, songIdx, oldPi);
+  if (oldWrapper) resetPartItemWrapperChrome(key, oldPi, oldWrapper);
+
+  const handoffAC = ps._directSegEndAC;
+  const oldNode = ps._directNode;
+  const promoted = ps._directChainNextNode;
+  ps._directNode = promoted;
+  ps._directChainNextNode = null;
+  ps._directChainNextPartIndex = null;
+
+  try {
+    oldNode.stop();
+  } catch (e) {}
+  try {
+    oldNode.disconnect();
+  } catch (e) {}
+
+  ps._directPartIndex = nextPi;
+  ps._directStartAC = handoffAC;
+  ps._directSeekOffset = 0;
+  const nextBuf = ps.buffers[nextPi];
+  ps._directDuration = nextBuf ? nextBuf.duration : 0;
+
+  const rate = getDirectPartPlaybackRate();
+  const absR = Math.max(1e-6, Math.abs(rate));
+  ps._directSegEndAC = handoffAC + ps._directDuration / absR;
+
+  if (nextWrapper) {
+    applyPartItemWrapperPlayingChrome(key, nextPi, nextWrapper);
+    syncDirectPartTransportButtons(ps, key, nextPi, nextWrapper);
+    bindDirectOnceMiniBarSeek(fmt, songIdx, nextPi, nextWrapper, ps, nextBuf);
+  }
+
+  const curSrc = ps._directNode;
+  curSrc.onended = () => {
+    onDirectPartSourceEnded(ps, key, curSrc, fmt, songIdx, nextPi, nextWrapper);
+  };
+
+  const followPi = getNextPartIndexInList(fmt, songIdx, nextPi);
+  if (followPi != null && ps.buffers[followPi]) {
+    preScheduleDirectChainNext(ps, fmt, songIdx, ps._directSegEndAC, rate);
+  } else if (followPi != null) {
+    void loadPartBuffer(fmt, songIdx, followPi).then(() => {
+      if (ps._directPartIndex !== nextPi || ps._directNode !== curSrc) return;
+      if (!ps.buffers[followPi]) return;
+      const r = getDirectPartPlaybackRate();
+      if (r <= 0) return;
+      preScheduleDirectChainNext(ps, fmt, songIdx, ps._directSegEndAC, r);
+    });
+  }
+}
+
+function bindDirectOnceMiniBarSeek(fmt, songIdx, partIndex, listItem, ps, buf) {
+  const key = `${fmt}_${songIdx}`;
+  const miniBar = document.getElementById(`mini-bar-${key}-${partIndex}`);
+  if (!miniBar || !buf) return;
+
+  miniBar.style.cursor = '';
+  miniBar.title = '';
+  miniBar.onmousedown = e => {
+    if (!ps._directNode) return;
+    e.preventDefault();
+    const dur = buf.duration;
+    const stopBtn = listItem.querySelector('.part-stop-btn');
+    const tickMini = createTickFunction(fmt, songIdx, partIndex);
+
+    const performSeek = clientX => {
+      const rect = miniBar.getBoundingClientRect();
+      const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+      const seekPos = ratio * dur;
+      stopDirectPart(ps);
+      void scheduleDirectOnceChainPlayback(fmt, songIdx, partIndex, listItem, ps, buf, seekPos);
+      syncDirectPartTransportButtons(ps, key, partIndex, listItem);
+      if (stopBtn) stopBtn.style.display = '';
+      const miniStack = document.getElementById(`part-mini-stack-${key}-${partIndex}`);
+      if (miniStack) miniStack.classList.add('visible');
+      listItem.querySelector('.part-item')?.classList.add('playing-part');
+      ps._directPaused = false;
+      requestAnimationFrame(tickMini);
+    };
+
+    performSeek(e.clientX);
+
+    const handleMouseMove = e => {
+      performSeek(e.clientX);
+    };
+    const handleMouseUp = () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  };
+}
+
+/**
+ * Play-once with gapless handoff to the next list part (forward rate only).
+ */
+async function scheduleDirectOnceChainPlayback(
+  fmt,
+  songIdx,
+  partIndex,
+  listItem,
+  ps,
+  buf,
+  offsetSecs
+) {
+  cancelDirectChainPreScheduled(ps);
+  cancelDirectLoopPreScheduled(ps);
+  if (ps._directNode) {
+    try {
+      ps._directNode.stop();
+    } catch (e) {}
+    try {
+      ps._directNode.disconnect();
+    } catch (e) {}
+    ps._directNode = null;
+  }
+
+  const rate = getDirectPartPlaybackRate();
+  const absR = Math.max(1e-6, Math.abs(rate));
+  const dur = buf.duration;
+  const key = `${fmt}_${songIdx}`;
+
+  const nextPi = getNextPartIndexInList(fmt, songIdx, partIndex);
+  if (nextPi != null) await loadPartBuffer(fmt, songIdx, nextPi);
+
+  const startAt = AC.currentTime + SEAM_SCHEDULE_AHEAD;
+  const src = AC.createBufferSource();
+  src.buffer = buf;
+  src.playbackRate.value = rate;
+  src.connect(ps.gainNode);
+  ps._directNode = src;
+  ps._directStartAC = startAt;
+  ps._directSeekOffset = offsetSecs;
+  ps._directDuration = dur;
+  ps._directSegEndAC = startAt + (dur - offsetSecs) / absR;
+
+  src.start(startAt, offsetSecs);
+
+  if (rate > 0 && nextPi != null && ps.buffers[nextPi]) {
+    preScheduleDirectChainNext(ps, fmt, songIdx, ps._directSegEndAC, rate);
+  }
+
+  src.onended = () => {
+    onDirectPartSourceEnded(ps, key, src, fmt, songIdx, partIndex, listItem);
+  };
+}
+
 function cancelDirectLoopPreScheduled(ps) {
   if (ps._directLoopNextNode) {
     try {
@@ -445,21 +686,33 @@ function applyPlaybackRateToDirectPart(ps) {
   }
   const oldRate = ps._directNode.playbackRate.value;
   const newRate = getDirectPartPlaybackRate();
-  const elapsed = AC.currentTime - ps._directStartAC;
+  const tickNow = AC.currentTime;
+  const elapsed = tickNow - ps._directStartAC;
   const dur = ps._directDuration || 0;
   const pos = Math.min(
     Math.max(0, ps._directSeekOffset + elapsed * oldRate),
     dur > 0 ? dur : Infinity
   );
+  if (ps._directChainNextNode) cancelDirectChainPreScheduled(ps);
   ps._directSeekOffset = pos;
-  ps._directStartAC = AC.currentTime;
+  ps._directStartAC = tickNow;
   ps._directNode.playbackRate.value = newRate;
+
+  if (newRate > 0) {
+    const absR = Math.max(1e-6, Math.abs(newRate));
+    const remainingWall = (dur - pos) / absR;
+    if (remainingWall > 0) {
+      ps._directSegEndAC = tickNow + remainingWall;
+      preScheduleDirectChainNext(ps, ps.fmt, ps.songIdx, ps._directSegEndAC, newRate);
+    }
+  }
 }
 
 function stopDirectPart(ps) {
   ps._directSeamSkip = false;
   if (ps._directSeamToken) ps._directSeamToken.cancelled = true;
   cancelDirectLoopPreScheduled(ps);
+  cancelDirectChainPreScheduled(ps);
   cancelDirectSeamPreScheduled(ps);
   if (ps._directPartIndex != null) {
     setSeamFfMiniBarClass(ps, ps.fmt, ps.songIdx, ps._directPartIndex, false);
@@ -507,6 +760,7 @@ function advanceDirectPartPlayToNext(fmt, songIdx, finishedPartIndex) {
 
 function onDirectPartSourceEnded(ps, key, src, fmt, songIdx, partIndex, listItem) {
   if (ps._directNode !== src) return;
+  if (ps._directChainNextNode) return;
   if (ps._directLoop && ps._directLoopNextNode) return;
   if (ps._directLoop) {
     ps._directNode = null;
@@ -526,30 +780,9 @@ function resetDirectPartUI(ps, key, partIndex, listItem) {
   ps._directPaused = false;
   ps._directLoop = false;
   ps._directSeamSkip = false;
-  const partItem = listItem.querySelector('.part-item');
-  const playBtn = listItem.querySelector('.part-play-btn');
-  const loopBtn = listItem.querySelector('.part-play-loop-btn');
-  const seamBtn = listItem.querySelector('.part-play-seam-btn');
-  const stopBtn = listItem.querySelector('.part-stop-btn');
-  const miniStack = document.getElementById(`part-mini-stack-${key}-${partIndex}`);
-  if (playBtn) {
-    playBtn.innerHTML = DIRECT_PART_PLAY_ICON;
-    playBtn.title = 'Play this part';
-  }
-  if (loopBtn) {
-    loopBtn.innerHTML = DIRECT_PART_LOOP_IDLE_ICON;
-    loopBtn.title = 'Play looped';
-  }
-  if (seamBtn) {
-    seamBtn.innerHTML = DIRECT_PART_SEAM_IDLE_ICON;
-    seamBtn.title = 'Seam preview';
-  }
-  if (stopBtn) stopBtn.style.display = 'none';
-  if (miniStack) {
-    miniStack.classList.remove('visible');
-    miniStack.classList.remove('seam-ff-phase');
-  }
-  if (partItem) partItem.classList.remove('playing-part');
+  ps._directSegEndAC = null;
+  cancelDirectChainPreScheduled(ps);
+  if (listItem) resetPartItemWrapperChrome(key, partIndex, listItem);
 }
 
 function createTickFunction(fmt, songIdx, partIndex) {
@@ -558,10 +791,15 @@ function createTickFunction(fmt, songIdx, partIndex) {
     const ps = STATE.players[key];
     if (!ps || !ps._directNode || ps._directPaused) return;
 
+    const pi = ps._directPartIndex;
+    if (pi == null) return;
+
+    tryPromoteDirectChainFromTick(fmt, songIdx, ps);
+
     if (ps._directLoop && !ps._directSeamSkip) {
-      const buf = ps.buffers[partIndex];
-      const w = getPartListItemWrapper(fmt, songIdx, partIndex);
-      if (buf && w) tryPromoteDirectLoopFromTick(fmt, songIdx, partIndex, w, ps, buf);
+      const buf = ps.buffers[pi];
+      const w = getPartListItemWrapper(fmt, songIdx, pi);
+      if (buf && w) tryPromoteDirectLoopFromTick(fmt, songIdx, pi, w, ps, buf);
     }
 
     const dur = ps._directDuration;
@@ -579,12 +817,12 @@ function createTickFunction(fmt, songIdx, partIndex) {
     }
     const pct = dur > 0 ? (pos / dur) * 100 : 0;
 
-    const fill = document.getElementById(`mini-fill-${key}-${partIndex}`);
-    const hnd = document.getElementById(`mini-handle-${key}-${partIndex}`);
+    const fill = document.getElementById(`mini-fill-${key}-${pi}`);
+    const hnd = document.getElementById(`mini-handle-${key}-${pi}`);
     if (fill) fill.style.width = `${pct}%`;
     if (hnd) hnd.style.left = `${pct}%`;
 
-    updatePartMiniWaveformPreview(fmt, songIdx, partIndex, ps, pos);
+    updatePartMiniWaveformPreview(fmt, songIdx, pi, ps, pos);
 
     let stillPlaying;
     if (ps._directSeamSkip || ps._directLoop) {
@@ -710,6 +948,18 @@ async function playPartDirectly(fmt, songIdx, partIndex, listItem, opts = {}) {
     return;
   }
 
+  if (getDirectPartPlaybackRate() > 0) {
+    await scheduleDirectOnceChainPlayback(fmt, songIdx, partIndex, listItem, ps, buf, 0);
+    syncDirectPartTransportButtons(ps, key, partIndex, listItem);
+    if (stopBtn) stopBtn.style.display = '';
+    if (miniStack) miniStack.classList.add('visible');
+    if (partItem) partItem.classList.add('playing-part');
+    const tickMini = createTickFunction(fmt, songIdx, partIndex);
+    requestAnimationFrame(tickMini);
+    bindDirectOnceMiniBarSeek(fmt, songIdx, partIndex, listItem, ps, buf);
+    return;
+  }
+
   const src = AC.createBufferSource();
   src.buffer = buf;
   src.playbackRate.value = getDirectPartPlaybackRate();
@@ -725,6 +975,7 @@ async function playPartDirectly(fmt, songIdx, partIndex, listItem, opts = {}) {
   ps._directStartAC = AC.currentTime;
   ps._directSeekOffset = 0;
   ps._directDuration = dur;
+  ps._directSegEndAC = null;
 
   const tickMini = createTickFunction(fmt, songIdx, partIndex);
   requestAnimationFrame(tickMini);

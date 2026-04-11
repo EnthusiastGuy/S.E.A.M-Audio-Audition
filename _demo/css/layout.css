@@ -27,6 +27,10 @@
   background: linear-gradient(to top, rgba(22, 33, 62, 0.92), rgba(22, 33, 62, 0.75));
   border-top: 1px solid rgba(45, 65, 112, 0.55);
 }
+.app-footer-author {
+  color: var(--crayon2);
+  font-weight: 700;
+}
 .app-footer a {
   color: var(--text2);
   display: inline-flex;

@@ -2,6 +2,13 @@
    S.E.A.M Audio Audition — UI Builder: Tabs, Playlist & Totals
    ============================================================= */
 
+/** Strip a leading track index from display (e.g. "1. Song1" → "Song1"). */
+function displayPlaylistSongName(name) {
+  if (name == null || typeof name !== 'string') return name;
+  const stripped = name.replace(/^\s*\d+[\.\)]\s*/, '').trim();
+  return stripped || name.trim() || name;
+}
+
 // ─── BUILD UI ────────────────────────────────────────────────
 function buildUI(savedSession) {
   const content = document.getElementById('tabs-content');
@@ -88,7 +95,7 @@ function buildSongRow(fmt, songIdx, nr) {
   // Name
   const colName = document.createElement('div');
   colName.className = 'col-name';
-  colName.textContent = song.name;
+  colName.textContent = displayPlaylistSongName(song.name);
   main.appendChild(colName);
 
   // Duration

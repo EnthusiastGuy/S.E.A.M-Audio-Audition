@@ -35,7 +35,7 @@
 }
 .knob-label {
   font-size: 11px;
-  color: var(--text2);
+  color: var(--crayon2);
   font-family: 'Space Mono', monospace;
   letter-spacing: 0.5px;
 }

@@ -517,35 +517,46 @@ function normalizeWebkitRelativeSegments(rel) {
   return out;
 }
 
-/** If the browser includes parents before wav/, keep from the format folder down (pack-relative). */
-function stripLeadingPathUntilWavSegment(segments) {
-  const idx = segments.findIndex(s => s.toLowerCase() === 'wav');
+/** If the browser includes parents before wav/ or flac/, keep from that folder down (pack-relative). */
+function stripLeadingPathUntilAudioFormatSegment(segments) {
+  const idx = segments.findIndex(s => {
+    const x = s.toLowerCase();
+    return x === 'wav' || x === 'flac';
+  });
   if (idx < 0) return segments;
   return segments.slice(idx);
 }
 
-/** True when this level looks like wav/: song subfolders each containing .wav files (no nested wav/ name). */
-function virtualTreeLooksLikeWavFolder(raw) {
+/**
+ * True when this level looks like a pack of song subfolders each containing segment audio
+ * (.wav and/or .flac), and this node is not itself a named wav/ or flac/ format folder.
+ */
+function virtualTreeLooksLikeFlatAudioPack(raw) {
   if (!raw || !raw._dirMap || raw._dirMap.size === 0) return false;
   if (findCaseInsensitiveDirKey(raw._dirMap, 'wav') !== null) return false;
+  if (findCaseInsensitiveDirKey(raw._dirMap, 'flac') !== null) return false;
   for (const dir of raw._dirMap.values()) {
     if (!dir._fileMap || dir._fileMap.size === 0) continue;
-    const hasWav = [...dir._fileMap.keys()].some(f => f.toLowerCase().endsWith('.wav'));
-    if (hasWav) return true;
+    const hasSeg = [...dir._fileMap.keys()].some(f => {
+      const x = f.toLowerCase();
+      return x.endsWith('.wav') || x.endsWith('.flac');
+    });
+    if (hasSeg) return true;
   }
   return false;
 }
 
 /**
  * Brave/file:// sometimes prefixes an extra folder in webkitRelativePath, or the user picks an inner folder.
- * Walk single-directory chains until we find a wav child or a layout that already is wav/ contents.
+ * Walk single-directory chains until we find a wav/ or flac/ child or a flat song-folder layout.
  */
 function resolveVirtualPackRoot(rawRoot) {
   let n = rawRoot;
   const maxDepth = 32;
   for (let depth = 0; depth < maxDepth; depth++) {
     if (findCaseInsensitiveDirKey(n._dirMap, 'wav') !== null) return n;
-    if (virtualTreeLooksLikeWavFolder(n)) return n;
+    if (findCaseInsensitiveDirKey(n._dirMap, 'flac') !== null) return n;
+    if (virtualTreeLooksLikeFlatAudioPack(n)) return n;
     if (n._fileMap.size > 0) return rawRoot;
     if (n._dirMap.size !== 1) return rawRoot;
     n = n._dirMap.values().next().value;
@@ -554,29 +565,28 @@ function resolveVirtualPackRoot(rawRoot) {
 }
 
 /**
- * Heuristic for when the user selects the pack root directly:
- * we accept it as a "WAV format root" if at least one immediate subdirectory
- * contains at least one `.wav` file directly inside it.
+ * Heuristic when the user selects the pack root directly: at least one immediate subdirectory
+ * contains a `.wav` or `.flac` segment file.
  */
-async function handleLooksLikeWavSongsRoot(rootHandle) {
+async function handleLooksLikeAudioSongsRoot(rootHandle) {
   try {
     let checkedDirs = 0;
     for await (const [, dirHandle] of rootHandle.entries()) {
       if (!dirHandle || dirHandle.kind !== 'directory') continue;
       checkedDirs++;
 
-      let foundWav = false;
+      let foundSeg = false;
       for await (const [fname, childHandle] of dirHandle.entries()) {
         if (!childHandle || childHandle.kind !== 'file') continue;
         const dot = fname.lastIndexOf('.');
         const ext = dot >= 0 ? fname.slice(dot + 1).toLowerCase() : '';
-        if (ext === 'wav') {
-          foundWav = true;
+        if (ext === 'wav' || ext === 'flac') {
+          foundSeg = true;
           break;
         }
       }
 
-      if (foundWav) return true;
+      if (foundSeg) return true;
       if (checkedDirs >= 12) return false; // Cap work for big trees.
     }
   } catch (_) {
@@ -644,7 +654,7 @@ function buildVirtualRootFromWebkitFiles(files, displayName) {
   const root = newVirtualDirNode(displayName);
   for (const file of files) {
     let segments = normalizeWebkitRelativeSegments(file.webkitRelativePath || file.name || '');
-    segments = stripLeadingPathUntilWavSegment(segments);
+    segments = stripLeadingPathUntilAudioFormatSegment(segments);
     if (segments.length < 2) continue;
 
     let node = root;
@@ -658,7 +668,9 @@ function buildVirtualRootFromWebkitFiles(files, displayName) {
   const sealed = finalizeVirtualDirNode(effective);
   sealed.__seamWebkitFallback = true;
   sealed.__seamVirtualRootIsWav =
-    findCaseInsensitiveDirKey(effective._dirMap, 'wav') === null && virtualTreeLooksLikeWavFolder(effective);
+    findCaseInsensitiveDirKey(effective._dirMap, 'wav') === null &&
+    findCaseInsensitiveDirKey(effective._dirMap, 'flac') === null &&
+    virtualTreeLooksLikeFlatAudioPack(effective);
   return sealed;
 }
 
@@ -1058,32 +1070,46 @@ async function discoverSongs(rootHandle) {
   const statusEl = document.getElementById('select-status');
   const fmt = 'wav';
   let fmtHandle = null;
+  /** @type {string|null} */
+  let fmtSubdir = null;
   await refreshProjectHeaderMetadata(rootHandle);
   try {
-    fmtHandle = await rootHandle.getDirectoryHandle(fmt, { create: false });
+    fmtHandle = await rootHandle.getDirectoryHandle('wav', { create: false });
+    fmtSubdir = 'wav';
   } catch (e) {
     // ignore; we'll fall back below
   }
 
   if (!fmtHandle) {
-    const looksLikeSongsRoot = rootHandle.__seamVirtualRootIsWav || (await handleLooksLikeWavSongsRoot(rootHandle));
+    try {
+      fmtHandle = await rootHandle.getDirectoryHandle('flac', { create: false });
+      fmtSubdir = 'flac';
+    } catch (e2) {
+      // ignore
+    }
+  }
+
+  if (!fmtHandle) {
+    const looksLikeSongsRoot =
+      rootHandle.__seamVirtualRootIsWav || (await handleLooksLikeAudioSongsRoot(rootHandle));
     if (looksLikeSongsRoot) {
-      // Either the browser didn't expose a `wav/` folder or the user selected the pack root.
+      // Either the browser didn't expose a format subfolder or the user selected the pack root.
       fmtHandle = rootHandle;
+      fmtSubdir = null;
     }
   }
 
   if (!fmtHandle) {
     STATE.songs[fmt] = [];
     STATE.order[fmt] = [];
-    statusEl.textContent = rootHandle.__seamWebkitFallback
-      ? 'Could not find song folders. Expected a `wav/` directory, or song subfolders with `.wav` files inside the selected folder.'
-      : 'Could not find song folders. Expected a `wav/` directory, or song subfolders with `.wav` files inside the selected folder.';
+    statusEl.textContent =
+      'Could not find song folders. Expected a `wav/` or `flac/` directory, or song subfolders with `.wav` / `.flac` files inside the selected folder.';
     return;
   }
 
   const packLabel = rootHandle.name || 'library';
-  const scanningMsg = fmtHandle === rootHandle ? 'Scanning WAV song folders …' : `Scanning ${fmt}/ …`;
+  const scanningMsg =
+    fmtHandle === rootHandle ? 'Scanning song folders …' : `Scanning ${fmtSubdir}/ …`;
   showAppLoading(`${scanningMsg} (${packLabel})`);
   statusEl.textContent = scanningMsg;
   await new Promise(r => requestAnimationFrame(r));

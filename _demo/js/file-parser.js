@@ -2,6 +2,21 @@
    S.E.A.M Audio Audition — File Parsing & Directory Scanning
    ============================================================= */
 
+const SEAM_SEGMENT_AUDIO_EXTS = new Set(['wav', 'flac']);
+
+function seamSegmentAudioExt(fname) {
+  const dot = fname.lastIndexOf('.');
+  return dot >= 0 ? fname.slice(dot + 1).toLowerCase() : '';
+}
+
+/** Lower rank wins when the same part or main exists in multiple formats (prefer WAV over FLAC). */
+function seamSegmentAudioExtRank(ext) {
+  const e = String(ext || '').toLowerCase();
+  if (e === 'wav') return 0;
+  if (e === 'flac') return 1;
+  return 99;
+}
+
 // ─── FILE PARSING ────────────────────────────────────────────
 /*
   Part filename pattern: "Song Name N -> A, B, C.ext"
@@ -62,17 +77,25 @@ async function scanFormat(formatHandle) {
 
     for await (const [fname, fileHandle] of dirHandle.entries()) {
       if (fileHandle.kind !== 'file') continue;
-      const ext = fname.slice(fname.lastIndexOf('.')+1).toLowerCase();
-      if (ext !== 'wav') continue;
+      const ext = seamSegmentAudioExt(fname);
+      if (!SEAM_SEGMENT_AUDIO_EXTS.has(ext)) continue;
 
       const parsed = parseFilename(fname);
       const entry  = ensureSong(songName);
+      const rank = seamSegmentAudioExtRank(ext);
 
       if (parsed.partNum === null) {
-        entry.mainFile   = fname;
-        entry.mainHandle = fileHandle;
+        const curRank = entry.mainFile ? seamSegmentAudioExtRank(seamSegmentAudioExt(entry.mainFile)) : 99;
+        if (!entry.mainHandle || rank <= curRank) {
+          entry.mainFile   = fname;
+          entry.mainHandle = fileHandle;
+        }
       } else {
-        entry.parts.set(parsed.partNum, { file: fname, handle: fileHandle, nexts: parsed.nexts });
+        const existing = entry.parts.get(parsed.partNum);
+        const curRank = existing ? seamSegmentAudioExtRank(seamSegmentAudioExt(existing.file)) : 99;
+        if (!existing || rank <= curRank) {
+          entry.parts.set(parsed.partNum, { file: fname, handle: fileHandle, nexts: parsed.nexts });
+        }
       }
     }
   }

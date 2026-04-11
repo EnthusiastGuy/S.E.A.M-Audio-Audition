@@ -37,7 +37,8 @@
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  overflow: hidden;
+  /* visible so per-song download format dropdown (absolute) is not clipped when the row is collapsed */
+  overflow: visible;
   transition: background 0.1s;
   cursor: grab;
   user-select: none;

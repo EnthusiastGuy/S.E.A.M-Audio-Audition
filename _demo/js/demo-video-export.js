@@ -9,6 +9,12 @@
 (function initDemoVideoExport() {
   'use strict';
 
+  /** @type {typeof globalThis.SEAM_DEMO_VIDEO_EXPORT} */
+  const DV = globalThis.SEAM_DEMO_VIDEO_EXPORT;
+  if (!DV) {
+    console.error('[demo-video-export] Load js/demo-video-export-helpers.js before demo-video-export.js.');
+  }
+
   /**
    * User background: default (null), static image, or one+ videos (looped crossfade).
    * @type {null | { kind: 'image', file: Blob } | { kind: 'video', files: Blob[] }}
@@ -292,7 +298,8 @@
   const BG_VIDEO_BITMAP_ALPHA = 0.62;
   /** Auto UI palette when following video: exponential blend toward measured colors (~1 s time constant). */
   const VIDEO_PALETTE_INERTIA_TAU_SEC = 1;
-  const OUTRO_BLACK_SEC = 1;
+  /** After music: hero flies back to center (matches intro motion, reversed). */
+  const OUTRO_FLYBACK_SEC = 3;
 
   /* ── tiny helpers ────────────────────────────────────────── */
 
@@ -370,7 +377,7 @@
     }
     const n = order.length;
     const cWord = n === 1 ? 'composition' : 'compositions';
-    const pWord = partTotal === 1 ? 'part' : 'parts';
+    const pWord = partTotal === 1 ? 'segment' : 'segments';
     return `${n} total audio ${cWord}, ${partTotal} total audio ${pWord}, ${fmtPackTotalDuration(durTotal)} total audio time`;
   }
 
@@ -399,7 +406,7 @@
     return `${orderOneBased}. ${t}`;
   }
 
-  function buildYoutubeDescription(plans, totalDurationSec, introLeadInSec) {
+  function buildYoutubeDescription(plans, totalDurationSec, introLeadInSec, musicDurSec) {
     const lead = Math.max(0, introLeadInSec || 0);
     const lines = [
       'YouTube chapter links (paste into the video description). The first line should start at 0:00.',
@@ -410,6 +417,10 @@
       const p = plans[i];
       const ts = formatYoutubeChapterTimestamp(lead + p.tStartSec);
       lines.push(`${ts} ${p.title}`);
+    }
+    const md = isFinite(musicDurSec) && musicDurSec > 0 ? musicDurSec : 0;
+    if (md > 0) {
+      lines.push(`${formatYoutubeChapterTimestamp(lead + md)} Closing`);
     }
     lines.push('');
     if (isFinite(totalDurationSec) && totalDurationSec > 0) {
@@ -1362,33 +1373,7 @@
    * ImageBitmap (same-origin http(s)), or use the gradient fallback.
    */
   /**
-   * Playlist chips wrap by width; fixed playlist height used to clip rows. Measure first so we can
-   * grow the reserved band (and nudge the main block down) when extra rows are needed.
-   * @returns {{ lastChipTopY: number, chipH: number }}
-   */
-  function measurePlaylistChipLayout(ctx, rawTitles, W, pad, s, stack, playlistMul = 1) {
-    const pm = Math.max(0.35, playlistMul);
-    ctx.font = `600 ${Math.round(15 * s * pm)}px ${stack}`;
-    let x = pad;
-    let y = pad + Math.round(8 * s * pm);
-    const chipH = Math.round(28 * s * pm);
-    const chipPad = Math.round(8 * s * pm);
-    const chipGap = Math.round(6 * s * pm);
-    const chipXGap = Math.round(8 * s * pm);
-    rawTitles.forEach((rawTitle, i) => {
-      const label = playlistChipLabel(i + 1, rawTitle);
-      const tw = Math.min(ctx.measureText(label).width + chipPad * 2, W - pad * 2);
-      if (x + tw > W - pad) {
-        x = pad;
-        y += chipH + chipGap;
-      }
-      x += tw + chipXGap;
-    });
-    return { lastChipTopY: y, chipH };
-  }
-
-  /**
-   * @param {object} timeline introHoldSec, introTransSec, musicDurSec, outroFadeSec, outroBlackSec
+   * @param {object} timeline introHoldSec, introTransSec, musicDurSec, outroFadeSec, outroFlySec
    * @param {{ text: string, year: number|null }} cornerCredit bottom-right label; year appended when non-null
    * @param {object} [fontSizeMuls] per-zone multipliers (1 = default); from readMp4FontSizeMultipliersFromUi()
    * @param {null|{ draw: function, dispose: function }} [videoBgAnimator] looping video background from createDemoVideoBgAnimator
@@ -1413,6 +1398,7 @@
     uiPaletteMode,
     autoPaletteCache,
   ) {
+    if (!DV) throw new Error('SEAM_DEMO_VIDEO_EXPORT missing (demo-video-export-helpers.js)');
     const W = CANVAS_W;
     const H = CANVAS_H;
     const stack = mp4VideoFontStack(fontFace);
@@ -1421,6 +1407,7 @@
       introTransSec,
       musicDurSec,
       outroFadeSec,
+      outroFlySec: timelineOutroFly = 0,
     } = timeline;
 
     ctx.fillStyle = '#0d1117';
@@ -1476,26 +1463,68 @@
     const wm = Math.max(0.35, fsm.watermark);
 
     const pad = Math.round(40 * s);
-    const basePlaylistH = Math.round(H * 0.14);
-    const maxPlaylistH = Math.round(H * 0.4);
-    const chipH = Math.round(28 * s * pl);
-    const chipPad = Math.round(8 * s * pl);
-    const chipGap = Math.round(6 * s * pl);
-    const chipXGap = Math.round(8 * s * pl);
-    const { lastChipTopY } = measurePlaylistChipLayout(ctx, rawTitles, W, pad, s, stack, pl);
-    const minHForChipTops = lastChipTopY - pad;
-    let playlistH = Math.max(basePlaylistH, Math.min(minHForChipTops, maxPlaylistH));
+    const chipStrip = DV.resolvePlaylistChipStrip(
+      ctx,
+      rawTitles,
+      currentIdx,
+      W,
+      pad,
+      playlistChipLabel,
+      s,
+      stack,
+      pl,
+      DV.MAX_PLAYLIST_ROWS,
+    );
+    const { items: playlistItems, chipH, chipGap, topInset, chipPad, chipXGap } = chipStrip;
+    const playlistRowCap = DV.playlistBandHeightCap(topInset, chipH, chipGap);
+    const playlistH = DV.resolvePlaylistBandHeight(chipStrip.bandHeightFromPad, topInset, chipH, chipGap, s);
     const gapBase = Math.round(24 * s);
     const gapFloor = Math.round(14 * s);
-    const extraPlaylist = Math.max(0, playlistH - basePlaylistH);
+    const oneRowBandFloor = topInset + chipH + Math.round(6 * s);
+    const extraPlaylist = Math.max(0, playlistH - oneRowBandFloor);
     const gapBelowPlaylist = Math.max(gapFloor, Math.round(gapBase - extraPlaylist * 0.22));
+
+    const seriesNum = packMeta && packMeta.seriesNum;
+    const packLine = (packMeta && (packMeta.packTitle || packMeta.raw)) || '';
+    const footerStatsExtra = packLine && packStatsLine ? 52 : 0;
+    const slackSix = Math.max(0, playlistRowCap - playlistH);
+    const footerBand = Math.round(
+      ((seriesNum && packLine ? 268 : packLine ? 212 : seriesNum ? 132 : 68) + footerStatsExtra) * s +
+        slackSix * 0.35,
+    );
+    const blockTop = pad + playlistH + gapBelowPlaylist;
+    const blockH = H - blockTop - pad - footerBand;
+    const titleW = Math.round(W * 0.38);
+    const waveX = pad + titleW + Math.round(20 * s);
+    const waveW = W - waveX - pad;
+    const waveY = blockTop;
+    const waveCapPx = Math.round((200 + Math.min(95, slackSix * 0.12)) * s);
+    const waveAvail = Math.max(0, blockH - Math.round(40 * s));
+    const waveH = Math.min(waveCapPx, waveAvail);
+
+    const titleX = pad;
+    const titleMaxW = Math.max(
+      Math.round(120 * s),
+      waveX - titleX - Math.round(16 * s),
+    );
+
     const transEnd = introHoldSec + introTransSec;
+    const musicEndT = introHoldSec + musicDurSec;
+    const outroFlySec = Number(timelineOutroFly) > 0 ? Number(timelineOutroFly) : 0;
+
     let layoutBlend = 1;
     if (tVideo < introHoldSec) layoutBlend = 0;
     else if (tVideo < transEnd) layoutBlend = easeInOutCubic((tVideo - introHoldSec) / introTransSec);
+    else if (outroFlySec > 0 && tVideo >= musicEndT) {
+      layoutBlend = 1 - easeInOutCubic(Math.min(1, (tVideo - musicEndT) / outroFlySec));
+    }
 
-    const mainUiAlpha =
-      tVideo < introHoldSec ? 0 : tVideo < transEnd ? easeInOutCubic((tVideo - introHoldSec) / introTransSec) : 1;
+    let mainUiAlpha = 1;
+    if (tVideo < introHoldSec) mainUiAlpha = 0;
+    else if (tVideo < transEnd) mainUiAlpha = easeInOutCubic((tVideo - introHoldSec) / introTransSec);
+    else if (outroFlySec > 0 && tVideo >= musicEndT) {
+      mainUiAlpha = 1 - easeInOutCubic(Math.min(1, (tVideo - musicEndT) / outroFlySec));
+    }
 
     const tMix = Math.min(Math.max(tVideo - introHoldSec, 0), Math.max(1e-9, musicDurSec));
 
@@ -1505,17 +1534,29 @@
     ctx.textBaseline = 'middle';
 
     let x = pad;
-    let y = pad + Math.round(8 * s * pl);
+    let y = pad + topInset;
     const chipR = Math.max(4, Math.round(6 * s * pl));
-    rawTitles.forEach((rawTitle, i) => {
-      const label = playlistChipLabel(i + 1, rawTitle);
-      const tw = Math.min(ctx.measureText(label).width + chipPad * 2, W - pad * 2);
+    const ellText = DV.ELLIPSIS_CHIP_TEXT;
+    playlistItems.forEach((item) => {
+      let label;
+      let tw;
+      if (item.kind === 'ellipsis') {
+        label = ellText;
+        const w = ctx.measureText(label).width + chipPad * 2;
+        tw = Math.max(Math.round(34 * pl), Math.min(w, W - pad * 2));
+      } else {
+        label = playlistChipLabel(item.index + 1, rawTitles[item.index]);
+        tw = Math.min(ctx.measureText(label).width + chipPad * 2, W - pad * 2);
+      }
       if (x + tw > W - pad) {
         x = pad;
         y += chipH + chipGap;
       }
       if (y > pad + playlistH) return;
-      const active = i === currentIdx;
+      const active = item.kind === 'song' && item.index === currentIdx;
+      const isEllipsis = item.kind === 'ellipsis';
+      if (isEllipsis) ctx.save();
+      if (isEllipsis) ctx.globalAlpha *= 0.58;
       ctx.fillStyle = active ? uiPal.chipActiveFill : uiPal.chipInactiveFill;
       drawRoundedRect(ctx, x, y, tw, chipH, chipR);
       ctx.fill();
@@ -1527,28 +1568,9 @@
       }
       ctx.fillStyle = active ? uiPal.chipActiveText : uiPal.chipInactiveText;
       ctx.fillText(label, x + chipPad, y + chipH / 2);
+      if (isEllipsis) ctx.restore();
       x += tw + chipXGap;
     });
-
-    const seriesNum = packMeta && packMeta.seriesNum;
-    const packLine = (packMeta && (packMeta.packTitle || packMeta.raw)) || '';
-    const footerStatsExtra = packLine && packStatsLine ? 52 : 0;
-    const footerBand = Math.round(
-      ((seriesNum && packLine ? 268 : packLine ? 212 : seriesNum ? 132 : 68) + footerStatsExtra) * s,
-    );
-    const blockTop = pad + playlistH + gapBelowPlaylist;
-    const blockH = H - blockTop - pad - footerBand;
-    const titleW = Math.round(W * 0.38);
-    const waveX = pad + titleW + Math.round(20 * s);
-    const waveW = W - waveX - pad;
-    const waveY = blockTop;
-    const waveH = Math.min(Math.round(200 * s), blockH - Math.round(40 * s));
-
-    const titleX = pad;
-    const titleMaxW = Math.max(
-      Math.round(120 * s),
-      waveX - titleX - Math.round(16 * s),
-    );
 
     const plan = plans[currentIdx];
     if (plan) {
@@ -1562,12 +1584,17 @@
       ctx.fillStyle = 'rgba(200, 210, 230, 0.78)';
       ctx.font = `400 ${Math.round(14 * s * ad)}px ${stack}`;
       ctx.textBaseline = 'top';
-      let metaY = afterTitle + Math.round(14 * s * ad);
+      const metaY = afterTitle + Math.round(14 * s * ad);
+      const detailLineH = Math.round(22 * s * ad);
+      const detailRowGap = Math.round(10 * s * ad);
+      const colGap = Math.round(14 * s * ad);
+      const colW = Math.max(Math.round(108 * s), (titleMaxW - colGap) / 2);
+      const metaRightX = titleX + colW + colGap;
+      const row2Y = metaY + detailLineH + detailRowGap;
       ctx.fillText(`Full track ${fmtMinSec(plan.fullDurationSec)}`, titleX, metaY);
-      metaY += Math.round(24 * s * ad);
-      ctx.fillText(`Timeline parts in folder: ${plan.partCount}`, titleX, metaY);
-      metaY += Math.round(24 * s * ad);
-      ctx.fillText(`Demo segment ${currentIdx + 1} of ${totalPieces}`, titleX, metaY);
+      ctx.fillText(`Audio segments: ${plan.partCount}`, metaRightX, metaY);
+      ctx.fillText(`Demo audio ${currentIdx + 1} of ${totalPieces}`, titleX, row2Y);
+      ctx.fillText(DV.formatFlacSizeDetailLine(plan.totalSourceBytes), metaRightX, row2Y);
 
       drawWaveform(ctx, plan.peaks, waveX, waveY, waveW, waveH, plan.localT(tMix), uiPal);
     }
@@ -1650,10 +1677,9 @@
     const fadeDur = Math.min(outroFadeSec, musicDurSec > 1e-6 ? musicDurSec : outroFadeSec);
     const fadeStart = Math.max(0, musicDurSec - fadeDur);
     let blackA = 0;
-    if (musicDurSec > 0 && tMusic >= fadeStart) {
-      blackA = easeInOutCubic((tMusic - fadeStart) / fadeDur);
+    if (musicDurSec > 0 && tMusic >= fadeStart && tMusic < musicDurSec) {
+      blackA = easeInOutCubic((tMusic - fadeStart) / fadeDur) * 0.45;
     }
-    if (tMusic >= musicDurSec) blackA = 1;
     if (blackA > 0) {
       ctx.fillStyle = `rgba(0,0,0,${blackA})`;
       ctx.fillRect(0, 0, W, H);
@@ -1742,6 +1768,7 @@
         tStartSec,
         fullDurationSec: 240 + i * 35,
         partCount: 4 + (i % 5),
+        totalSourceBytes: Math.round((2.1 + i * 0.27) * 1024 * 1024),
         excerptLenSec: excerptLen,
         peaks,
         localT(globalMixSec) {
@@ -1839,7 +1866,7 @@
       introTransSec: INTRO_TRANS_SEC,
       musicDurSec,
       outroFadeSec: OUTRO_FADE_SEC,
-      outroBlackSec: OUTRO_BLACK_SEC,
+      outroFlySec: OUTRO_FLYBACK_SEC,
     };
     const afterIntro = introHoldSec + INTRO_TRANS_SEC;
     const tVideo = afterIntro + Math.min(52, musicDurSec * 0.3);
@@ -2145,7 +2172,7 @@
     fontSizeMuls,
   ) {
     const musicDurSec = mixedBuffer.duration;
-    const totalVideoSec = introHoldSec + musicDurSec + OUTRO_BLACK_SEC;
+    const totalVideoSec = introHoldSec + musicDurSec + OUTRO_FLYBACK_SEC;
     const fps = chooseFps(totalVideoSec);
     const totalVideoFrames = Math.max(1, Math.ceil(totalVideoSec * fps));
     const totalPieces = plans.length;
@@ -2156,7 +2183,7 @@
       introTransSec: INTRO_TRANS_SEC,
       musicDurSec,
       outroFadeSec: OUTRO_FADE_SEC,
-      outroBlackSec: OUTRO_BLACK_SEC,
+      outroFlySec: OUTRO_FLYBACK_SEC,
     };
 
     const audioChannels = Math.min(2, mixedBuffer.numberOfChannels);
@@ -2340,6 +2367,7 @@
         startSec: introHoldSec + p.tStartSec,
         title: playlistChipLabel(i + 1, rawTitles[i]),
       })),
+      { startSec: introHoldSec + musicDurSec, title: 'Closing' },
     ];
     const mp4WithChapters = injectNeroChaptersIntoMp4(target.buffer, chapterList);
 
@@ -2398,10 +2426,17 @@
         const ex = sliceAudioBuffer(composite, pick.t0, pick.t1);
         if (!ex) continue;
         excerpts.push(ex);
+        let totalSourceBytes = 0;
+        try {
+          if (DV) totalSourceBytes = await DV.sumSongSourceAudioBytes(song);
+        } catch {
+          totalSourceBytes = 0;
+        }
         meta.push({
           title: song.name,
           fullDurationSec: song.duration || composite.duration || 0,
           partCount: song.parts?.length ?? 0,
+          totalSourceBytes,
           excerptOffsetSec: pick.t0,
           excerptLenSec: pick.clipLen,
           peaks: computePeaks(ex, PEAK_BINS),
@@ -2464,8 +2499,8 @@
       const baseName = sanitizeFileName(STATE.rootDir?.name || 'S.E.A.M_demo');
       triggerDownload(mp4Blob, `${baseName}_demo.mp4`);
 
-      const totalVideoDur = introHoldSec + mixedBuffer.duration + OUTRO_BLACK_SEC;
-      const descText = buildYoutubeDescription(plans, totalVideoDur, introHoldSec);
+      const totalVideoDur = introHoldSec + mixedBuffer.duration + OUTRO_FLYBACK_SEC;
+      const descText = buildYoutubeDescription(plans, totalVideoDur, introHoldSec, mixedBuffer.duration);
       const descBlob = new Blob([descText], { type: 'text/plain;charset=utf-8' });
       requestAnimationFrame(() => {
         triggerDownload(descBlob, `${baseName}_demo_description.txt`);
